@@ -1,25 +1,31 @@
 /* ==========================================================================
-   M73 PRO-TELEMETRY COCKPIT UI THEME (MOTORSPORT EDITION)
-   High-contrast, OLED-optimized, telemetry cluster for Priora 16V / Itelma M73
+   ПРОФЕССИОНАЛЬНАЯ СИСТЕМА ДИАГНОСТИКИ М73 — ДИЗАЙН 2026
+   Эргономика интерфейса по стандартам Apple HIG и правилам дашбордов:
+   - Чистая визуальная иерархия без лишнего шума
+   - Идеальная контрастность для автомобиля
+   - Настоящий глубокий OLED-чёрный фон
+   - Исключительно русский язык
    ========================================================================== */
 
 :root {
-  --bg-deep: #030508;
-  --bg-panel: rgba(14, 20, 32, 0.75);
-  --bg-panel-border: rgba(255, 255, 255, 0.08);
-  --bg-card: rgba(10, 15, 25, 0.65);
-  --bg-card-border: rgba(40, 54, 85, 0.4);
+  --bg-canvas: #000000;
+  --bg-card: #0f121a;
+  --bg-card-secondary: #151924;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-focus: rgba(59, 130, 246, 0.4);
 
-  --neon-cyan: #00f0ff;
-  --neon-cyan-glow: rgba(0, 240, 255, 0.25);
-  --neon-green: #00ff88;
-  --neon-green-glow: rgba(0, 255, 136, 0.3);
-  --racing-red: #ff2a55;
-  --racing-red-glow: rgba(255, 42, 85, 0.4);
-  --racing-amber: #ffaa00;
+  --color-primary: #3b82f6;
+  --color-primary-active: #2563eb;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
 
-  --font-digital: "SF Mono", "DIN Alternate", "Roboto Mono", "Chakra Petch", Menlo, monospace;
-  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", sans-serif;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-subtle: #64748b;
+
+  --font-stack: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "SF Mono", Menlo, Monaco, Consolas, monospace;
 }
 
 * {
@@ -31,21 +37,16 @@
 }
 
 body {
-  background-color: var(--bg-deep);
-  background-image: 
-    radial-gradient(circle at 50% 0%, rgba(0, 240, 255, 0.05) 0%, transparent 60%),
-    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
-  background-size: 100% 100%, 32px 32px, 32px 32px;
-  color: #f1f5f9;
-  font-family: var(--font-ui);
+  background-color: var(--bg-canvas);
+  color: var(--text-main);
+  font-family: var(--font-stack);
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
 
-.cockpit-container {
+.app-shell {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -54,143 +55,153 @@ body {
 }
 
 /* ==========================================================================
-   ВЕРХНЯЯ ШАПКА ТЕЛЕМЕТРИИ
+   ВЕРХНЯЯ НАВИГАЦИОННАЯ ПАНЕЛЬ
    ========================================================================== */
-.cockpit-header {
+.app-navbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 16px;
-  background: rgba(8, 12, 20, 0.85);
+  padding: 12px 16px;
+  background-color: rgba(10, 12, 18, 0.9);
   backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--bg-panel-border);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border-subtle);
   z-index: 50;
 }
 
-.brand-group {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.brand-badge {
-  font-family: var(--font-digital);
-  font-size: 0.75rem;
-  font-weight: 800;
-  color: var(--neon-cyan);
-  background: rgba(0, 240, 255, 0.1);
-  border: 1px solid rgba(0, 240, 255, 0.3);
-  padding: 3px 6px;
-  border-radius: 4px;
-  letter-spacing: 0.5px;
-}
-
-.brand-title {
-  font-size: 1.1rem;
-  font-weight: 900;
-  letter-spacing: 0.5px;
-  line-height: 1.1;
-  color: #fff;
-}
-
-.neon-cyan {
-  color: var(--neon-cyan);
-  text-shadow: 0 0 10px var(--neon-cyan-glow);
-}
-
-.brand-sub {
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.8px;
-  color: #64748b;
-  font-family: var(--font-digital);
-}
-
-.header-controls {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-/* Индикатор частоты опроса */
-.speed-hz-box {
+.navbar-info {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  background: rgba(3, 7, 15, 0.9);
-  padding: 3px 8px;
-  border-radius: 6px;
-  border: 1px solid rgba(0, 255, 136, 0.25);
-  min-width: 68px;
+  gap: 2px;
 }
 
-.hz-digital {
-  font-family: var(--font-digital);
-  font-size: 1.05rem;
-  font-weight: 900;
-  color: var(--neon-green);
-  text-shadow: 0 0 8px var(--neon-green-glow);
-  line-height: 1;
-}
-
-.hz-sub {
-  font-size: 0.6rem;
+.navbar-title {
+  font-size: 1.1rem;
   font-weight: 700;
-  color: #64748b;
-  font-family: var(--font-digital);
-}
-
-.ms-pill {
-  color: var(--neon-cyan);
-}
-
-/* Кнопка Connect в стиле спорткара */
-.btn-cockpit-connect {
-  position: relative;
-  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  letter-spacing: -0.02em;
   color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  padding: 8px 14px;
-  font-family: var(--font-digital);
-  font-size: 0.8rem;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  cursor: pointer;
-  box-shadow: 0 4px 15px rgba(2, 132, 199, 0.35);
+}
+
+.navbar-subtitle {
   display: flex;
   align-items: center;
   gap: 6px;
-  overflow: hidden;
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }
 
-.btn-cockpit-connect.connected {
-  background: linear-gradient(135deg, #059669 0%, #047857 100%);
-  box-shadow: 0 4px 15px rgba(5, 150, 105, 0.4);
-  border-color: rgba(52, 211, 153, 0.5);
-}
-
-.btn-radar {
-  width: 7px;
-  height: 7px;
+.status-indicator {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: #38bdf8;
+  background-color: #64748b;
   display: inline-block;
+  transition: all 0.2s ease;
 }
 
-.btn-cockpit-connect.connected .btn-radar {
-  background: var(--neon-green);
-  box-shadow: 0 0 8px var(--neon-green);
+.status-indicator.connected {
+  background-color: var(--color-success);
+  box-shadow: 0 0 6px var(--color-success);
+}
+
+.sub-sep {
+  opacity: 0.4;
+}
+
+.navbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Капсула частоты опроса */
+.cadence-capsule {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  background: var(--bg-card);
+  padding: 6px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border-subtle);
+}
+
+.cadence-value {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-success);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.cadence-unit {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.cadence-ms {
+  font-size: 0.65rem;
+  color: var(--text-subtle);
+}
+
+/* Кнопки */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  padding: 8px 14px;
+}
+
+.btn-primary {
+  background-color: var(--color-primary);
+  color: #fff;
+}
+
+.btn-primary:active {
+  background-color: var(--color-primary-active);
+}
+
+.btn-connect.connected {
+  background-color: var(--color-success);
+}
+
+.btn-secondary {
+  background-color: var(--bg-card-secondary);
+  color: var(--text-main);
+  border: 1px solid var(--border-subtle);
+}
+
+.btn-danger {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: var(--color-danger);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 0.75rem;
 }
 
 /* ==========================================================================
-   VIEWPORT И ТАХОМЕТРИЧЕСКИЙ БАР
+   ОСНОВНАЯ ОБЛАСТЬ
    ========================================================================== */
-.cockpit-viewport {
+.app-body {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 10px 12px 75px 12px;
+  padding: 14px 14px 80px 14px;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -202,764 +213,593 @@ body {
   display: block;
 }
 
-/* Светодиодный Shift-Light Bar */
-.shift-lights-bar {
-  display: flex;
-  gap: 4px;
-  padding: 6px 8px;
-  background: rgba(3, 7, 15, 0.95);
-  border: 1px solid var(--bg-panel-border);
-  border-radius: 8px;
-  margin-bottom: 10px;
-}
-
-.led {
-  flex: 1;
-  height: 6px;
-  border-radius: 2px;
-  background: #1e293b;
-  transition: all 0.08s ease-out;
-}
-
-.led.active.led-green {
-  background: var(--neon-green);
-  box-shadow: 0 0 10px var(--neon-green);
-}
-
-.led.active.led-yellow {
-  background: var(--racing-amber);
-  box-shadow: 0 0 10px var(--racing-amber);
-}
-
-.led.active.led-red {
-  background: var(--racing-red);
-  box-shadow: 0 0 12px var(--racing-red);
-}
-
-.led.active.led-blue.blink {
-  background: #38bdf8;
-  box-shadow: 0 0 16px #38bdf8;
-  animation: ledPulse 0.15s infinite;
-}
-
-@keyframes ledPulse {
-  50% { opacity: 0.2; }
-}
-
-/* ==========================================================================
-   ПАНЕЛИ (PANELS & SEGMENTED CONTROLS)
-   ========================================================================== */
-.cockpit-panel {
-  background: var(--bg-panel);
-  backdrop-filter: blur(20px);
-  border: 1px solid var(--bg-panel-border);
-  border-radius: 12px;
-  padding: 12px;
-  margin-bottom: 10px;
-}
-
-.panel-tag {
-  font-family: var(--font-digital);
-  font-size: 0.65rem;
-  font-weight: 800;
-  letter-spacing: 1px;
-  color: #64748b;
-  display: block;
-  margin-bottom: 4px;
-}
-
-.panel-title {
-  font-size: 1rem;
-  font-weight: 800;
-  color: #fff;
-}
-
-.panel-caption {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  margin-top: 4px;
+/* Базовая карточка */
+.card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 14px;
   margin-bottom: 12px;
 }
 
-/* Селектор режимов */
-.mode-header {
+.card-caption {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
-.mode-readout {
-  font-family: var(--font-digital);
+.caption-label {
   font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--neon-green);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
-.segmented-control {
-  display: flex;
-  background: rgba(3, 7, 15, 0.8);
-  padding: 3px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  gap: 3px;
-}
-
-.seg-btn {
-  flex: 1;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  padding: 7px 4px;
-  font-family: var(--font-digital);
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  color: #64748b;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-}
-
-.seg-btn.active {
-  background: linear-gradient(180deg, rgba(40, 54, 85, 0.8) 0%, rgba(20, 28, 45, 0.9) 100%);
-  color: #fff;
-  border: 1px solid rgba(0, 240, 255, 0.4);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-}
-
-.custom-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.custom-chk-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.caption-aux {
   font-size: 0.75rem;
-  color: #cbd5e1;
-  cursor: pointer;
-}
-
-.custom-chk-label input {
-  accent-color: var(--neon-cyan);
-  width: 16px;
-  height: 16px;
+  color: var(--text-subtle);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ==========================================================================
-   ЛОГГЕР КАРТОЧКА
+   ПЕРВЫЙ УРОВЕНЬ ВНИМАНИЯ: СКОРОСТЬ И ОБОРОТЫ
    ========================================================================== */
-.logger-status-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.rec-beacon-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.rec-beacon {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #475569;
-}
-
-.rec-beacon.recording {
-  background: var(--racing-red);
-  box-shadow: 0 0 10px var(--racing-red);
-  animation: ledPulse 0.8s infinite;
-}
-
-.rec-state-text {
-  font-family: var(--font-digital);
-  font-size: 0.75rem;
-  font-weight: 800;
-  letter-spacing: 0.8px;
-  color: #94a3b8;
-}
-
-.logger-counter {
-  font-family: var(--font-digital);
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: var(--neon-cyan);
-}
-
-.logger-btns-row {
-  display: flex;
-  gap: 8px;
-}
-
-.btn-rec-action {
-  flex: 1;
-  padding: 10px;
-  border-radius: 8px;
-  font-family: var(--font-digital);
-  font-size: 0.8rem;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  transition: all 0.15s ease;
-}
-
-.btn-record {
-  background: rgba(30, 41, 59, 0.7);
-  color: #fff;
-}
-
-.btn-record.active {
-  background: rgba(255, 42, 85, 0.2);
-  color: var(--racing-red);
-  border-color: var(--racing-red);
-  box-shadow: 0 0 12px var(--racing-red-glow);
-}
-
-.rec-circle {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--racing-red);
-  display: inline-block;
-}
-
-.btn-export {
-  background: rgba(0, 255, 136, 0.1);
-  color: var(--neon-green);
-  border-color: rgba(0, 255, 136, 0.3);
-}
-
-.btn-rec-action:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-/* ==========================================================================
-   ГЛАВНЫЕ ГЕРОЙ-ПРИБОРЫ (RPM & SPEED)
-   ========================================================================== */
-.hero-gauges-row {
+.primary-gauges {
   display: grid;
-  grid-template-columns: 1.4fr 1fr;
+  grid-template-columns: 1.3fr 1fr;
   gap: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
-.hero-gauge-card {
-  background: linear-gradient(160deg, rgba(20, 28, 48, 0.8) 0%, rgba(8, 12, 22, 0.9) 100%);
-  border: 1px solid rgba(0, 240, 255, 0.3);
-  border-radius: 12px;
-  padding: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+.hero-gauge {
+  background: linear-gradient(180deg, #121622 0%, #0d1017 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  min-height: 105px;
 }
 
-.rpm-hero {
-  border-color: rgba(0, 240, 255, 0.4);
-}
-
-.speed-hero {
-  border-color: rgba(40, 54, 85, 0.6);
-}
-
-.hero-gauge-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-
-.peak-tag {
-  font-family: var(--font-digital);
-  font-size: 0.6rem;
-  color: #64748b;
-}
-
-.hero-value-wrap {
+.gauge-number-wrap {
   display: flex;
   align-items: baseline;
   gap: 6px;
   margin: 4px 0;
 }
 
-.hero-digital-val {
-  font-family: var(--font-digital);
+.gauge-number {
   font-size: 2.3rem;
-  font-weight: 900;
-  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.04em;
   color: #fff;
-  letter-spacing: -1px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
-.cyan-glow {
-  color: var(--neon-cyan);
-  text-shadow: 0 0 14px var(--neon-cyan-glow);
+.gauge-unit-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
-.hero-unit {
-  font-family: var(--font-digital);
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: #64748b;
-}
-
-.racing-bar-track {
+.progress-track {
   width: 100%;
-  height: 6px;
-  background: rgba(3, 7, 15, 0.9);
-  border-radius: 3px;
+  height: 4px;
+  background-color: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
   overflow: hidden;
-  margin-top: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  margin-top: 8px;
 }
 
-.racing-bar-fill {
+.progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, var(--neon-cyan) 0%, var(--neon-green) 60%, var(--racing-amber) 85%, var(--racing-red) 100%);
+  background: linear-gradient(90deg, #38bdf8 0%, #3b82f6 70%, #ef4444 100%);
   transition: width 0.08s ease-out;
 }
 
-.speed-sub-metrics {
-  display: flex;
-  justify-content: space-between;
-  font-family: var(--font-digital);
-  font-size: 0.7rem;
-  color: #64748b;
+.gauge-sub-info {
+  font-size: 0.75rem;
+  color: var(--text-muted);
   margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.speed-sub-metrics strong {
-  color: #f1f5f9;
-}
-
-/* ==========================================================================
-   СЕТКА ТЕЛЕМЕТРИИ (TELEMETRY GRID)
-   ========================================================================== */
-.telemetry-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.telemetry-card {
-  background: var(--bg-card);
-  border: 1px solid var(--bg-card-border);
-  border-radius: 10px;
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  min-height: 68px;
-  transition: all 0.15s ease;
-}
-
-.telemetry-card.highlight-card {
-  border-color: rgba(255, 170, 0, 0.35);
-  background: linear-gradient(150deg, rgba(25, 30, 45, 0.8) 0%, rgba(10, 15, 25, 0.7) 100%);
-}
-
-.tel-label {
-  font-family: var(--font-digital);
-  font-size: 0.65rem;
-  font-weight: 700;
-  color: #64748b;
-  letter-spacing: 0.5px;
-}
-
-.tel-val-wrap {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-top: 2px;
-}
-
-.tel-val {
-  font-family: var(--font-digital);
-  font-size: 1.5rem;
-  font-weight: 900;
+.gauge-sub-info strong {
   color: #fff;
-  line-height: 1;
-}
-
-.cyan-val {
-  color: var(--neon-cyan);
-}
-
-.amber-val {
-  color: var(--racing-amber);
-}
-
-.tel-unit {
-  font-family: var(--font-digital);
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: #64748b;
-}
-
-.tel-retard-badge {
-  font-family: var(--font-digital);
-  font-size: 0.85rem;
-  font-weight: 900;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: rgba(148, 163, 184, 0.1);
-  color: #94a3b8;
-}
-
-.knock-alert {
-  border-color: var(--racing-red) !important;
-  background: rgba(255, 42, 85, 0.15) !important;
-  box-shadow: 0 0 15px var(--racing-red-glow);
-}
-
-.mini-bar-track {
-  width: 100%;
-  height: 3px;
-  background: #03070f;
-  border-radius: 2px;
-  overflow: hidden;
-  margin-top: 6px;
-}
-
-.mini-bar-fill {
-  height: 100%;
-}
-
-.temp-fill {
-  background: linear-gradient(90deg, #38bdf8, #00ff88, #ffaa00, #ff2a55);
 }
 
 /* ==========================================================================
-   ГОНОЧНЫЕ ПИНЫ СОСТОЯНИЯ (STATUS PINS)
+   БЛОК УПРАВЛЕНИЯ ЛОГГЕРОМ И РЕЖИМАМИ
    ========================================================================== */
-.status-pins-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-  padding: 8px;
-  background: rgba(10, 15, 25, 0.75);
-  border: 1px solid var(--bg-panel-border);
-  border-radius: 10px;
+.control-card {
+  padding: 14px;
 }
 
-.status-pin {
+.control-header {
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
   align-items: center;
-  gap: 4px;
-  padding: 4px;
-  background: rgba(3, 7, 15, 0.6);
-  border-radius: 6px;
+  margin-bottom: 14px;
 }
 
-.pin-led {
+.control-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.control-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.control-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-action {
+  padding: 8px 12px;
+  font-size: 0.8rem;
+}
+
+.btn-record {
+  background-color: var(--bg-card-secondary);
+  color: #fff;
+  border: 1px solid var(--border-subtle);
+}
+
+.btn-record.active {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+.rec-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #334155;
-  transition: all 0.15s ease;
+  background-color: #64748b;
+  display: inline-block;
 }
 
-.status-pin.active .pin-led {
-  background: var(--neon-green);
-  box-shadow: 0 0 8px var(--neon-green);
+.btn-record.active .rec-dot {
+  background-color: var(--color-danger);
+  box-shadow: 0 0 6px var(--color-danger);
+  animation: pulse 1s infinite;
 }
 
-.status-pin.knock-pin.active .pin-led {
-  background: var(--racing-red);
-  box-shadow: 0 0 10px var(--racing-red);
+@keyframes pulse {
+  50% { opacity: 0.3; }
 }
 
-.pin-name {
-  font-family: var(--font-digital);
-  font-size: 0.6rem;
-  font-weight: 700;
-  color: #64748b;
-  text-align: center;
+/* Переключатель режимов (iOS Segmented Control) */
+.speed-mode-box {
+  background-color: rgba(0, 0, 0, 0.35);
+  border-radius: 12px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
 }
 
-.status-pin.active .pin-name {
-  color: #fff;
-}
-
-/* ==========================================================================
-   ВКЛАДКИ АЦП И МАТРИЦА ПРОПУСКОВ
-   ========================================================================== */
-.misfire-matrix {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.misfire-cell {
-  background: rgba(3, 7, 15, 0.85);
-  border: 1px solid var(--bg-card-border);
-  border-radius: 8px;
-  padding: 10px 4px;
-  text-align: center;
-}
-
-.misfire-cyl {
-  font-family: var(--font-digital);
-  font-size: 0.65rem;
-  font-weight: 700;
-  color: #64748b;
-  display: block;
-}
-
-.misfire-count {
-  font-family: var(--font-digital);
-  font-size: 1.4rem;
-  font-weight: 900;
-  color: var(--neon-green);
-}
-
-.misfire-count.has-misfires {
-  color: var(--racing-red);
-  text-shadow: 0 0 10px var(--racing-red);
-}
-
-.adc-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.adc-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  background: rgba(3, 7, 15, 0.8);
-  border: 1px solid var(--bg-card-border);
-  border-radius: 8px;
-}
-
-.adc-row.highlight-adc {
-  border-color: rgba(0, 240, 255, 0.4);
-  background: rgba(0, 240, 255, 0.05);
-}
-
-.adc-name {
-  font-size: 0.8rem;
-  color: #94a3b8;
-}
-
-.adc-voltage {
-  font-family: var(--font-digital);
-  font-size: 0.95rem;
-  font-weight: 900;
-  color: var(--neon-cyan);
-}
-
-/* ==========================================================================
-   УПРАВЛЕНИЕ И СБРОС С ИНИЦИАЛИЗАЦИЕЙ
-   ========================================================================== */
-.actuator-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.actuator-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 12px;
-  background: rgba(3, 7, 15, 0.8);
-  border: 1px solid var(--bg-card-border);
-  border-radius: 8px;
-}
-
-.act-name {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: #e2e8f0;
-}
-
-.btn-act-trigger {
-  padding: 6px 12px;
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid var(--bg-card-border);
-  color: #fff;
-  border-radius: 6px;
-  font-family: var(--font-digital);
-  font-size: 0.75rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.reset-zone-box {
-  margin-top: 20px;
-  padding: 14px;
-  background: rgba(255, 42, 85, 0.06);
-  border: 1px solid rgba(255, 42, 85, 0.3);
-  border-radius: 10px;
-}
-
-.danger-tag {
-  font-family: var(--font-digital);
-  font-size: 0.65rem;
-  font-weight: 900;
-  color: var(--racing-red);
-  letter-spacing: 1px;
-}
-
-.reset-title {
-  font-size: 0.95rem;
-  font-weight: 800;
-  color: #fff;
-  margin-top: 2px;
-}
-
-.reset-caption {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  margin: 6px 0 12px 0;
-}
-
-.btn-reset-fire {
-  width: 100%;
-  padding: 12px;
-  background: linear-gradient(135deg, rgba(255, 42, 85, 0.8) 0%, rgba(200, 20, 60, 0.9) 100%);
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font-family: var(--font-digital);
-  font-size: 0.85rem;
-  font-weight: 900;
-  letter-spacing: 0.5px;
-  box-shadow: 0 4px 15px rgba(255, 42, 85, 0.35);
-  cursor: pointer;
-}
-
-/* ==========================================================================
-   ОШИБКИ И ТЕРМИНАЛ
-   ========================================================================== */
-.panel-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.toolbar-btns {
-  display: flex;
-  gap: 8px;
-}
-
-.btn-tool {
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-family: var(--font-digital);
-  font-size: 0.75rem;
-  font-weight: 800;
-  cursor: pointer;
-  border: none;
-}
-
-.btn-tool-primary {
-  background: rgba(2, 132, 199, 0.2);
-  color: var(--neon-cyan);
-  border: 1px solid rgba(0, 240, 255, 0.4);
-}
-
-.btn-tool-danger {
-  background: rgba(255, 42, 85, 0.2);
-  color: var(--racing-red);
-  border: 1px solid rgba(255, 42, 85, 0.4);
-}
-
-.dtc-stream-box {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 120px;
-}
-
-.dtc-item {
-  background: rgba(3, 7, 15, 0.9);
-  border: 1px solid rgba(255, 170, 0, 0.3);
-  border-left: 4px solid var(--racing-amber);
-  border-radius: 8px;
-  padding: 10px 12px;
-}
-
-.dtc-code {
-  font-family: var(--font-digital);
-  font-size: 1rem;
-  font-weight: 900;
-  color: var(--racing-amber);
-}
-
-.dtc-desc {
-  font-size: 0.8rem;
-  color: #cbd5e1;
-  margin-top: 2px;
-}
-
-.empty-stream-msg {
-  text-align: center;
-  color: #64748b;
-  font-size: 0.85rem;
-  padding: 30px 0;
-}
-
-/* Терминал */
-.terminal-panel-custom {
-  display: flex;
-  flex-direction: column;
-  height: 480px;
-}
-
-.terminal-ctrl-bar {
+.speed-mode-header {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   margin-bottom: 8px;
 }
 
-.btn-clear-term {
-  padding: 4px 8px;
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid var(--bg-card-border);
-  color: #94a3b8;
-  font-family: var(--font-digital);
-  font-size: 0.7rem;
-  border-radius: 4px;
+.mode-caption {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.mode-status-text {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-success);
+}
+
+.segmented-control {
+  display: flex;
+  background-color: #06080d;
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  gap: 3px;
+}
+
+.segment-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 6px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.segment-btn.active {
+  background-color: #1f2536;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.custom-selection-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.custom-chk-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.75rem;
+  color: #cbd5e1;
   cursor: pointer;
 }
 
-.terminal-screen {
-  flex: 1;
-  background: #020408;
-  border: 1px solid var(--bg-card-border);
+.custom-chk-item input {
+  accent-color: var(--color-primary);
+  width: 17px;
+  height: 17px;
+}
+
+/* ==========================================================================
+   СЕТКА МЕТРИК ДВИГАТЕЛЯ
+   ========================================================================== */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.metric-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 72px;
+}
+
+.metric-card.metric-accent {
+  border-color: rgba(59, 130, 246, 0.25);
+  background: linear-gradient(180deg, #111522 0%, #0f121a 100%);
+}
+
+.metric-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.metric-value-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.metric-val {
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.metric-unit {
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+  font-weight: 500;
+}
+
+.retard-badge {
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.retard-badge.active-knock {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: var(--color-danger);
+}
+
+.mini-track {
+  width: 100%;
+  height: 3px;
+  background-color: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.mini-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #38bdf8, #10b981, #f59e0b, #ef4444);
+}
+
+/* ==========================================================================
+   ИНДИКАТОРЫ И ФЛАГИ
+   ========================================================================== */
+.flags-card {
+  padding: 12px 14px;
+}
+
+.flags-chips {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.flag-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+  font-weight: 500;
+}
+
+.chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #475569;
+}
+
+.flag-chip.active {
+  color: #fff;
+  border-color: rgba(16, 185, 129, 0.3);
+  background-color: rgba(16, 185, 129, 0.08);
+}
+
+.flag-chip.active .chip-dot {
+  background-color: var(--color-success);
+  box-shadow: 0 0 6px var(--color-success);
+}
+
+.flag-chip.flag-alert.active {
+  border-color: rgba(239, 68, 68, 0.3);
+  background-color: rgba(239, 68, 68, 0.1);
+  color: var(--color-danger);
+}
+
+.flag-chip.flag-alert.active .chip-dot {
+  background-color: var(--color-danger);
+  box-shadow: 0 0 6px var(--color-danger);
+}
+
+/* ==========================================================================
+   РАЗДЕЛЫ: ОШИБКИ, АЦП, ТЕСТЫ
+   ========================================================================== */
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 14px;
+}
+
+.section-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.section-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.section-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.dtc-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 100px;
+}
+
+.dtc-item {
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-subtle);
+  border-left: 4px solid var(--color-warning);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.dtc-code {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-warning);
+  font-family: var(--font-mono);
+}
+
+.dtc-desc {
+  font-size: 0.8rem;
+  color: #e2e8f0;
+  margin-top: 2px;
+  line-height: 1.3;
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--text-subtle);
+  font-size: 0.85rem;
+  padding: 32px 0;
+}
+
+/* Цилиндры и пропуски */
+.cylinders-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.cylinder-card {
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 10px 4px;
+  text-align: center;
+}
+
+.cyl-name {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  display: block;
+}
+
+.cyl-count {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--color-success);
+  font-variant-numeric: tabular-nums;
+}
+
+.cyl-count.has-misfires {
+  color: var(--color-danger);
+}
+
+/* Таблица АЦП */
+.adc-table {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.adc-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+
+.adc-line.highlight-adc {
+  border-color: rgba(59, 130, 246, 0.35);
+  background-color: rgba(59, 130, 246, 0.05);
+}
+
+.adc-desc {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.adc-desc strong {
+  font-size: 0.85rem;
+  color: #fff;
+}
+
+.adc-desc span {
+  font-size: 0.7rem;
+  color: var(--text-subtle);
+}
+
+.adc-val {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+}
+
+/* Управление механизмами */
+.actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.action-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+
+.action-desc strong {
+  display: block;
+  font-size: 0.85rem;
+  color: #fff;
+}
+
+.action-desc span {
+  font-size: 0.7rem;
+  color: var(--text-subtle);
+}
+
+.danger-box {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 12px;
+  background-color: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.danger-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-danger);
+}
+
+.danger-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 6px 0 12px 0;
+  line-height: 1.35;
+}
+
+/* Терминал */
+.terminal-card {
+  display: flex;
+  flex-direction: column;
+  height: 480px;
+}
+
+.terminal-log-area {
+  flex: 1;
+  background-color: #050608;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
   padding: 10px;
-  font-family: var(--font-digital);
+  font-family: var(--font-mono);
   font-size: 0.75rem;
   overflow-y: auto;
   display: flex;
@@ -967,91 +807,74 @@ body {
   gap: 4px;
 }
 
-.log-entry.tx { color: var(--neon-cyan); }
-.log-entry.rx { color: var(--neon-green); }
+.log-entry.tx { color: #38bdf8; }
+.log-entry.rx { color: #34d399; }
 .log-entry.info { color: #94a3b8; }
-.log-entry.err { color: var(--racing-red); }
+.log-entry.err { color: #f87171; }
 
-.terminal-sender-row {
+.terminal-input-row {
   display: flex;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
-.term-input {
+.form-input {
   flex: 1;
-  background: #03070f;
-  border: 1px solid var(--bg-card-border);
-  border-radius: 8px;
-  padding: 8px 12px;
+  background-color: #06080d;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 10px 12px;
   color: #fff;
-  font-family: var(--font-digital);
   font-size: 0.85rem;
   outline: none;
+  font-family: var(--font-mono);
 }
 
-.btn-term-send {
-  padding: 8px 16px;
-  background: linear-gradient(135deg, #0284c7, #0369a1);
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font-family: var(--font-digital);
-  font-size: 0.8rem;
-  font-weight: 800;
-  cursor: pointer;
+.form-input:focus {
+  border-color: var(--border-focus);
 }
 
 /* ==========================================================================
-   ПАРЯЩАЯ НИЖНЯЯ ПРИБОРНАЯ НАВИГАЦИЯ (FLOATING DOCK)
+   НАВИГАЦИОННЫЙ ТАБ-БАР (iOS NATIVE STYLE)
    ========================================================================== */
-.floating-dock {
+.app-tabbar {
   position: fixed;
-  bottom: calc(env(safe-area-inset-bottom) + 8px);
-  left: 12px;
-  right: 12px;
-  background: rgba(10, 15, 25, 0.88);
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: rgba(10, 12, 18, 0.92);
   backdrop-filter: blur(25px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
-  padding: 6px 4px;
+  -webkit-backdrop-filter: blur(25px);
+  border-top: 1px solid var(--border-subtle);
+  padding: 6px 12px calc(env(safe-area-inset-bottom) + 6px) 12px;
   display: flex;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
   z-index: 100;
 }
 
-.dock-tab {
+.tabbar-item {
   flex: 1;
+  background: transparent;
+  border: none;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  background: transparent;
-  border: none;
-  color: #64748b;
+  gap: 3px;
+  color: var(--text-subtle);
   cursor: pointer;
   padding: 4px 0;
   transition: all 0.15s ease;
 }
 
-.dock-tab.active {
-  color: var(--neon-cyan);
+.tabbar-item.active {
+  color: var(--color-primary);
 }
 
-.dock-tab.active .dock-icon {
-  transform: scale(1.15);
-  text-shadow: 0 0 10px var(--neon-cyan-glow);
+.tabbar-icon {
+  font-size: 1.15rem;
 }
 
-.dock-icon {
-  font-size: 1.1rem;
-  transition: transform 0.15s ease;
-}
-
-.dock-text {
-  font-family: var(--font-digital);
-  font-size: 0.6rem;
-  font-weight: 800;
-  letter-spacing: 0.5px;
+.tabbar-label {
+  font-size: 0.65rem;
+  font-weight: 600;
 }
