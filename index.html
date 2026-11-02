@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f172a">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>Priora Diag M73</title>
+  <title>M73 ProLog - Лада Приора</title>
   
   <link rel="stylesheet" href="styles.css">
   
@@ -37,14 +37,48 @@
     <!-- Основной контент с вкладками -->
     <main class="main-content">
       
-      <!-- ВКЛАДКА 1: ПРИБОРНАЯ ПАНЕЛЬ И БЫСТРЫЙ ЛОГГЕР -->
+      <!-- ВКЛАДКА 1: ПРИБОРНАЯ ПАНЕЛЬ И СКОРОСТНОЙ ЛОГГЕР -->
       <section id="tab-dashboard" class="tab-pane active">
+        
+        <!-- Селектор режимов скорости опроса -->
+        <div class="mode-selector-card">
+          <div class="mode-selector-header">
+            <span class="mode-label">Режим опроса датчиков:</span>
+            <span class="mode-badge" id="modeBadge">⚡ Спорт (~0.08с)</span>
+          </div>
+          <div class="mode-pills">
+            <button class="pill-btn active" data-mode="sport">⚡ Спорт (Кадр 1)</button>
+            <button class="pill-btn" data-mode="custom">⚙ Свой выбор</button>
+            <button class="pill-btn" data-mode="full">🔍 Все 84 параметра</button>
+          </div>
+
+          <!-- Разворачиваемый блок чекбоксов для ручного выбора -->
+          <div class="custom-checkboxes-panel" id="customCheckboxesPanel" style="display: none;">
+            <label class="checkbox-row">
+              <input type="checkbox" id="chkFrame1" checked disabled>
+              <span>Кадр 1: Обороты, Скорость, Дроссель, ДМРВ, УОЗ, Впрыск, ТОЖ (База)</span>
+            </label>
+            <label class="checkbox-row">
+              <input type="checkbox" id="chkFrame2">
+              <span>Кадр 2: Каналы АЦП датчиков (ДМРВ 0.996В, ДПДЗ, ДТОЖ, Лямбда 1/2)</span>
+            </label>
+            <label class="checkbox-row">
+              <input type="checkbox" id="chkFrame3">
+              <span>Кадр 3: Топливные коррекции, адсорбер, адаптации смеси</span>
+            </label>
+            <label class="checkbox-row">
+              <input type="checkbox" id="chkFrame4">
+              <span>Кадр 4: Пропуски воспламенения по цилиндрам 1, 2, 3, 4</span>
+            </label>
+          </div>
+        </div>
+
         <!-- Блок управления скоростным логгером -->
         <div class="logger-control-card">
           <div class="logger-info">
             <div class="logger-status-dot" id="loggerStatusDot"></div>
             <div>
-              <div class="logger-title">Скоростной логгер (Кадр 21 01)</div>
+              <div class="logger-title">Логгер поездки в Excel (.xlsx)</div>
               <div class="logger-stats" id="loggerStatsText">Запись остановлена (0 записей)</div>
             </div>
           </div>
@@ -162,7 +196,7 @@
           <div class="flag-item" id="flagIdle"><span class="flag-dot"></span> Холостой ход</div>
           <div class="flag-item" id="flagLambda"><span class="flag-dot"></span> Лямбда-регулирование</div>
           <div class="flag-item" id="flagKnock"><span class="flag-dot"></span> Детонация</div>
-          <div class="flag-item" id="flagFuelCut"><span class="flag-dot"></span> Блокировка впрыска</div>
+          <div class="flag-item" id="flagFuelCut"><span class="flag-dot"></span> Отсечка впрыска</div>
         </div>
       </section>
 
@@ -207,6 +241,16 @@
               <span class="adc-label">АЦП Бортового напряжения</span>
               <span class="adc-val" id="adcVolt">--- В</span>
             </div>
+          </div>
+        </div>
+
+        <div class="section-card">
+          <h2>Счётчики пропусков зажигания (Кадр 21 04)</h2>
+          <div class="misfires-grid">
+            <div class="misfire-box"><span class="misfire-num">Цилиндр 1</span><span class="misfire-val" id="misCyl1">0</span></div>
+            <div class="misfire-box"><span class="misfire-num">Цилиндр 2</span><span class="misfire-val" id="misCyl2">0</span></div>
+            <div class="misfire-box"><span class="misfire-num">Цилиндр 3</span><span class="misfire-val" id="misCyl3">0</span></div>
+            <div class="misfire-box"><span class="misfire-num">Цилиндр 4</span><span class="misfire-val" id="misCyl4">0</span></div>
           </div>
         </div>
       </section>
@@ -276,7 +320,7 @@
       </button>
       <button class="nav-tab" data-tab="tab-adc">
         <span class="tab-icon">📊</span>
-        <span class="tab-text">АЦП</span>
+        <span class="tab-text">АЦП / Пропуски</span>
       </button>
       <button class="nav-tab" data-tab="tab-actuators">
         <span class="tab-icon">⚙</span>

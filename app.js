@@ -12,6 +12,15 @@ class M73Application {
     this.isPolling = false;
     this.currentTab = 'tab-dashboard';
 
+    // Конфигурация активных кадров опроса
+    this.currentMode = 'sport'; // 'sport' | 'custom' | 'full'
+    this.framesConfig = {
+      frame1: true,  // База (Обороты, Скорость, Дроссель, ДМРВ, УОЗ, Впрыск, ТОЖ)
+      frame2: false, // АЦП
+      frame3: false, // Адаптации
+      frame4: false  // Пропуски
+    };
+
     this.initElements();
     this.bindEvents();
   }
@@ -22,6 +31,14 @@ class M73Application {
     this.hzValue = document.getElementById('hzValue');
     this.msValue = document.getElementById('msValue');
     
+    // Элементы режимов
+    this.modeBadge = document.getElementById('modeBadge');
+    this.customCheckboxesPanel = document.getElementById('customCheckboxesPanel');
+    this.chkFrame1 = document.getElementById('chkFrame1');
+    this.chkFrame2 = document.getElementById('chkFrame2');
+    this.chkFrame3 = document.getElementById('chkFrame3');
+    this.chkFrame4 = document.getElementById('chkFrame4');
+
     // Элементы логгера
     this.btnToggleLog = document.getElementById('btnToggleLog');
     this.btnExportXlsx = document.getElementById('btnExportXlsx');
@@ -55,12 +72,16 @@ class M73Application {
     this.btnReadDtc = document.getElementById('btnReadDtc');
     this.btnClearDtc = document.getElementById('btnClearDtc');
 
-    // АЦП
+    // АЦП и пропуски
     this.adcMaf = document.getElementById('adcMaf');
     this.adcThrottle = document.getElementById('adcThrottle');
     this.adcTemp = document.getElementById('adcTemp');
     this.adcO2 = document.getElementById('adcO2');
     this.adcVolt = document.getElementById('adcVolt');
+    this.misCyl1 = document.getElementById('misCyl1');
+    this.misCyl2 = document.getElementById('misCyl2');
+    this.misCyl3 = document.getElementById('misCyl3');
+    this.misCyl4 = document.getElementById('misCyl4');
 
     // Терминал
     this.terminalLog = document.getElementById('terminalLog');
@@ -68,22 +89,40 @@ class M73Application {
   }
 
   bindEvents() {
-    // Подключение / Отключение
     this.btnConnect.addEventListener('click', () => this.toggleConnection());
 
-    // Переключение вкладок
+    // Переключение режимов скорости опроса
+    document.querySelectorAll('.pill-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.pill-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.setMode(btn.getAttribute('data-mode'));
+      });
+    });
+
+    // Обработка чекбоксов
+    const updateCheckboxes = () => {
+      this.framesConfig.frame2 = this.chkFrame2.checked;
+      this.framesConfig.frame3 = this.chkFrame3.checked;
+      this.framesConfig.frame4 = this.chkFrame4.checked;
+      this.updateModeBadge();
+    };
+
+    this.chkFrame2.addEventListener('change', updateCheckboxes);
+    this.chkFrame3.addEventListener('change', updateCheckboxes);
+    this.chkFrame4.addEventListener('change', updateCheckboxes);
+
+    // Навигация
     document.querySelectorAll('.nav-tab').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', () => {
         const targetTab = btn.getAttribute('data-tab');
         this.switchTab(targetTab);
       });
     });
 
-    // Логирование терминала
     this.elm.onLog = (type, msg) => this.appendTerminal(type, msg);
     this.elm.onDisconnect = () => this.handleDisconnectedState();
 
-    // Обновление счетчика логгера
     this.logger.onStatsUpdate = (stats) => {
       this.hzValue.textContent = stats.hz.toFixed(1);
       this.msValue.textContent = stats.ms;
@@ -92,13 +131,52 @@ class M73Application {
       }
     };
 
-    // Кнопки записи лога
     this.btnToggleLog.addEventListener('click', () => this.toggleLogging());
     this.btnExportXlsx.addEventListener('click', () => this.logger.exportToXlsx());
 
-    // Кнопки DTC
     this.btnReadDtc.addEventListener('click', () => this.readDtc());
     this.btnClearDtc.addEventListener('click', () => this.clearDtc());
+  }
+
+  /**
+   * Установка режима опроса
+   */
+  setMode(mode) {
+    this.currentMode = mode;
+    if (mode === 'sport') {
+      this.customCheckboxesPanel.style.display = 'none';
+      this.framesConfig.frame2 = false;
+      this.framesConfig.frame3 = false;
+      this.framesConfig.frame4 = false;
+      this.chkFrame2.checked = false;
+      this.chkFrame3.checked = false;
+      this.chkFrame4.checked = false;
+      this.modeBadge.textContent = "⚡ Спорт (~0.08с / 12 Гц)";
+      this.modeBadge.style.color = "#34d399";
+    } else if (mode === 'full') {
+      this.customCheckboxesPanel.style.display = 'none';
+      this.framesConfig.frame2 = true;
+      this.framesConfig.frame3 = true;
+      this.framesConfig.frame4 = true;
+      this.chkFrame2.checked = true;
+      this.chkFrame3.checked = true;
+      this.chkFrame4.checked = true;
+      this.modeBadge.textContent = "🔍 Все 84 параметра (~0.34с)";
+      this.modeBadge.style.color = "#38bdf8";
+    } else if (mode === 'custom') {
+      this.customCheckboxesPanel.style.display = 'flex';
+      this.updateModeBadge();
+    }
+  }
+
+  updateModeBadge() {
+    let count = 1;
+    if (this.framesConfig.frame2) count++;
+    if (this.framesConfig.frame3) count++;
+    if (this.framesConfig.frame4) count++;
+    const estMs = count * 80;
+    this.modeBadge.textContent = `⚙ Кадров: ${count} (~${estMs}мс)`;
+    this.modeBadge.style.color = "#f59e0b";
   }
 
   /**
@@ -119,12 +197,10 @@ class M73Application {
       this.btnConnectText.textContent = "Связь с М73...";
       await this.m73.initEcu();
 
-      // Успешно подключено
       this.btnConnect.classList.add('connected');
       this.btnConnectText.textContent = "Отключить";
       this.btnToggleLog.disabled = false;
 
-      // Запуск высокоскоростного цикла опроса датчиков
       this.startContinuousPolling();
     } catch (err) {
       alert("Ошибка подключения: " + err.message);
@@ -143,7 +219,7 @@ class M73Application {
   }
 
   /**
-   * СВЕРХБЫСТРЫЙ КОНВЕЙЕРНЫЙ ЦИКЛ ОПРОСА М73
+   * СВЕРХБЫСТРЫЙ КОНВЕЙЕРНЫЙ ЦИКЛ ОПРОСА
    */
   async startContinuousPolling() {
     if (this.isPolling) return;
@@ -151,26 +227,14 @@ class M73Application {
 
     while (this.isPolling && this.elm.isConnected) {
       try {
-        // Если открыта вкладка "Панель" или активна запись лога в файл:
-        if (this.currentTab === 'tab-dashboard' || this.logger.isRecording) {
-          const params = await this.m73.readLiveParams();
-          if (params) {
-            this.updateDashboardUI(params);
-            this.logger.addPoint(params);
-          }
-        } 
-        // Если открыта вкладка "АЦП"
-        else if (this.currentTab === 'tab-adc') {
-          const adc = await this.m73.readAdcParams();
-          if (adc) this.updateAdcUI(adc);
-          await this.delay(100);
-        } else {
-          // На других вкладках делаем небольшую паузу
-          await this.delay(200);
+        // Опрашиваем в точности сконфигурированные кадры
+        const data = await this.m73.readConfiguredCycle(this.framesConfig);
+        if (data) {
+          this.updateDashboardUI(data);
+          this.logger.addPoint(data, this.framesConfig);
         }
       } catch (err) {
-        // При единичной ошибке кадра не рвем связь, продолжаем цикл
-        console.warn("Ошибка в цикле опроса: ", err);
+        console.warn("Пауза в цикле: ", err);
         await this.delay(30);
       }
     }
@@ -210,6 +274,28 @@ class M73Application {
     this.setFlag(this.flagLambda, data.flags.lambda);
     this.setFlag(this.flagKnock, data.flags.knock);
     this.setFlag(this.flagFuelCut, data.flags.fuelCut);
+
+    // АЦП и пропуски (если опрашиваются)
+    if (data.adc && this.adcMaf) {
+      this.adcMaf.textContent = `${data.adc.maf} В`;
+      this.adcThrottle.textContent = `${data.adc.tps} В`;
+      this.adcTemp.textContent = `${data.adc.temp} В`;
+      this.adcO2.textContent = `${data.adc.o2} В`;
+      this.adcVolt.textContent = `${data.adc.volt} В`;
+    }
+
+    if (data.misfires && this.misCyl1) {
+      this.updateMisfireBox(this.misCyl1, data.misfires.cyl1);
+      this.updateMisfireBox(this.misCyl2, data.misfires.cyl2);
+      this.updateMisfireBox(this.misCyl3, data.misfires.cyl3);
+      this.updateMisfireBox(this.misCyl4, data.misfires.cyl4);
+    }
+  }
+
+  updateMisfireBox(el, val) {
+    el.textContent = val;
+    if (val > 0) el.classList.add('has-misfires');
+    else el.classList.remove('has-misfires');
   }
 
   setFlag(element, isActive) {
@@ -217,17 +303,6 @@ class M73Application {
     else element.classList.remove('active');
   }
 
-  updateAdcUI(adc) {
-    this.adcMaf.textContent = `${adc.mafVolts} В`;
-    this.adcThrottle.textContent = `${adc.tpsVolts} В`;
-    this.adcTemp.textContent = `${adc.tempVolts} В`;
-    this.adcO2.textContent = `${adc.o2Volts} В`;
-    this.adcVolt.textContent = `${adc.volt} В`;
-  }
-
-  /**
-   * Включение / Остановка записи лога
-   */
   toggleLogging() {
     if (!this.logger.isRecording) {
       this.logger.start();
@@ -245,9 +320,6 @@ class M73Application {
     }
   }
 
-  /**
-   * Чтение ошибок DTC
-   */
   async readDtc() {
     if (!this.elm.isConnected) {
       alert("Сначала подключитесь к адаптеру");
@@ -255,7 +327,6 @@ class M73Application {
     }
     this.dtcList.innerHTML = '<div class="empty-state">Опрос памяти ошибок ЭБУ...</div>';
     
-    // Временно приостанавливаем фоновый опрос датчиков, чтобы не мешать ответу DTC
     const prevPolling = this.isPolling;
     this.isPolling = false;
     await this.delay(100);
@@ -279,9 +350,6 @@ class M73Application {
     }
   }
 
-  /**
-   * Сброс ошибок DTC
-   */
   async clearDtc() {
     if (!confirm("Вы действительно хотите сбросить ошибки в ЭБУ?")) return;
     
@@ -304,9 +372,6 @@ class M73Application {
     }
   }
 
-  /**
-   * Управление механизмами
-   */
   async testActuator(testType) {
     if (!this.elm.isConnected) return alert("Адаптер не подключен");
     
@@ -324,9 +389,6 @@ class M73Application {
     }
   }
 
-  /**
-   * Сброс с инициализацией
-   */
   async resetWithInit() {
     if (!confirm("Внимание! Будут сброшены все таблицы самообучения и адаптаций ЭБУ М73 к заводским. Двигатель должен быть заглушен, зажигание включено. Продолжить?")) return;
 
@@ -348,9 +410,6 @@ class M73Application {
     }
   }
 
-  /**
-   * Переключение экрана вкладок
-   */
   switchTab(tabId) {
     this.currentTab = tabId;
     document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
@@ -381,9 +440,7 @@ class M73Application {
     this.terminalInput.value = "";
     try {
       await this.elm.send(cmd);
-    } catch (e) {
-      // ошибка отобразится в логе
-    }
+    } catch (e) {}
   }
 
   delay(ms) {

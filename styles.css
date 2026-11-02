@@ -164,6 +164,121 @@ body {
   display: block;
 }
 
+/* СЕЛЕКТОР РЕЖИМОВ ОПРОСА */
+.mode-selector-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.mode-selector-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.mode-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.mode-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--accent-green);
+  padding: 2px 8px;
+  background-color: rgba(16, 185, 129, 0.15);
+  border-radius: 6px;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.mode-pills {
+  display: flex;
+  gap: 6px;
+}
+
+.pill-btn {
+  flex: 1;
+  padding: 8px 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 8px;
+  background-color: #0b1120;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pill-btn.active {
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  color: #fff;
+  border-color: #38bdf8;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.3);
+}
+
+.custom-checkboxes-panel {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.75rem;
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.checkbox-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-cyan);
+}
+
+/* СЕТКА ПРОПУСКОВ ЗАЖИГАНИЯ */
+.misfires-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.misfire-box {
+  background-color: #0b1120;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.misfire-num {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.misfire-val {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: #34d399;
+}
+
+.misfire-val.has-misfires {
+  color: var(--accent-red);
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+}
+
 /* КАРТОЧКА ЛОГГЕРА */
 .logger-control-card {
   background-color: var(--bg-card);

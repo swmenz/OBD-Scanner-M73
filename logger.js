@@ -23,14 +23,9 @@ class TripLogger {
     this.onStatsUpdate = null; // (stats: { count: number, hz: number, ms: number }) => void
   }
 
-  /**
-   * Активация бесшумного звукового потока (трюк Car Scanner)
-   * для предотвращения засыпания JavaScript на iOS при сворачивании браузера
-   */
   _enableBackgroundMode() {
     try {
       if (!this.silentAudio) {
-        // Минимальный бесшумный WAV в формате Base64
         const silentWav = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
         this.silentAudio = new Audio(silentWav);
         this.silentAudio.loop = true;
@@ -40,7 +35,6 @@ class TripLogger {
       console.warn("Ошибка запуска фонового режима:", e);
     }
 
-    // Запрет гашения экрана (Screen Wake Lock API)
     if ('wakeLock' in navigator) {
       navigator.wakeLock.request('screen').then(wl => {
         this.wakeLock = wl;
@@ -75,7 +69,7 @@ class TripLogger {
   /**
    * Добавление точки данных в лог
    */
-  addPoint(params) {
+  addPoint(params, framesConfig) {
     const now = performance.now();
     
     if (this.lastFrameTime > 0) {
@@ -92,11 +86,10 @@ class TripLogger {
     this.lastFrameTime = now;
 
     if (this.isRecording) {
-      // Время от старта записи в секундах (с точностью до тысячных, как в OpenDiag)
       const elapsedSec = ((now - this.startTime) / 1000).toFixed(3);
 
-      // Формируем структуру строк, полностью идентичную OpenDiag Mobile
-      this.records.push({
+      // Базовые параметры (Кадр 1)
+      const record = {
         "Время (сек)": parseFloat(elapsedSec),
         "Обороты двигателя (об/мин)": params.rpm,
         "Скорость автомобиля (км/ч)": params.speed,
@@ -118,7 +111,34 @@ class TripLogger {
         "Контроль детонации активен": params.flags.knock ? "Да" : "Нет",
         "Отсечка топливоподачи": params.flags.fuelCut ? "Да" : "Нет",
         "Интервал_опроса (мс)": this.currentMs
-      });
+      };
+
+      // Если включен Кадр 3 (Адаптации)
+      if (framesConfig && framesConfig.frame3) {
+        record["Заданное значение лямбда (-)"] = params.targetLambda;
+        record["Коэффициент продувки адсорбера (%)"] = params.purgeRate;
+        record["Мультипликативная составляющая коррекции (-)"] = params.multAdapt;
+        record["Аддитивная составляющая коррекции (%)"] = params.addAdapt;
+      }
+
+      // Если включен Кадр 4 (Пропуски зажигания)
+      if (framesConfig && framesConfig.frame4) {
+        record["Пропуски цилиндр 1 (-)"] = params.misfires.cyl1;
+        record["Пропуски цилиндр 2 (-)"] = params.misfires.cyl2;
+        record["Пропуски цилиндр 3 (-)"] = params.misfires.cyl3;
+        record["Пропуски цилиндр 4 (-)"] = params.misfires.cyl4;
+        record["Суммарный счетчик пропусков (-)"] = params.misfires.total;
+      }
+
+      // Если включен Кадр 2 (АЦП)
+      if (framesConfig && framesConfig.frame2) {
+        record["АЦП ДМРВ (В)"] = params.adc.maf;
+        record["АЦП ДПДЗ (В)"] = params.adc.tps;
+        record["АЦП ДТОЖ (В)"] = params.adc.temp;
+        record["АЦП Лямбда 1 (В)"] = params.adc.o2;
+      }
+
+      this.records.push(record);
     }
 
     if (this.onStatsUpdate) {
@@ -146,33 +166,8 @@ class TripLogger {
 
     const worksheet = XLSX.utils.json_to_sheet(this.records);
 
-    // Автоподбор ширины столбцов под русский текст
-    worksheet["!cols"] = [
-      { wch: 12 }, // Время (сек)
-      { wch: 16 }, // Обороты
-      { wch: 15 }, // Скорость
-      { wch: 18 }, // Дроссель
-      { wch: 16 }, // ДМРВ
-      { wch: 18 }, // Цикловой расход
-      { wch: 15 }, // Впрыск
-      { wch: 12 }, // Загрузка форс
-      { wch: 14 }, // УОЗ
-      { wch: 18 }, // Отскок УОЗ
-      { wch: 16 }, // ТОЖ
-      { wch: 14 }, // Бортсеть
-      { wch: 15 }, // РХХ
-      { wch: 14 }, // Расход л/ч
-      { wch: 18 }, // Лямбда 1
-      { wch: 16 }, // Коррекция
-      { wch: 12 }, // Флаг ХХ
-      { wch: 14 }, // Флаг полной нагрузки
-      { wch: 15 }, // Детонация
-      { wch: 14 }, // Отсечка
-      { wch: 12 }  // Интервал мс
-    ];
-
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Лог М73 Скоростной");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Лог М73");
 
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
@@ -187,7 +182,7 @@ class TripLogger {
         await navigator.share({
           files: [file],
           title: 'Лог диагностики Приора М73',
-          text: `Скоростной лог М73 (${this.records.length} точек)`
+          text: `Лог М73 (${this.records.length} точек)`
         });
         return;
       } catch (err) {

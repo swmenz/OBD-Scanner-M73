@@ -1,13 +1,41 @@
 /**
  * Протокол взаимодействия с ЭБУ Итэлма М73 (Лада Приора / Калина / 2114)
  * Стандарт KWP2000 (ISO 14230), Fast Init, 10400 бод.
- * С калибровками и формулами, сверенными 1:1 по реальному логу OpenDiag Mobile.
+ * Поддерживает выборочный опрос кадров (21 01, 21 02, 21 03, 21 04)
+ * для регулировки баланса между максимальной скоростью (12 Гц) и полнотой данных.
  */
 
 class ItelmaM73Protocol {
   constructor(elm) {
     this.elm = elm;
     this.isInitialized = false;
+
+    // Кэш для объединения данных из разных кадров
+    this.latestData = {
+      timestamp: new Date(),
+      rpm: 0,
+      temp: 0,
+      throttle: 0,
+      speed: 0,
+      spark: 0,
+      sparkRetard: 0,
+      maf: 0,
+      cycleAir: 0,
+      injTime: 0,
+      dutyCycle: 0,
+      fuelRate: 0,
+      voltage: 0,
+      iacSteps: 0,
+      o2Volt: 0,
+      lambdaCorr: 1.0,
+      targetLambda: 1.0,
+      purgeRate: 0,
+      multAdapt: 1.0,
+      addAdapt: 0,
+      misfires: { cyl1: 0, cyl2: 0, cyl3: 0, cyl4: 0, total: 0 },
+      adc: { maf: 0, tps: 0, temp: 0, o2: 0, volt: 0 },
+      flags: { idle: true, lambda: false, knock: false, fuelCut: false }
+    };
   }
 
   /**
@@ -19,18 +47,15 @@ class ItelmaM73Protocol {
     await this.elm.send("AT Z", 1500).catch(() => {});
     await this.delay(100);
 
-    // Отключаем эхо, пробелы и лишние байты для максимальной скорости K-Line
     await this.elm.send("AT E0");
     await this.elm.send("AT L0");
     await this.elm.send("AT S0"); // Пробелы выкл (критично для скорости)
 
-    // Протокол K-Line Fast Init
     await this.elm.send("AT SP 5");
     await this.elm.send("AT IB 10");
     await this.elm.send("AT SH 81 10 F1");
     await this.elm.send("AT H1");
 
-    // Зажимаем таймауты адаптера (убираем заводские задержки 300мс)
     await this.elm.send("AT AT 0");
     await this.elm.send("AT ST 19"); // Таймаут ~100мс
     await this.elm.send("AT SW 96");
@@ -52,35 +77,57 @@ class ItelmaM73Protocol {
   }
 
   /**
-   * СКОРОСТНОЙ ЗАПРОС ОСНОВНЫХ ДАТЧИКОВ (Кадр 21 01)
+   * ДИНАМИЧЕСКИЙ ОПРОС ТОЛЬКО ВЫБРАННЫХ КАДРОВ
+   * @param {Object} framesConfig - { frame1: bool, frame2: bool, frame3: bool, frame4: bool }
    */
-  async readLiveParams() {
-    const raw = await this.elm.send("2101", 350);
-    return this.parseFrame2101(raw);
+  async readConfiguredCycle(framesConfig) {
+    // 1. Всегда опрашиваем базовый скоростной Кадр 1 (он обязателен)
+    const raw1 = await this.elm.send("2101", 350);
+    this.parseFrame2101(raw1);
+
+    // 2. Если включен Кадр 2 (Каналы АЦП)
+    if (framesConfig.frame2) {
+      try {
+        const raw2 = await this.elm.send("2102", 350);
+        this.parseFrame2102(raw2);
+      } catch (e) {}
+    }
+
+    // 3. Если включен Кадр 3 (Адаптации и продувка адсорбера)
+    if (framesConfig.frame3) {
+      try {
+        const raw3 = await this.elm.send("2103", 350);
+        this.parseFrame2103(raw3);
+      } catch (e) {}
+    }
+
+    // 4. Если включен Кадр 4 (Пропуски зажигания по цилиндрам)
+    if (framesConfig.frame4) {
+      try {
+        const raw4 = await this.elm.send("2104", 350);
+        this.parseFrame2104(raw4);
+      } catch (e) {}
+    }
+
+    this.latestData.timestamp = new Date();
+    return this.latestData;
   }
 
   /**
-   * Разбор сырых байт кадра 21 01 для М73 с математикой OpenDiag
+   * Разбор Кадра 1 (21 01) — Основные ездовые параметры
    */
   parseFrame2101(rawStr) {
     const hex = rawStr.replace(/[\s\r\n]/g, '').toUpperCase();
-    
     const idx = hex.indexOf("6101");
-    if (idx === -1) {
-      return null;
-    }
+    if (idx === -1) return null;
 
     const payloadHex = hex.substring(idx + 4);
     const bytes = [];
     for (let i = 0; i < payloadHex.length - 1; i += 2) {
       bytes.push(parseInt(payloadHex.substr(i, 2), 16));
     }
+    if (bytes.length < 14) return null;
 
-    if (bytes.length < 16) {
-      return null;
-    }
-
-    // Базовые параметры из кадра M73
     const rpm = (bytes[0] || 0) * 40;
     const temp = (bytes[1] || 0) - 40;
     const throttle = parseFloat(((bytes[2] || 0) * 0.5).toFixed(1));
@@ -96,75 +143,60 @@ class ItelmaM73Protocol {
     const voltage = parseFloat(((bytes[9] || 0) * 0.1).toFixed(1));
     const iacSteps = bytes[10] || 0;
 
-    // Отскок УОЗ по детонации
     const retardRaw = bytes[11] || 0;
     const sparkRetard = retardRaw > 0 ? parseFloat((-retardRaw * 0.75).toFixed(2)) : 0.0;
 
-    // Сигнал датчика кислорода (ДК1) и коэффициент коррекции
     const o2Raw = bytes[12] || 0;
     const o2Volt = parseFloat((o2Raw * 0.0049).toFixed(3));
     
     const lambdaCorrRaw = bytes[13] || 128;
     const lambdaCorr = parseFloat((lambdaCorrRaw / 128.0).toFixed(3));
 
-    // Расчётные спортивные параметры (точные формулы ВАЗ / OpenDiag)
-    // 1. Цикловой расход воздуха (мг/такт) = (ДМРВ * 8333.33) / RPM
+    // Расчётные величины
     let cycleAir = 0.0;
     if (rpm > 100 && maf > 0) {
       cycleAir = parseFloat(((maf * 8333.33) / rpm).toFixed(2));
     }
 
-    // 2. Загрузка форсунок (%) = (Время впрыска * RPM) / 1200
     let dutyCycle = 0.0;
     if (rpm > 100 && injTime > 0) {
       dutyCycle = parseFloat(((injTime * rpm) / 1200.0).toFixed(2));
     }
 
-    // 3. Расход топлива (л/ч)
     let fuelRate = 0.0;
     if (rpm > 100 && injTime > 0) {
-      fuelRate = parseFloat(((injTime * rpm * 0.000325)).toFixed(2));
+      fuelRate = parseFloat((injTime * rpm * 0.000325).toFixed(2));
     }
 
-    // Флаги состояния
-    const flagByte = bytes[14] || 0;
-    const flagIdle = throttle === 0 && rpm < 1050;
-    const flagLambda = o2Volt > 0.05 && o2Volt < 0.95;
-    const flagKnock = sparkRetard < 0;
-    const flagFuelCut = injTime === 0 && rpm > 1500;
+    this.latestData.rpm = rpm;
+    this.latestData.temp = temp;
+    this.latestData.throttle = throttle;
+    this.latestData.speed = speed;
+    this.latestData.spark = spark;
+    this.latestData.sparkRetard = sparkRetard;
+    this.latestData.maf = maf;
+    this.latestData.cycleAir = cycleAir;
+    this.latestData.injTime = injTime;
+    this.latestData.dutyCycle = dutyCycle;
+    this.latestData.fuelRate = fuelRate;
+    this.latestData.voltage = voltage;
+    this.latestData.iacSteps = iacSteps;
+    this.latestData.o2Volt = o2Volt;
+    this.latestData.lambdaCorr = lambdaCorr;
 
-    return {
-      timestamp: new Date(),
-      rpm,
-      temp,
-      throttle,
-      speed,
-      spark,
-      sparkRetard,
-      maf,
-      cycleAir,
-      injTime,
-      dutyCycle,
-      fuelRate,
-      voltage,
-      iacSteps,
-      o2Volt,
-      lambdaCorr,
-      flags: {
-        idle: flagIdle,
-        lambda: flagLambda,
-        knock: flagKnock,
-        fuelCut: flagFuelCut
-      }
-    };
+    this.latestData.flags.idle = throttle === 0 && rpm < 1050;
+    this.latestData.flags.lambda = o2Volt > 0.05 && o2Volt < 0.95;
+    this.latestData.flags.knock = sparkRetard < 0;
+    this.latestData.flags.fuelCut = injTime === 0 && rpm > 1500;
+
+    return this.latestData;
   }
 
   /**
-   * ЗАПРОС КАНАЛОВ АЦП (Кадр 21 02)
+   * Разбор Кадра 2 (21 02) — АЦП
    */
-  async readAdcParams() {
-    const raw = await this.elm.send("2102", 500);
-    const hex = raw.replace(/[\s\r\n]/g, '').toUpperCase();
+  parseFrame2102(rawStr) {
+    const hex = rawStr.replace(/[\s\r\n]/g, '').toUpperCase();
     const idx = hex.indexOf("6102");
     if (idx === -1) return null;
 
@@ -173,25 +205,63 @@ class ItelmaM73Protocol {
     for (let i = 0; i < payloadHex.length - 1; i += 2) {
       bytes.push(parseInt(payloadHex.substr(i, 2), 16));
     }
-
     if (bytes.length < 8) return null;
 
-    // АЦП ДМРВ: 10 бит ((B0*256 + B1) * 5.0 / 1024)
     const mafAdcRaw = ((bytes[0] || 0) << 8) | (bytes[1] || 0);
-    const mafVolts = (mafAdcRaw * (5.0 / 1023.0)).toFixed(3);
+    this.latestData.adc.maf = (mafAdcRaw * (5.0 / 1023.0)).toFixed(3);
+    this.latestData.adc.tps = ((bytes[2] || 0) * (5.0 / 255.0)).toFixed(2);
+    this.latestData.adc.temp = ((bytes[3] || 0) * (5.0 / 255.0)).toFixed(2);
+    this.latestData.adc.o2 = ((bytes[4] || 0) * (1.25 / 255.0)).toFixed(3);
+    this.latestData.adc.volt = ((bytes[5] || 0) * 0.1).toFixed(1);
 
-    const tpsVolts = ((bytes[2] || 0) * (5.0 / 255.0)).toFixed(2);
-    const tempVolts = ((bytes[3] || 0) * (5.0 / 255.0)).toFixed(2);
-    const o2Volts = ((bytes[4] || 0) * (1.25 / 255.0)).toFixed(3);
-    const volt = ((bytes[5] || 0) * 0.1).toFixed(1);
+    return this.latestData.adc;
+  }
 
-    return {
-      mafVolts,
-      tpsVolts,
-      tempVolts,
-      o2Volts,
-      volt
-    };
+  /**
+   * Разбор Кадра 3 (21 03) — Адаптации и адсорбер
+   */
+  parseFrame2103(rawStr) {
+    const hex = rawStr.replace(/[\s\r\n]/g, '').toUpperCase();
+    const idx = hex.indexOf("6103");
+    if (idx === -1) return null;
+
+    const payloadHex = hex.substring(idx + 4);
+    const bytes = [];
+    for (let i = 0; i < payloadHex.length - 1; i += 2) {
+      bytes.push(parseInt(payloadHex.substr(i, 2), 16));
+    }
+    if (bytes.length < 6) return null;
+
+    this.latestData.targetLambda = parseFloat(((bytes[0] || 128) / 128.0).toFixed(3));
+    this.latestData.purgeRate = parseFloat(((bytes[1] || 0) * 0.39).toFixed(1));
+    this.latestData.multAdapt = parseFloat(((bytes[2] || 128) / 128.0).toFixed(3));
+    this.latestData.addAdapt = parseFloat((((bytes[3] || 128) - 128) * 0.1).toFixed(2));
+
+    return true;
+  }
+
+  /**
+   * Разбор Кадра 4 (21 04) — Пропуски зажигания
+   */
+  parseFrame2104(rawStr) {
+    const hex = rawStr.replace(/[\s\r\n]/g, '').toUpperCase();
+    const idx = hex.indexOf("6104");
+    if (idx === -1) return null;
+
+    const payloadHex = hex.substring(idx + 4);
+    const bytes = [];
+    for (let i = 0; i < payloadHex.length - 1; i += 2) {
+      bytes.push(parseInt(payloadHex.substr(i, 2), 16));
+    }
+    if (bytes.length < 5) return null;
+
+    this.latestData.misfires.cyl1 = bytes[0] || 0;
+    this.latestData.misfires.cyl2 = bytes[1] || 0;
+    this.latestData.misfires.cyl3 = bytes[2] || 0;
+    this.latestData.misfires.cyl4 = bytes[3] || 0;
+    this.latestData.misfires.total = bytes[4] || (bytes[0] + bytes[1] + bytes[2] + bytes[3]);
+
+    return this.latestData.misfires;
   }
 
   /**
