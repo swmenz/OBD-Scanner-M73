@@ -104,9 +104,9 @@ class M73Application {
     this.btnConnect.addEventListener('click', () => this.toggleConnection());
 
     // Переключение режимов
-    document.querySelectorAll('.segment-btn').forEach(btn => {
+    document.querySelectorAll('.segment-btn, .liquid-seg-item').forEach(btn => {
       btn.addEventListener('click', () => {
-        document.querySelectorAll('.segment-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.segment-btn, .liquid-seg-item').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.setMode(btn.getAttribute('data-mode'));
       });
@@ -123,8 +123,8 @@ class M73Application {
     this.chkFrame3.addEventListener('change', updateCheckboxes);
     this.chkFrame4.addEventListener('change', updateCheckboxes);
 
-    // Навигация по вкладкам (iOS TabBar)
-    document.querySelectorAll('.tabbar-item').forEach(btn => {
+    // Навигация по вкладкам (iOS TabBar / Liquid Dock)
+    document.querySelectorAll('.tabbar-item, .dock-item').forEach(btn => {
       btn.addEventListener('click', () => {
         const targetTab = btn.getAttribute('data-tab');
         this.switchTab(targetTab);
@@ -448,7 +448,7 @@ class M73Application {
   switchTab(tabId) {
     this.currentTab = tabId;
     document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.tabbar-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tabbar-item, .dock-item').forEach(el => el.classList.remove('active'));
 
     const targetContent = document.getElementById(tabId);
     const targetNav = document.querySelector(`[data-tab="${tabId}"]`);

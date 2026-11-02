@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#090a0f">
+  <meta name="theme-color" content="#030408">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Диагностика М73 — Лада Приора</title>
@@ -13,241 +13,247 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <!-- Фоновые источники света для преломления в жидком стекле (Liquid Glass) -->
+  <div class="ambient-glow glow-top"></div>
+  <div class="ambient-glow glow-bottom"></div>
+
   <div class="app-shell">
     
-    <!-- ВЕРХНЯЯ СТАТУСНАЯ ПАНЕЛЬ -->
-    <header class="app-navbar">
-      <div class="navbar-info">
-        <h1 class="navbar-title">Диагностика М73</h1>
-        <div class="navbar-subtitle">
-          <span class="status-indicator" id="connIndicator"></span>
-          <span id="connStateText">Не подключено</span>
-          <span class="sub-sep">•</span>
-          <span>Лада Приора 16V</span>
+    <!-- ВЕРХНЯЯ СТЕКЛЯННАЯ ПАНЕЛЬ НАВИГАЦИИ -->
+    <header class="glass-navbar">
+      <div class="navbar-brand">
+        <h1 class="brand-name">М73 Диагностика</h1>
+        <div class="brand-status">
+          <span class="status-pulse" id="connIndicator"></span>
+          <span class="status-text" id="connStateText">Не подключено</span>
+          <span class="dot-separator">•</span>
+          <span class="car-tag">Приора 16V</span>
         </div>
       </div>
 
-      <div class="navbar-actions">
-        <div class="cadence-capsule" title="Текущая частота опроса K-Line">
-          <span class="cadence-value" id="hzValue">0.0</span>
-          <span class="cadence-unit">Гц</span>
-          <span class="cadence-ms">(<span id="msValue">0</span> мс)</span>
+      <div class="navbar-right">
+        <div class="cadence-pill" title="Частота опроса K-Line">
+          <span class="cadence-num" id="hzValue">0.0</span>
+          <span class="cadence-lbl">Гц</span>
+          <span class="cadence-detail">(<span id="msValue">0</span> мс)</span>
         </div>
-        <button id="btnConnect" class="btn btn-primary btn-connect">
+        <button id="btnConnect" class="glass-btn btn-primary-glass">
           <span id="btnConnectText">Подключить</span>
         </button>
       </div>
     </header>
 
-    <!-- ОСНОВНАЯ ОБЛАСТЬ ПРОСМОТРА -->
-    <main class="app-body">
+    <!-- ОСНОВНОЙ КОНТЕНТ -->
+    <main class="app-scroll-view">
       
-      <!-- ВКЛАДКА 1: ОСНОВНАЯ ПРИБОРНАЯ ПАНЕЛЬ -->
+      <!-- ВКЛАДКА 1: ПАНЕЛЬ ДАТЧИКОВ -->
       <section id="tab-dashboard" class="tab-pane active">
         
-        <!-- ГЛАВНЫЙ БЛОК: СКОРОСТЬ И ОБОРОТЫ (ПЕРВЫЙ УРОВЕНЬ ВНИМАНИЯ) -->
-        <div class="primary-gauges">
+        <!-- ГЛАВНЫЙ БЛОК: СКОРОСТЬ И ОБОРОТЫ (LIQUID HERO GAUGES) -->
+        <div class="hero-grid">
           <!-- Обороты двигателя -->
-          <div class="gauge-card hero-gauge">
-            <div class="card-caption">
-              <span class="caption-label">Обороты двигателя</span>
-              <span class="caption-aux" id="valPeakRpm">Пик: 0 об/мин</span>
+          <div class="glass-card hero-card">
+            <div class="card-top-row">
+              <span class="micro-header">Обороты двигателя</span>
+              <span class="peak-badge" id="valPeakRpm">Пик: 0 об/мин</span>
             </div>
-            <div class="gauge-number-wrap">
-              <span class="gauge-number" id="valRpm">0</span>
-              <span class="gauge-unit-label">об/мин</span>
+            <div class="hero-digital-row">
+              <span class="hero-value" id="valRpm">0</span>
+              <span class="hero-unit">об/мин</span>
             </div>
-            <div class="progress-track">
-              <div class="progress-bar" id="barRpm" style="width: 0%;"></div>
+            <div class="glass-progress-track">
+              <div class="glass-progress-bar" id="barRpm" style="width: 0%;"></div>
             </div>
           </div>
 
-          <!-- Скорость автомобиля -->
-          <div class="gauge-card hero-gauge">
-            <div class="card-caption">
-              <span class="caption-label">Скорость</span>
-              <span class="caption-aux" id="valGearAux">Передача: —</span>
+          <!-- Скорость -->
+          <div class="glass-card hero-card">
+            <div class="card-top-row">
+              <span class="micro-header">Скорость</span>
+              <span class="gear-badge" id="valGearAux">Передача: —</span>
             </div>
-            <div class="gauge-number-wrap">
-              <span class="gauge-number" id="valSpeed">0</span>
-              <span class="gauge-unit-label">км/ч</span>
+            <div class="hero-digital-row">
+              <span class="hero-value" id="valSpeed">0</span>
+              <span class="hero-unit">км/ч</span>
             </div>
-            <div class="gauge-sub-info">
+            <div class="hero-subtext">
               <span>Дроссель: <strong id="valThrottleSub">0%</strong></span>
             </div>
           </div>
         </div>
 
-        <!-- БЛОК 2: УПРАВЛЕНИЕ ЗАПИСЬЮ ЛОГА И РЕЖИМ СКОРОСТИ -->
-        <div class="card control-card">
-          <div class="control-header">
-            <div>
-              <div class="control-title">Запись поездки в Excel</div>
-              <div class="control-meta" id="loggerStatsText">Запись не ведётся • 0 точек</div>
+        <!-- КАРТОЧКА ЛОГГЕРА И ВЫБОРА РЕЖИМА СКОРОСТИ -->
+        <div class="glass-card control-card">
+          <div class="control-top">
+            <div class="control-info">
+              <div class="card-title">Запись поездки в Excel</div>
+              <div class="card-subtitle" id="loggerStatsText">Запись не ведётся • 0 точек</div>
             </div>
-            <div class="control-actions">
-              <button id="btnToggleLog" class="btn btn-action btn-record" disabled>
-                <span class="rec-dot" id="loggerStatusDot"></span>
+            <div class="control-buttons">
+              <button id="btnToggleLog" class="glass-btn btn-rec" disabled>
+                <span class="rec-beacon" id="loggerStatusDot"></span>
                 <span id="recBtnLabel">Начать запись</span>
               </button>
-              <button id="btnExportXlsx" class="btn btn-action btn-secondary" disabled>
-                Сохранить XLSX
+              <button id="btnExportXlsx" class="glass-btn btn-glass-secondary" disabled>
+                Экспорт XLSX
               </button>
             </div>
           </div>
 
-          <!-- Переключатель режима сбора данных -->
-          <div class="speed-mode-box">
-            <div class="speed-mode-header">
-              <span class="mode-caption">Режим сбора данных:</span>
-              <span class="mode-status-text" id="modeBadge">Спорт (макс. скорость ~0.08 с)</span>
+          <!-- Сегментный переключатель в стиле Apple (Liquid Segmented Control) -->
+          <div class="mode-container">
+            <div class="mode-header-line">
+              <span class="mode-label">Режим опроса датчиков:</span>
+              <span class="mode-accent-label" id="modeBadge">Спорт (макс. скорость ~0.08 с)</span>
             </div>
-            <div class="segmented-control">
-              <button class="segment-btn active" data-mode="sport">⚡ Спорт (12 Гц)</button>
-              <button class="segment-btn" data-mode="custom">Выборочно</button>
-              <button class="segment-btn" data-mode="full">Все 84 датчика</button>
+            <div class="liquid-segmented">
+              <button class="liquid-seg-item active" data-mode="sport">⚡ Спорт (12 Гц)</button>
+              <button class="liquid-seg-item" data-mode="custom">Выборочно</button>
+              <button class="liquid-seg-item" data-mode="full">Все 84 датчика</button>
             </div>
 
-            <!-- Раскрывающийся блок ручного выбора групп параметров -->
-            <div class="custom-selection-group" id="customCheckboxesPanel" style="display: none;">
-              <label class="custom-chk-item">
+            <!-- Чекбоксы выборочного режима -->
+            <div class="custom-selection-panel" id="customCheckboxesPanel" style="display: none;">
+              <label class="glass-checkbox-row">
                 <input type="checkbox" id="chkFrame1" checked disabled>
-                <span>Кадр 1: Обороты, скорость, дроссель, ДМРВ, впрыск, УОЗ, ТОЖ (основное)</span>
+                <span class="chk-checkmark"></span>
+                <span class="chk-text">Кадр 1 (Базовый): Обороты, скорость, дроссель, ДМРВ, впрыск, УОЗ, ТОЖ</span>
               </label>
-              <label class="custom-chk-item">
+              <label class="glass-checkbox-row">
                 <input type="checkbox" id="chkFrame2">
-                <span>Кадр 2: Напряжения АЦП (покой ДМРВ, ДПДЗ, ДТОЖ, датчики кислорода)</span>
+                <span class="chk-checkmark"></span>
+                <span class="chk-text">Кадр 2 (АЦП): Напряжения покоя ДМРВ, ДПДЗ, ДТОЖ, датчики кислорода</span>
               </label>
-              <label class="custom-chk-item">
+              <label class="glass-checkbox-row">
                 <input type="checkbox" id="chkFrame3">
-                <span>Кадр 3: Топливные коррекции, адаптации смеси и адсорбер</span>
+                <span class="chk-checkmark"></span>
+                <span class="chk-text">Кадр 3 (Смесь): Коррекции, адаптации смеси и клапан адсорбера</span>
               </label>
-              <label class="custom-chk-item">
+              <label class="glass-checkbox-row">
                 <input type="checkbox" id="chkFrame4">
-                <span>Кадр 4: Пропуски воспламенения по цилиндрам 1, 2, 3, 4</span>
+                <span class="chk-checkmark"></span>
+                <span class="chk-text">Кадр 4 (Пропуски): Счётчики воспламенения по цилиндрам 1, 2, 3, 4</span>
               </label>
             </div>
           </div>
         </div>
 
-        <!-- БЛОК 3: ВТОРИЧНЫЕ ПАРАМЕТРЫ ДВИГАТЕЛЯ (СЕТКА МЕТРИК) -->
+        <!-- СЕТКА ДАТЧИКОВ ДВИГАТЕЛЯ (FLUID METRIC TILES) -->
         <div class="metrics-grid">
           
           <!-- ДМРВ -->
-          <div class="metric-card">
-            <span class="metric-label">Расход воздуха (ДМРВ)</span>
-            <div class="metric-value-row">
-              <span class="metric-val" id="valMaf">0.0</span>
-              <span class="metric-unit">кг/ч</span>
+          <div class="glass-card metric-tile">
+            <span class="tile-label">Расход воздуха (ДМРВ)</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valMaf">0.0</span>
+              <span class="tile-unit">кг/ч</span>
             </div>
           </div>
 
           <!-- Цикловой расход -->
-          <div class="metric-card metric-accent">
-            <span class="metric-label">Цикловой расход</span>
-            <div class="metric-value-row">
-              <span class="metric-val" id="valCycleAir">0.0</span>
-              <span class="metric-unit">мг/такт</span>
+          <div class="glass-card metric-tile tile-featured">
+            <span class="tile-label">Цикловой расход</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valCycleAir">0.0</span>
+              <span class="tile-unit">мг/такт</span>
             </div>
           </div>
 
           <!-- Время впрыска -->
-          <div class="metric-card">
-            <span class="metric-label">Длительность впрыска</span>
-            <div class="metric-value-row">
-              <span class="metric-val" id="valInjTime">0.00</span>
-              <span class="metric-unit">мс</span>
+          <div class="glass-card metric-tile">
+            <span class="tile-label">Длительность впрыска</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valInjTime">0.00</span>
+              <span class="tile-unit">мс</span>
             </div>
           </div>
 
           <!-- Загрузка форсунок -->
-          <div class="metric-card metric-accent">
-            <span class="metric-label">Загрузка форсунок</span>
-            <div class="metric-value-row">
-              <span class="metric-val" id="valDuty">0.0%</span>
-              <span class="metric-unit">загрузка</span>
+          <div class="glass-card metric-tile tile-featured">
+            <span class="tile-label">Загрузка форсунок</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valDuty">0.0%</span>
+              <span class="tile-unit">нагрузка</span>
             </div>
           </div>
 
-          <!-- УОЗ и детонация -->
-          <div class="metric-card" id="cardSpark">
-            <span class="metric-label">УОЗ / Отскок</span>
-            <div class="metric-value-row">
-              <span class="metric-val" id="valSpark">0.0</span>
-              <span class="retard-badge" id="valRetard">0.0°</span>
+          <!-- УОЗ и отскок детонации -->
+          <div class="glass-card metric-tile" id="cardSpark">
+            <span class="tile-label">УОЗ / Отскок</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valSpark">0.0</span>
+              <span class="glass-retard-tag" id="valRetard">0.0°</span>
             </div>
           </div>
 
-          <!-- Дроссельная заслонка -->
-          <div class="metric-card">
-            <span class="metric-label">Дроссельная заслонка</span>
-            <div class="metric-value-row">
-              <span class="metric-val" id="valThrottle">0.0</span>
-              <span class="metric-unit">%</span>
+          <!-- Дроссель -->
+          <div class="glass-card metric-tile">
+            <span class="tile-label">Дроссельная заслонка</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valThrottle">0.0</span>
+              <span class="tile-unit">%</span>
             </div>
           </div>
 
           <!-- Температура двигателя -->
-          <div class="metric-card">
-            <span class="metric-label">Температура ОЖ</span>
-            <div class="metric-value-row">
-              <span class="metric-val" id="valTemp">0</span>
-              <span class="metric-unit">°C</span>
+          <div class="glass-card metric-tile">
+            <span class="tile-label">Температура ОЖ</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valTemp">0</span>
+              <span class="tile-unit">°C</span>
             </div>
-            <div class="mini-track">
-              <div class="mini-bar" id="barTemp" style="width: 0%;"></div>
+            <div class="mini-glass-track">
+              <div class="mini-glass-bar" id="barTemp" style="width: 0%;"></div>
             </div>
           </div>
 
-          <!-- Напряжение бортовой сети -->
-          <div class="metric-card">
-            <span class="metric-label">Бортовая сеть</span>
-            <div class="metric-value-row">
-              <span class="metric-val" id="valVoltage">0.0</span>
-              <span class="metric-unit">В</span>
+          <!-- Бортовое напряжение -->
+          <div class="glass-card metric-tile">
+            <span class="tile-label">Бортовая сеть</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valVoltage">0.0</span>
+              <span class="tile-unit">В</span>
             </div>
           </div>
 
           <!-- Расход топлива -->
-          <div class="metric-card">
-            <span class="metric-label">Текущий расход</span>
-            <div class="metric-value-row">
-              <span class="metric-val" id="valFuelRate">0.00</span>
-              <span class="metric-unit">л/ч</span>
+          <div class="glass-card metric-tile">
+            <span class="tile-label">Текущий расход</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valFuelRate">0.00</span>
+              <span class="tile-unit">л/ч</span>
             </div>
           </div>
 
           <!-- Позиция РХХ -->
-          <div class="metric-card">
-            <span class="metric-label">Позиция РХХ</span>
-            <div class="metric-value-row">
-              <span class="metric-val" id="valIac">0</span>
-              <span class="metric-unit">шагов</span>
+          <div class="glass-card metric-tile">
+            <span class="tile-label">Позиция РХХ</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valIac">0</span>
+              <span class="tile-unit">шагов</span>
             </div>
           </div>
 
         </div>
 
-        <!-- БЛОК 4: ФЛАГИ СОСТОЯНИЙ И РЕЖИМОВ РАБОТЫ -->
-        <div class="card flags-card">
-          <div class="card-caption">
-            <span class="caption-label">Режимы и флаги состояния</span>
-          </div>
-          <div class="flags-chips">
-            <div class="flag-chip" id="flagIdle">
-              <span class="chip-dot"></span>
+        <!-- ФЛАГИ СОСТОЯНИЯ И РЕЖИМОВ -->
+        <div class="glass-card flags-container">
+          <span class="micro-header">Режимы и флаги состояния</span>
+          <div class="glass-chips-grid">
+            <div class="glass-chip" id="flagIdle">
+              <span class="chip-beacon"></span>
               <span>Холостой ход</span>
             </div>
-            <div class="flag-chip" id="flagLambda">
-              <span class="chip-dot"></span>
+            <div class="glass-chip" id="flagLambda">
+              <span class="chip-beacon"></span>
               <span>Лямбда-петля</span>
             </div>
-            <div class="flag-chip flag-alert" id="flagKnock">
-              <span class="chip-dot"></span>
+            <div class="glass-chip chip-alert" id="flagKnock">
+              <span class="chip-beacon"></span>
               <span>Детонация</span>
             </div>
-            <div class="flag-chip" id="flagFuelCut">
-              <span class="chip-dot"></span>
+            <div class="glass-chip" id="flagFuelCut">
+              <span class="chip-beacon"></span>
               <span>Отсечка топлива</span>
             </div>
           </div>
@@ -255,99 +261,99 @@
 
       </section>
 
-      <!-- ВКЛАДКА 2: ДИАГНОСТИКА ОШИБОК (DTC) -->
+      <!-- ВКЛАДКА 2: ОШИБКИ DTC -->
       <section id="tab-dtc" class="tab-pane">
-        <div class="card">
-          <div class="section-header">
+        <div class="glass-card">
+          <div class="panel-header">
             <div>
-              <h2 class="section-title">Коды неисправностей (DTC)</h2>
-              <p class="section-subtitle">Память ошибок блока управления Итэлма М73</p>
+              <h2 class="panel-heading">Коды неисправностей (DTC)</h2>
+              <p class="panel-sub">Память ошибок контроллера Итэлма М73</p>
             </div>
-            <div class="section-buttons">
-              <button id="btnReadDtc" class="btn btn-secondary">Считать ошибки</button>
-              <button id="btnClearDtc" class="btn btn-danger">Сбросить</button>
+            <div class="panel-btns">
+              <button id="btnReadDtc" class="glass-btn btn-glass-secondary">Считать ошибки</button>
+              <button id="btnClearDtc" class="glass-btn btn-glass-danger">Сбросить</button>
             </div>
           </div>
-          <div class="dtc-container" id="dtcList">
-            <div class="empty-state">Нажмите «Считать ошибки» для опроса памяти ЭБУ</div>
+          <div class="dtc-scroll-list" id="dtcList">
+            <div class="empty-state-card">Нажмите «Считать ошибки» для опроса памяти ЭБУ</div>
           </div>
         </div>
       </section>
 
-      <!-- ВКЛАДКА 3: КАНАЛЫ АЦП И ПРОПУСКИ ЗАЖИГАНИЯ -->
+      <!-- ВКЛАДКА 3: ДАТЧИКИ И ПРОПУСКИ -->
       <section id="tab-adc" class="tab-pane">
         
-        <!-- Счётчики пропусков зажигания -->
-        <div class="card">
-          <div class="section-header">
+        <!-- Пропуски зажигания -->
+        <div class="glass-card">
+          <div class="panel-header">
             <div>
-              <h2 class="section-title">Пропуски зажигания</h2>
-              <p class="section-subtitle">Счётчики пропусков воспламенения по цилиндрам</p>
+              <h2 class="panel-heading">Пропуски зажигания</h2>
+              <p class="panel-sub">Счётчики пропусков воспламенения по цилиндрам</p>
             </div>
           </div>
-          <div class="cylinders-grid">
-            <div class="cylinder-card">
-              <span class="cyl-name">Цилиндр 1</span>
-              <span class="cyl-count" id="misCyl1">0</span>
+          <div class="cyl-matrix">
+            <div class="cyl-tile">
+              <span class="cyl-lbl">Цилиндр 1</span>
+              <span class="cyl-val" id="misCyl1">0</span>
             </div>
-            <div class="cylinder-card">
-              <span class="cyl-name">Цилиндр 2</span>
-              <span class="cyl-count" id="misCyl2">0</span>
+            <div class="cyl-tile">
+              <span class="cyl-lbl">Цилиндр 2</span>
+              <span class="cyl-val" id="misCyl2">0</span>
             </div>
-            <div class="cylinder-card">
-              <span class="cyl-name">Цилиндр 3</span>
-              <span class="cyl-count" id="misCyl3">0</span>
+            <div class="cyl-tile">
+              <span class="cyl-lbl">Цилиндр 3</span>
+              <span class="cyl-val" id="misCyl3">0</span>
             </div>
-            <div class="cylinder-card">
-              <span class="cyl-name">Цилиндр 4</span>
-              <span class="cyl-count" id="misCyl4">0</span>
+            <div class="cyl-tile">
+              <span class="cyl-lbl">Цилиндр 4</span>
+              <span class="cyl-val" id="misCyl4">0</span>
             </div>
           </div>
         </div>
 
         <!-- Каналы АЦП -->
-        <div class="card">
-          <div class="section-header">
+        <div class="glass-card">
+          <div class="panel-header">
             <div>
-              <h2 class="section-title">Каналы АЦП датчиков</h2>
-              <p class="section-subtitle">Прямые электрические напряжения с контрольных точек (Кадр 21 02)</p>
+              <h2 class="panel-heading">Каналы АЦП датчиков</h2>
+              <p class="panel-sub">Прямые электрические напряжения (Кадр 21 02)</p>
             </div>
           </div>
-          <div class="adc-table">
-            <div class="adc-line highlight-adc">
-              <div class="adc-desc">
+          <div class="adc-stack">
+            <div class="adc-row-glass highlight-row">
+              <div class="adc-info">
                 <strong>ДМРВ (Датчик массового расхода воздуха)</strong>
                 <span>Эталон покоя: 0.996 ... 1.020 В</span>
               </div>
-              <span class="adc-val" id="adcMaf">0.000 В</span>
+              <span class="adc-number" id="adcMaf">0.000 В</span>
             </div>
-            <div class="adc-line">
-              <div class="adc-desc">
+            <div class="adc-row-glass">
+              <div class="adc-info">
                 <strong>ДПДЗ (Положение дроссельной заслонки)</strong>
                 <span>Напряжение потенциометра заслонки</span>
               </div>
-              <span class="adc-val" id="adcThrottle">0.00 В</span>
+              <span class="adc-number" id="adcThrottle">0.00 В</span>
             </div>
-            <div class="adc-line">
-              <div class="adc-desc">
+            <div class="adc-row-glass">
+              <div class="adc-info">
                 <strong>ДТОЖ (Температура охлаждающей жидкости)</strong>
                 <span>Сигнал с терморезистора</span>
               </div>
-              <span class="adc-val" id="adcTemp">0.00 В</span>
+              <span class="adc-number" id="adcTemp">0.00 В</span>
             </div>
-            <div class="adc-line">
-              <div class="adc-desc">
+            <div class="adc-row-glass">
+              <div class="adc-info">
                 <strong>Датчик кислорода 1 (Управляющий лямбда-зонд)</strong>
                 <span>Колебания сигнала смеси</span>
               </div>
-              <span class="adc-val" id="adcO2">0.000 В</span>
+              <span class="adc-number" id="adcO2">0.000 В</span>
             </div>
-            <div class="adc-line">
-              <div class="adc-desc">
+            <div class="adc-row-glass">
+              <div class="adc-info">
                 <strong>Бортовая сеть (Канал АЦП)</strong>
                 <span>Напряжение на клеммах контроллера</span>
               </div>
-              <span class="adc-val" id="adcVolt">0.0 В</span>
+              <span class="adc-number" id="adcVolt">0.0 В</span>
             </div>
           </div>
         </div>
@@ -356,101 +362,101 @@
 
       <!-- ВКЛАДКА 4: ТЕСТЫ И СБРОС С ИНИЦИАЛИЗАЦИЕЙ -->
       <section id="tab-actuators" class="tab-pane">
-        <div class="card">
-          <div class="section-header">
+        <div class="glass-card">
+          <div class="panel-header">
             <div>
-              <h2 class="section-title">Исполнительные механизмы</h2>
-              <p class="section-subtitle">Проверка реле и клапанов (проводить на заглушенном двигателе)</p>
+              <h2 class="panel-heading">Исполнительные механизмы</h2>
+              <p class="panel-sub">Проверка реле (проводить на заглушенном двигателе)</p>
             </div>
           </div>
 
-          <div class="actions-list">
-            <div class="action-item">
-              <div class="action-desc">
+          <div class="actuator-list">
+            <div class="actuator-item-glass">
+              <div class="act-details">
                 <strong>Вентилятор охлаждения (1 скорость)</strong>
                 <span>Включение реле низкой скорости на 5 секунд</span>
               </div>
-              <button class="btn btn-secondary" onclick="M73App.testActuator('fan1_on')">Включить</button>
+              <button class="glass-btn btn-glass-secondary" onclick="M73App.testActuator('fan1_on')">Включить</button>
             </div>
 
-            <div class="action-item">
-              <div class="action-desc">
+            <div class="actuator-item-glass">
+              <div class="act-details">
                 <strong>Вентилятор охлаждения (2 скорость)</strong>
                 <span>Включение реле высокой скорости на 5 секунд</span>
               </div>
-              <button class="btn btn-secondary" onclick="M73App.testActuator('fan2_on')">Включить</button>
+              <button class="glass-btn btn-glass-secondary" onclick="M73App.testActuator('fan2_on')">Включить</button>
             </div>
 
-            <div class="action-item">
-              <div class="action-desc">
+            <div class="actuator-item-glass">
+              <div class="act-details">
                 <strong>Реле бензонасоса</strong>
                 <span>Принудительное включение топливного насоса</span>
               </div>
-              <button class="btn btn-secondary" onclick="M73App.testActuator('pump_on')">Включить</button>
+              <button class="glass-btn btn-glass-secondary" onclick="M73App.testActuator('pump_on')">Включить</button>
             </div>
 
-            <div class="action-item">
-              <div class="action-desc">
+            <div class="actuator-item-glass">
+              <div class="act-details">
                 <strong>Лампа «Check Engine»</strong>
-                <span>Проверка исправности индикации на приборной панели</span>
+                <span>Проверка индикатора на приборной панели</span>
               </div>
-              <button class="btn btn-secondary" onclick="M73App.testActuator('mil_test')">Тест</button>
+              <button class="glass-btn btn-glass-secondary" onclick="M73App.testActuator('mil_test')">Тест</button>
             </div>
           </div>
 
-          <div class="danger-box">
-            <div class="danger-title">Сброс с инициализацией (сброс адаптаций)</div>
-            <p class="danger-desc">
-              Очищает таблицы самообучения топлива и угла опережения зажигания к исходным заводским параметрам. Проводить строго при включенном зажигании и заглушенном моторе.
+          <div class="glass-danger-zone">
+            <div class="danger-heading">Сброс с инициализацией (сброс адаптаций)</div>
+            <p class="danger-text">
+              Очищает таблицы самообучения топлива и угла опережения зажигания к заводским значениям. Проводить строго при включенном зажигании и заглушенном моторе.
             </p>
-            <button class="btn btn-danger btn-block" onclick="M73App.resetWithInit()">
+            <button class="glass-btn btn-danger-fluid" onclick="M73App.resetWithInit()">
               Выполнить сброс с инициализацией
             </button>
           </div>
         </div>
       </section>
 
-      <!-- ВКЛАДКА 5: ТЕРМИНАЛ ОБМЕНА -->
+      <!-- ВКЛАДКА 5: ТЕРМИНАЛ -->
       <section id="tab-terminal" class="tab-pane">
-        <div class="card terminal-card">
-          <div class="section-header">
+        <div class="glass-card terminal-card-glass">
+          <div class="panel-header">
             <div>
-              <h2 class="section-title">Прямой терминал ELM327</h2>
-              <p class="section-subtitle">Сырой протокол обмена командами с контроллером М73</p>
+              <h2 class="panel-heading">Прямой терминал ELM327</h2>
+              <p class="panel-sub">Сырой обмен командами с контроллером М73</p>
             </div>
-            <button class="btn btn-secondary btn-sm" onclick="M73App.clearTerminal()">Очистить</button>
+            <button class="glass-btn btn-glass-secondary btn-sm" onclick="M73App.clearTerminal()">Очистить</button>
           </div>
-          <div class="terminal-log-area" id="terminalLog"></div>
-          <div class="terminal-input-row">
-            <input type="text" id="terminalInput" class="form-input" placeholder="Команда (например: 21 01 или ATZ)" />
-            <button class="btn btn-primary" onclick="M73App.sendManualCommand()">Отправить</button>
+          <div class="terminal-display-glass" id="terminalLog"></div>
+          <div class="terminal-input-bar">
+            <input type="text" id="terminalInput" class="glass-input" placeholder="Команда (например: 21 01 или ATZ)" />
+            <button class="glass-btn btn-primary-glass" onclick="M73App.sendManualCommand()">Отправить</button>
           </div>
         </div>
       </section>
 
     </main>
 
-    <!-- НАВИГАЦИОННАЯ ПАНЕЛЬ iOS (ТАБ-БАР) -->
-    <nav class="app-tabbar">
-      <button class="tabbar-item active" data-tab="tab-dashboard">
-        <span class="tabbar-icon">⚡</span>
-        <span class="tabbar-label">Панель</span>
+    <!-- ПАРЯЩИЙ СТЕКЛЯННЫЙ ТАБ-БАР (APPLE FLOATING LIQUID DOCK) -->
+    <nav class="liquid-dock">
+      <button class="dock-item active" data-tab="tab-dashboard">
+        <span class="dock-icon">⚡</span>
+        <span class="dock-label">Панель</span>
       </button>
-      <button class="tabbar-item" data-tab="tab-dtc">
-        <span class="tabbar-icon">⚠️</span>
-        <span class="tabbar-label">Ошибки</span>
+      <button class="dock-item" data-tab="tab-dtc">
+        <span class="dock-icon">⚠️</span>
+        <span class="dock-label">Ошибки</span>
       </button>
-      <button class="tabbar-item" data-tab="tab-adc">
-        <span class="tabbar-icon">📊</span>
-        <span class="tabbar-label">Датчики</span>
+      <button class="dock-item" data-tab="tab-adc">
+        <span class="dock-icon">📊</span>
+        <span class="dock-label">Датчики</span>
       </button>
-      <button class="tabbar-item" data-tab="tab-actuators">
-        <span class="tabbar-icon">⚙️</span>
-        <span class="tabbar-label">Тесты</span>
+      <button class="dock-item" data-tab="tab-actuators">
+        <span class="dock-icon">⚙️</span>
+        <span class="dock-label">Тесты</span>
       </button>
-      <button class="tabbar-item" data-tab="tab-terminal">
-        <span class="tabbar-icon">💻</span>
-        <span class="tabbar-label">Терминал</span>
+      <button class="dock-item" data-tab="tab-terminal">
+        <span class="dock-icon">💻</span>
+        <span class="dock-label">Терминал</span>
       </button>
     </nav>
 
