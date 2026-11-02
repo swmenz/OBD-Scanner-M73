@@ -205,7 +205,7 @@ class ItelmaM73Protocol {
 
     // Расчетные величины (физика двигателя Приоры 21126)
     // Цикловой расход воздуха: (maf * 8333.33) / rpm (мг/такт)
-    const cycleAir = (rpm > 100 && maf > 0) ? Math.round((maf * 8333.33) / rpm) : 0;
+    const cycleAir = (rpm > 100 && maf > 0) ? +((maf * 8333.33) / rpm).toFixed(1) : 0.0;
     // Скважность форсунок (duty cycle): (injTime * rpm) / 1200 (%)
     const dutyCycle = (rpm > 100 && injTime > 0) ? +Math.min(100, Math.max(0, (injTime * rpm) / 1200)).toFixed(1) : 0.0;
     // Часовой расход топлива: л/ч

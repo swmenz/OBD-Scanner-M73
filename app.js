@@ -16,9 +16,7 @@ class M73Application {
     this.currentMode = 'sport';
     this.framesConfig = {
       frame1: true,
-      frame2: false,
-      frame3: false,
-      frame4: false
+      frame2: false
     };
 
     this.peakRpm = 0;
@@ -114,14 +112,10 @@ class M73Application {
 
     const updateCheckboxes = () => {
       this.framesConfig.frame2 = this.chkFrame2.checked;
-      this.framesConfig.frame3 = this.chkFrame3.checked;
-      this.framesConfig.frame4 = this.chkFrame4.checked;
       this.updateModeBadge();
     };
 
     this.chkFrame2.addEventListener('change', updateCheckboxes);
-    this.chkFrame3.addEventListener('change', updateCheckboxes);
-    this.chkFrame4.addEventListener('change', updateCheckboxes);
 
     // Навигация по вкладкам (iOS TabBar / Liquid Dock)
     document.querySelectorAll('.tabbar-item, .dock-item').forEach(btn => {
@@ -154,22 +148,14 @@ class M73Application {
     if (mode === 'sport') {
       this.customCheckboxesPanel.style.display = 'none';
       this.framesConfig.frame2 = false;
-      this.framesConfig.frame3 = false;
-      this.framesConfig.frame4 = false;
       this.chkFrame2.checked = false;
-      this.chkFrame3.checked = false;
-      this.chkFrame4.checked = false;
       this.modeBadge.textContent = "Спорт (макс. скорость ~0.08 с)";
       this.modeBadge.style.color = "var(--apple-green)";
     } else if (mode === 'full') {
       this.customCheckboxesPanel.style.display = 'none';
       this.framesConfig.frame2 = true;
-      this.framesConfig.frame3 = true;
-      this.framesConfig.frame4 = true;
       this.chkFrame2.checked = true;
-      this.chkFrame3.checked = true;
-      this.chkFrame4.checked = true;
-      this.modeBadge.textContent = "Полный опрос (все 84 датчика)";
+      this.modeBadge.textContent = "Все датчики + АЦП (~0.16 с)";
       this.modeBadge.style.color = "var(--apple-blue)";
     } else if (mode === 'custom') {
       this.customCheckboxesPanel.style.display = 'flex';
@@ -178,12 +164,9 @@ class M73Application {
   }
 
   updateModeBadge() {
-    let count = 1;
-    if (this.framesConfig.frame2) count++;
-    if (this.framesConfig.frame3) count++;
-    if (this.framesConfig.frame4) count++;
-    const estMs = count * 80;
-    this.modeBadge.textContent = `Выбрано блоков: ${count} (~${estMs} мс)`;
+    const count = this.framesConfig.frame2 ? 2 : 1;
+    const estTime = count === 1 ? "0.08" : "0.16";
+    this.modeBadge.textContent = `Выбрано блоков: ${count} (~${estTime} с)`;
     this.modeBadge.style.color = "var(--apple-amber)";
   }
 
