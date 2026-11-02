@@ -1,6 +1,7 @@
 {
   "name": "Priora Diag M73 ProLog",
   "short_name": "M73 ProLog",
+  "lang": "ru",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#000000",

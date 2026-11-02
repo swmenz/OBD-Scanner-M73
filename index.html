@@ -6,6 +6,9 @@
   <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="М73 Диагностика">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="icon-192.png">
   <title>Диагностика М73 — Лада Приора</title>
   
   <link rel="stylesheet" href="styles.css">
@@ -105,7 +108,7 @@
             <div class="liquid-segmented">
               <button class="liquid-seg-item active" data-mode="sport">⚡ Спорт (12 Гц)</button>
               <button class="liquid-seg-item" data-mode="custom">Выборочно</button>
-              <button class="liquid-seg-item" data-mode="full">Все 84 датчика</button>
+              <button class="liquid-seg-item" data-mode="full">Все датчики</button>
             </div>
 
             <!-- Чекбоксы выборочного режима -->
@@ -113,23 +116,16 @@
               <label class="glass-checkbox-row">
                 <input type="checkbox" id="chkFrame1" checked disabled>
                 <span class="chk-checkmark"></span>
-                <span class="chk-text">Кадр 1 (Базовый): Обороты, скорость, дроссель, ДМРВ, впрыск, УОЗ, ТОЖ, смесь и пропуски</span>
+                <span class="chk-text">Кадр 1 (Базовый 21 01): Обороты, скорость, дроссель, ДМРВ, впрыск, УОЗ, ТОЖ, смесь и пропуски</span>
               </label>
               <label class="glass-checkbox-row">
                 <input type="checkbox" id="chkFrame2">
                 <span class="chk-checkmark"></span>
-                <span class="chk-text">Кадр 2 (АЦП): Напряжения покоя ДМРВ, ДПДЗ, ДТОЖ, датчики кислорода (Кадр 21 03)</span>
+                <span class="chk-text">Кадр 2 (АЦП 21 03): Напряжения покоя ДМРВ, ДПДЗ, ДТОЖ, датчики кислорода</span>
               </label>
-              <label class="glass-checkbox-row">
-                <input type="checkbox" id="chkFrame3" checked disabled>
-                <span class="chk-checkmark"></span>
-                <span class="chk-text">Кадр 3 (Смесь): Коррекции и продувка адсорбера (уже включены в Кадр 1)</span>
-              </label>
-              <label class="glass-checkbox-row">
-                <input type="checkbox" id="chkFrame4" checked disabled>
-                <span class="chk-checkmark"></span>
-                <span class="chk-text">Кадр 4 (Пропуски): Счетчики цилиндров 1–4 (уже включены в Кадр 1)</span>
-              </label>
+              <div class="custom-selection-hint">
+                В ЭБУ Итэлма М73 параметры смеси и пропусков уже транслируются в едином Кадре 1.
+              </div>
             </div>
           </div>
         </div>

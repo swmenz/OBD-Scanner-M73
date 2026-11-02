@@ -21,6 +21,13 @@ class M73Application {
 
     this.peakRpm = 0;
 
+    // Состояние подключения и терминала
+    this.connecting = false;
+    this.isPolling = false;
+    this.pollPromise = null;
+    this.termBuffer = [];
+    this.TERM_LIMIT = 300;
+
     this.initElements();
     this.bindEvents();
   }
@@ -38,8 +45,6 @@ class M73Application {
     this.customCheckboxesPanel = document.getElementById('customCheckboxesPanel');
     this.chkFrame1 = document.getElementById('chkFrame1');
     this.chkFrame2 = document.getElementById('chkFrame2');
-    this.chkFrame3 = document.getElementById('chkFrame3');
-    this.chkFrame4 = document.getElementById('chkFrame4');
 
     // Логгер
     this.btnToggleLog = document.getElementById('btnToggleLog');
@@ -171,13 +176,17 @@ class M73Application {
   }
 
   async toggleConnection() {
+    if (this.connecting) return;
+
     if (this.elm.isConnected) {
-      this.isPolling = false;
+      await this.stopPolling();
       await this.elm.disconnect();
       this.handleDisconnectedState();
       return;
     }
 
+    this.connecting = true;
+    this.btnConnect.disabled = true;
     try {
       this.btnConnectText.textContent = "Поиск...";
       await this.elm.requestAndConnect();
@@ -190,17 +199,27 @@ class M73Application {
       this.connIndicator.classList.add('connected');
       this.connStateText.textContent = "Подключено к ЭБУ";
       this.btnToggleLog.disabled = false;
+      this.peakRpm = 0;
+      this.valPeakRpm.textContent = "Пик: 0 об/мин";
 
       this.startContinuousPolling();
     } catch (err) {
       const msg = err && err.message ? err.message : (typeof err === 'string' ? err : "Не удалось найти Bluetooth адаптер");
       alert(msg);
+      // Если Bluetooth уже открыт, а ЭБУ не ответил — обязательно закрываем канал,
+      // иначе кнопка «Подключить» превратится в «Отключить» без реальной связи
+      try { await this.elm.disconnect(); } catch (e) {}
       this.handleDisconnectedState();
+    } finally {
+      this.connecting = false;
+      this.btnConnect.disabled = false;
     }
   }
 
   handleDisconnectedState() {
     this.isPolling = false;
+    // Обрыв связи во время записи: корректно завершаем запись, чтобы данные можно было выгрузить
+    if (this.logger.isRecording) this.toggleLogging();
     this.btnConnect.classList.remove('connected');
     this.btnConnectText.textContent = "Подключить";
     this.connIndicator.classList.remove('connected');
@@ -211,9 +230,26 @@ class M73Application {
     this.msValue.textContent = "0";
   }
 
-  async startContinuousPolling() {
-    if (this.isPolling) return;
+  startContinuousPolling() {
+    if (this.isPolling) return this.pollPromise;
     this.isPolling = true;
+    this.pollPromise = this._pollLoop().finally(() => { this.pollPromise = null; });
+    return this.pollPromise;
+  }
+
+  /**
+   * Надёжная остановка опроса: ждём, пока завершится текущий запрос в цикле.
+   * Исключает ситуацию, когда после чтения ошибок запускается второй параллельный цикл.
+   */
+  async stopPolling() {
+    this.isPolling = false;
+    if (this.pollPromise) {
+      try { await this.pollPromise; } catch (e) {}
+    }
+  }
+
+  async _pollLoop() {
+    let failures = 0;
 
     while (this.isPolling && this.elm.isConnected) {
       try {
@@ -223,14 +259,22 @@ class M73Application {
         };
         const data = await this.m73.readConfiguredCycle(activeConfig);
         if (data) {
+          if (failures >= 10) this.connStateText.textContent = "Подключено к ЭБУ";
+          failures = 0;
           this.updateDashboardUI(data);
           this.logger.addPoint(data, activeConfig);
+        } else {
+          throw new Error("Пустой кадр");
         }
       } catch (err) {
-        console.warn("Пауза в цикле: ", err);
-        await this.delay(30);
+        failures++;
+        if (failures === 10) this.connStateText.textContent = "ЭБУ не отвечает";
+        await this.delay(failures < 10 ? 30 : 250);
       }
     }
+
+    // Цикл завершён (обрыв связи или остановка) — сбрасываем флаг, иначе повторный запуск после переподключения будет заблокирован
+    this.isPolling = false;
   }
 
   /**
@@ -364,8 +408,7 @@ class M73Application {
     this.dtcList.innerHTML = '<div class="empty-state-card">Опрос памяти ошибок ЭБУ...</div>';
     
     const prevPolling = this.isPolling;
-    this.isPolling = false;
-    await this.delay(100);
+    await this.stopPolling();
 
     try {
       const errors = await this.m73.readDtcCodes();
@@ -390,8 +433,7 @@ class M73Application {
     if (!confirm("Вы действительно хотите сбросить ошибки в контроллере?")) return;
     
     const prevPolling = this.isPolling;
-    this.isPolling = false;
-    await this.delay(100);
+    await this.stopPolling();
 
     try {
       const ok = await this.m73.clearDtcCodes();
@@ -412,8 +454,7 @@ class M73Application {
     if (!this.elm.isConnected) return alert("Адаптер не подключен");
     
     const prevPolling = this.isPolling;
-    this.isPolling = false;
-    await this.delay(100);
+    await this.stopPolling();
 
     try {
       await this.m73.runActuatorTest(testType);
@@ -429,20 +470,24 @@ class M73Application {
     if (!confirm("Внимание! Будут сброшены таблицы самообучения топлива и угла зажигания М73 к заводским значениям. Двигатель должен быть заглушен, зажигание включено. Продолжить?")) return;
 
     const prevPolling = this.isPolling;
-    this.isPolling = false;
-    await this.delay(100);
+    await this.stopPolling();
 
+    let sessionEnded = false;
     try {
       const ok = await this.m73.resetWithInit();
       if (ok) {
-        alert("Сброс с инициализацией успешно завершен! Выключите зажигание на 10 секунд.");
+        // После сброса ЭБУ закрывает диагностическую сессию — опрос продолжать бессмысленно
+        sessionEnded = true;
+        await this.elm.disconnect();
+        this.handleDisconnectedState();
+        alert("Сброс с инициализацией выполнен! Выключите зажигание на 10 секунд, затем включите и подключитесь заново.");
       } else {
-        alert("Команда выполнена (проверьте вкладку Терминал).");
+        alert("ЭБУ не подтвердил сброс (подробности во вкладке «Терминал»).");
       }
     } catch (err) {
       alert("Ошибка сброса: " + err.message);
     } finally {
-      if (prevPolling) this.startContinuousPolling();
+      if (prevPolling && !sessionEnded) this.startContinuousPolling();
     }
   }
 
@@ -455,18 +500,44 @@ class M73Application {
     const targetNav = document.querySelector(`[data-tab="${tabId}"]`);
     if (targetContent) targetContent.classList.add('active');
     if (targetNav) targetNav.classList.add('active');
+
+    if (tabId === 'tab-terminal') this.renderTerminal();
   }
 
+  /**
+   * Терминал: хранит последние 300 записей в памяти и рисует их в DOM только
+   * когда открыта вкладка «Терминал». На частоте 12 Гц это исключает бесконечный
+   * рост DOM и просадки FPS на главной панели.
+   */
   appendTerminal(type, msg) {
-    if (!this.terminalLog) return;
+    const time = new Date().toLocaleTimeString('ru-RU');
+    this.termBuffer.push({ type, text: `[${time}] ${msg}` });
+    if (this.termBuffer.length > this.TERM_LIMIT) this.termBuffer.shift();
+
+    if (this.currentTab !== 'tab-terminal' || !this.terminalLog) return;
+    this._appendTerminalNode(this.termBuffer[this.termBuffer.length - 1]);
+    while (this.terminalLog.childElementCount > this.TERM_LIMIT) {
+      this.terminalLog.removeChild(this.terminalLog.firstElementChild);
+    }
+    this.terminalLog.scrollTop = this.terminalLog.scrollHeight;
+  }
+
+  _appendTerminalNode(entry) {
     const div = document.createElement('div');
-    div.className = `log-entry ${type}`;
-    div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    div.className = `log-entry ${entry.type}`;
+    div.textContent = entry.text;
     this.terminalLog.appendChild(div);
+  }
+
+  renderTerminal() {
+    if (!this.terminalLog) return;
+    this.terminalLog.innerHTML = "";
+    this.termBuffer.forEach(entry => this._appendTerminalNode(entry));
     this.terminalLog.scrollTop = this.terminalLog.scrollHeight;
   }
 
   clearTerminal() {
+    this.termBuffer = [];
     this.terminalLog.innerHTML = "";
   }
 

@@ -17,9 +17,30 @@ class Elm327BLE {
     this.activeRejecter = null;
     this.commandTimeoutTimer = null;
     this._queue = Promise.resolve(); // Последовательная очередь команд (Mutex)
+
+    // Единые ссылки на обработчики: повторная регистрация одной и той же функции
+    // браузером игнорируется, поэтому после переподключения пакеты не задваиваются
+    this._rxHandler = (e) => this._onDataReceived(e);
+    this._gattHandler = () => this._onGattDisconnected();
     
     this.onLog = null;
     this.onDisconnect = null;
+  }
+
+  _onGattDisconnected() {
+    this.isConnected = false;
+    // Немедленно отклоняем зависшую команду и гасим таймер, чтобы очередь не ждала таймаут
+    if (this.commandTimeoutTimer) {
+      clearTimeout(this.commandTimeoutTimer);
+      this.commandTimeoutTimer = null;
+    }
+    const pendingReject = this.activeRejecter;
+    this.activeResolver = null;
+    this.activeRejecter = null;
+    this.rxBuffer = "";
+    if (pendingReject) pendingReject(new Error("Связь с адаптером потеряна"));
+    this.log('err', 'Связь с Bluetooth адаптером разорвана');
+    if (this.onDisconnect) this.onDisconnect();
   }
 
   // 128-битные строковые UUID (строго требуется для iOS WebKit / Bluefy)
@@ -113,11 +134,7 @@ class Elm327BLE {
 
     this.log('info', `Выбран адаптер: ${this.device.name || 'Безымянный'}`);
 
-    this.device.addEventListener('gattserverdisconnected', () => {
-      this.isConnected = false;
-      this.log('err', 'Связь с Bluetooth адаптером разорвана');
-      if (this.onDisconnect) this.onDisconnect();
-    });
+    this.device.addEventListener('gattserverdisconnected', this._gattHandler);
 
     this.log('info', 'Подключение к GATT серверу адаптера...');
     this.server = await this.device.gatt.connect();
@@ -146,10 +163,7 @@ class Elm327BLE {
 
         // Включаем уведомления от ELM
         await this.rxCharacteristic.startNotifications();
-        this.rxCharacteristic.addEventListener(
-          'characteristicvaluechanged', 
-          (e) => this._onDataReceived(e)
-        );
+        this.rxCharacteristic.addEventListener('characteristicvaluechanged', this._rxHandler);
 
         this.log('info', `Определен тип порта: ${candidate.name}`);
         return;
@@ -174,7 +188,7 @@ class Elm327BLE {
           this.rxCharacteristic = rx;
           this.txCharacteristic = tx;
           await this.rxCharacteristic.startNotifications();
-          this.rxCharacteristic.addEventListener('characteristicvaluechanged', (e) => this._onDataReceived(e));
+          this.rxCharacteristic.addEventListener('characteristicvaluechanged', this._rxHandler);
           this.log('info', `Автоматически подобран порт в сервисе ${s.uuid}`);
           return;
         }

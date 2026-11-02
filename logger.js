@@ -21,6 +21,13 @@ class TripLogger {
     this.wakeLock = null;
 
     this.onStatsUpdate = null; // (stats: { count: number, hz: number, ms: number }) => void
+
+    // iOS снимает блокировку экрана при сворачивании страницы — возвращаем её при возврате в приложение
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && this.isRecording && 'wakeLock' in navigator) {
+        navigator.wakeLock.request('screen').then(wl => { this.wakeLock = wl; }).catch(() => {});
+      }
+    });
   }
 
   _enableBackgroundMode() {
@@ -172,9 +179,10 @@ class TripLogger {
     const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
-    if (navigator.canShare && navigator.canShare({ files: [new File([blob], fileName)] })) {
+    const file = new File([blob], fileName, { type: blob.type });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
-        const file = new File([blob], fileName, { type: blob.type });
         await navigator.share({
           files: [file],
           title: 'Лог диагностики Приора М73',

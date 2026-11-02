@@ -61,26 +61,36 @@ class ItelmaM73Protocol {
     await this.elm.send("AT WM 81 10 F1 3E");
 
     this.elm.log('info', 'Открытие диагностической сессии (Fast Init 81)...');
-    let startResp = "";
+
+    const checkSession = (resp) => {
+      const clean = (resp || "").replace(/\s+/g, '').toUpperCase();
+      const hasError = /ERROR|NODATA|UNABLE|\?|CANBUS|BUSBUSY|FBERROR|DATAERROR/.test(clean);
+      return {
+        clean,
+        ok: !hasError && clean.length > 0 && (
+          clean.includes("C1") ||
+          clean.includes("8110F1") ||
+          clean.includes("BUSINIT:OK") ||
+          clean.includes("OK"))
+      };
+    };
+
+    let session = { clean: "", ok: false };
     try {
-      startResp = await this.elm.send("81", 2500);
-    } catch (e) {
+      session = checkSession(await this.elm.send("81", 2500));
+    } catch (e) {}
+
+    // Если «81» не открыл сессию (ошибка, NO DATA или таймаут) — пробуем встроенный Fast Init адаптера
+    if (!session.ok) {
       this.elm.log('info', 'Пробуем встроенный Fast Init (AT FI)...');
       try {
-        startResp = await this.elm.send("AT FI", 2500);
-      } catch (e2) {}
+        session = checkSession(await this.elm.send("AT FI", 3000));
+      } catch (e) {}
     }
-    
-    const cleanResp = startResp.replace(/\s+/g, '').toUpperCase();
-    const isOk = cleanResp.includes("C1") || 
-                 cleanResp.includes("83F110C1") || 
-                 cleanResp.includes("8110F1") || 
-                 cleanResp.includes("BUSINIT:OK") || 
-                 cleanResp.includes("61");
 
-    if (!isOk) {
-      this.elm.log('err', 'Не удалось открыть сессию с ЭБУ М73: ' + cleanResp);
-      throw new Error("ЭБУ М73 не отвечает на Fast Init. Проверьте включено ли зажигание!");
+    if (!session.ok) {
+      this.elm.log('err', 'Не удалось открыть сессию с ЭБУ М73: ' + session.clean);
+      throw new Error("ЭБУ М73 не отвечает на Fast Init. Проверьте, включено ли зажигание!");
     }
 
     // Отключаем заголовки (AT H0), чтобы ELM отдавал чистый payload без 83 F1 10 и контрольной суммы
@@ -106,7 +116,8 @@ class ItelmaM73Protocol {
   async readConfiguredCycle(framesConfig) {
     // 1. Всегда опрашиваем базовый скоростной Кадр 1 (содержит параметры двигателя, смесь и пропуски)
     const raw1 = await this.elm.send("2101", 350);
-    this.parseFrame2101(raw1);
+    // Если ЭБУ не вернул корректный кадр (NO DATA, обрыв K-Line), не выдаём устаревшие данные за свежие
+    if (!this.parseFrame2101(raw1)) return null;
 
     // 2. Если включен Кадр 2 (Каналы АЦП - в М73 это кадр 21 03)
     if (framesConfig.frame2) {
@@ -133,13 +144,11 @@ class ItelmaM73Protocol {
     for (let i = 0; i < payloadHex.length - 1; i += 2) {
       bytes.push(parseInt(payloadHex.substr(i, 2), 16));
     }
-    if (bytes.length < 22) return null;
+    if (bytes.length < 22 || bytes.some(Number.isNaN)) return null;
 
     // Флаги состояния (байты 0..3)
-    const b0 = bytes[0] || 0;
     const b1 = bytes[1] || 0;
     const b2 = bytes[2] || 0;
-    const b3 = bytes[3] || 0;
 
     // Байт 4: Температура охлаждающей жидкости (°C)
     const temp = bytes[4] - 40;
@@ -209,7 +218,7 @@ class ItelmaM73Protocol {
     // Скважность форсунок (duty cycle): (injTime * rpm) / 1200 (%)
     const dutyCycle = (rpm > 100 && injTime > 0) ? +Math.min(100, Math.max(0, (injTime * rpm) / 1200)).toFixed(1) : 0.0;
     // Часовой расход топлива: л/ч
-    const fuelRate = (rpm > 100 && injTime > 0) ? +((injTime * rpm * 0.000108)).toFixed(2) : 0.0;
+    const fuelRate = (rpm > 100 && injTime > 0) ? +((injTime * rpm * 0.000325)).toFixed(2) : 0.0;
 
     // Флаги состояния
     const flags = {
@@ -257,7 +266,7 @@ class ItelmaM73Protocol {
     for (let i = 0; i < payloadHex.length - 1; i += 2) {
       bytes.push(parseInt(payloadHex.substr(i, 2), 16));
     }
-    if (bytes.length < 5) return null;
+    if (bytes.length < 5 || bytes.some(Number.isNaN)) return null;
 
     this.latestData.adc.temp = +(bytes[0] * 0.01953).toFixed(3);
     this.latestData.adc.maf = +(bytes[1] * 0.01953).toFixed(3);
@@ -278,8 +287,10 @@ class ItelmaM73Protocol {
     const hex = raw.replace(/[\s\r\n]/g, '').toUpperCase();
 
     const dtcList = [];
+    if (hex.startsWith("7F")) throw new Error("ЭБУ отклонил запрос чтения ошибок (отрицательный ответ " + hex.substring(0, 6) + ")");
+    if (/NODATA|ERROR|UNABLE|\?/.test(hex)) throw new Error("ЭБУ не ответил на запрос ошибок");
     const idx = hex.indexOf("58");
-    if (idx === -1) return dtcList;
+    if (idx === -1) throw new Error("Некорректный ответ ЭБУ: " + (hex || "пусто"));
 
     const payload = hex.substring(idx + 2);
     if (payload.length < 2) return dtcList;
@@ -311,19 +322,27 @@ class ItelmaM73Protocol {
 
   async clearDtcCodes() {
     this.elm.log('info', 'Сброс ошибок ЭБУ (14 FF 00)...');
-    const resp = await this.elm.send("14FF00", 1500);
-    return resp.includes("54") || resp.includes("OK");
+    const resp = (await this.elm.send("14FF00", 1500)).replace(/\s+/g, '').toUpperCase();
+    return resp.startsWith("54") || resp.includes("OK");
   }
 
   async runActuatorTest(testType) {
     this.elm.log('info', `Запуск теста механизма: ${testType}`);
-    switch (testType) {
-      case 'fan1_on': return await this.elm.send("300107", 1000);
-      case 'fan2_on': return await this.elm.send("300207", 1000);
-      case 'pump_on': return await this.elm.send("300307", 1000);
-      case 'mil_test': return await this.elm.send("300407", 1000);
-      default: throw new Error("Неизвестный тест механизма");
+    const commands = {
+      fan1_on: "300107",
+      fan2_on: "300207",
+      pump_on: "300307",
+      mil_test: "300407"
+    };
+    const cmd = commands[testType];
+    if (!cmd) throw new Error("Неизвестный тест механизма");
+
+    const resp = (await this.elm.send(cmd, 1000)).replace(/\s+/g, '').toUpperCase();
+    // Положительный ответ сервиса 0x30 начинается с 0x70; всё остальное — отказ ЭБУ
+    if (!resp.startsWith("70")) {
+      throw new Error("ЭБУ не принял команду теста (ответ: " + (resp || "пусто") + ")");
     }
+    return resp;
   }
 
   async resetWithInit() {
@@ -331,15 +350,15 @@ class ItelmaM73Protocol {
     try {
       const resp = await this.elm.send("1101", 2000);
       const clean = resp.replace(/\s+/g, '').toUpperCase();
-      if (clean.includes("5101") || clean.includes("OK")) {
+      if (clean.startsWith("5101") || clean.includes("OK")) {
         return true;
       }
     } catch (e) {}
 
     // Резервная попытка через старт процедуры 31 01 00
     this.elm.log('info', 'Резервная попытка сброса через 31 01 00...');
-    const resp2 = await this.elm.send("310100", 2000);
-    return resp2.includes("71") || resp2.includes("OK");
+    const resp2 = (await this.elm.send("310100", 2000)).replace(/\s+/g, '').toUpperCase();
+    return resp2.startsWith("71") || resp2.includes("OK");
   }
 
   delay(ms) {

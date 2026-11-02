@@ -1,5 +1,5 @@
 // Сервис-воркер для 100% оффлайн работы приложения в машине без интернета
-const CACHE_NAME = 'm73-diag-cache-v10';
+const CACHE_NAME = 'm73-diag-cache-v12';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -10,17 +10,21 @@ const ASSETS_TO_CACHE = [
   './logger.js',
   './app.js',
   './manifest.json',
-  './xlsx.full.min.js'
+  './xlsx.full.min.js',
+  './icon-192.png',
+  './icon-512.png',
+  './apple-touch-icon.png'
 ];
 
-// Установка: кэшируем каждый файл и сразу форсируем активацию
+// Установка: кэшируем каждый файл в обход HTTP-кэша браузера (cache: 'reload'),
+// иначе в новый кэш могут попасть устаревшие копии файлов
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return Promise.all(
         ASSETS_TO_CACHE.map((url) => {
-          return cache.add(url).catch((err) => {
+          return cache.add(new Request(url, { cache: 'reload' })).catch((err) => {
             console.warn('Не удалось закэшировать ресурс:', url, err);
           });
         })
@@ -44,32 +48,48 @@ self.addEventListener('activate', (event) => {
 
 // Перехват запросов: если сети нет, отдаем из памяти телефона
 self.addEventListener('fetch', (event) => {
-  // Для запросов на открытие страницы (навигация)
-  if (event.request.mode === 'navigate') {
+  const request = event.request;
+
+  // Обрабатываем только GET-запросы к своему же сайту
+  if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) {
+    return;
+  }
+
+  // Открытие страницы: сначала сеть (свежая версия), но не дольше 3 секунд —
+  // при слабом/отсутствующем интернете в машине сразу отдаём страницу из кэша
+  if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => {
-        return caches.match('./index.html') || caches.match('./');
+      Promise.race([
+        fetch(request),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+      ]).catch(async () => {
+        const cached = (await caches.match('./index.html')) || (await caches.match('./'));
+        return cached || new Response('Нет сети, а приложение ещё не сохранено в память телефона. Откройте его один раз с интернетом.', {
+          status: 503,
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+        });
       })
     );
     return;
   }
 
-  // Для скриптов, стилей и файлов приложения: сначала кэш, затем сеть
+  // Скрипты, стили, иконки: мгновенно из кэша, а в фоне обновляем копию (stale-while-revalidate)
   event.respondWith(
-    caches.match(event.request, { ignoreSearch: true }).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).then((networkResponse) => {
+    caches.match(request, { ignoreSearch: true }).then((cachedResponse) => {
+      const networkFetch = fetch(request).then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
           const clone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
         }
         return networkResponse;
-      }).catch(() => {
-        // Оффлайн фоллбэк для ресурсов
-        return caches.match(event.request);
       });
+
+      if (cachedResponse) {
+        // Ошибку фонового обновления (нет сети) глушим — пользователь уже получил файл из кэша
+        networkFetch.catch(() => {});
+        return cachedResponse;
+      }
+      return networkFetch;
     })
   );
 });
