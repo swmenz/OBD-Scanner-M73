@@ -3,289 +3,381 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#0f172a">
+  <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>M73 ProLog - Лада Приора</title>
+  <title>M73 ProTelemetry - Priora 16V</title>
   
   <link rel="stylesheet" href="styles.css">
   
-  <!-- SheetJS для мгновенного формирования реальных .xlsx файлов без интернета -->
+  <!-- Локальная библиотека SheetJS без внешнего интернета -->
   <script src="xlsx.full.min.js"></script>
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
-  <div class="app-container">
-    <!-- Верхняя статусная панель -->
-    <header class="app-header">
-      <div class="header-left">
-        <h1 class="logo-title">M73 ProLog</h1>
-        <span class="ecu-tag">Итэлма М73</span>
-      </div>
-      <div class="header-right">
-        <div class="hz-indicator" id="hzIndicator" title="Текущая скорость опроса">
-          <span class="hz-value" id="hzValue">0.0</span>
-          <span class="hz-unit">Гц / <span id="msValue">0</span>мс</span>
+  <div class="cockpit-container">
+    
+    <!-- ВЕРХНЯЯ ГОНОЧНАЯ ШАПКА -->
+    <header class="cockpit-header">
+      <div class="brand-group">
+        <div class="brand-badge">21126</div>
+        <div>
+          <h1 class="brand-title">M73 <span class="neon-cyan">TELEMETRY</span></h1>
+          <div class="brand-sub">ITELMA I373DA02 • K-LINE PRO</div>
         </div>
-        <button id="btnConnect" class="btn btn-connect">
-          <span class="pulse-icon"></span>
-          <span id="btnConnectText">Подключить</span>
+      </div>
+
+      <div class="header-controls">
+        <div class="speed-hz-box" title="Частота опроса К-Линии">
+          <span class="hz-digital" id="hzValue">0.0</span>
+          <span class="hz-sub">HZ <span class="ms-pill"><span id="msValue">0</span>ms</span></span>
+        </div>
+        <button id="btnConnect" class="btn-cockpit-connect">
+          <span class="btn-glow"></span>
+          <span class="btn-radar"></span>
+          <span id="btnConnectText">CONNECT</span>
         </button>
       </div>
     </header>
 
-    <!-- Основной контент с вкладками -->
-    <main class="main-content">
+    <!-- ОСНОВНОЙ ЭКРАН -->
+    <main class="cockpit-viewport">
       
-      <!-- ВКЛАДКА 1: ПРИБОРНАЯ ПАНЕЛЬ И СКОРОСТНОЙ ЛОГГЕР -->
+      <!-- ВКЛАДКА 1: ПАНЕЛЬ ТЕЛЕМЕТРИИ (DASHBOARD) -->
       <section id="tab-dashboard" class="tab-pane active">
         
-        <!-- Селектор режимов скорости опроса -->
-        <div class="mode-selector-card">
-          <div class="mode-selector-header">
-            <span class="mode-label">Режим опроса датчиков:</span>
-            <span class="mode-badge" id="modeBadge">⚡ Спорт (~0.08с)</span>
+        <!-- Светодиодная шкала переключения передач (Shift-Light LED Bar) -->
+        <div class="shift-lights-bar" id="shiftLightsBar">
+          <div class="led led-green" data-stage="1"></div>
+          <div class="led led-green" data-stage="2"></div>
+          <div class="led led-green" data-stage="3"></div>
+          <div class="led led-yellow" data-stage="4"></div>
+          <div class="led led-yellow" data-stage="5"></div>
+          <div class="led led-yellow" data-stage="6"></div>
+          <div class="led led-red" data-stage="7"></div>
+          <div class="led led-red" data-stage="8"></div>
+          <div class="led led-blue blink" data-stage="9"></div>
+        </div>
+
+        <!-- Спортивный селектор режимов -->
+        <div class="cockpit-panel mode-panel">
+          <div class="mode-header">
+            <span class="panel-tag">POLLING CADENCE</span>
+            <span class="mode-readout" id="modeBadge">⚡ SPORT (0.08s / 12 Hz)</span>
           </div>
-          <div class="mode-pills">
-            <button class="pill-btn active" data-mode="sport">⚡ Спорт (Кадр 1)</button>
-            <button class="pill-btn" data-mode="custom">⚙ Свой выбор</button>
-            <button class="pill-btn" data-mode="full">🔍 Все 84 параметра</button>
+          <div class="segmented-control">
+            <button class="seg-btn active" data-mode="sport">
+              <span class="seg-icon">⚡</span> SPORT
+            </button>
+            <button class="seg-btn" data-mode="custom">
+              <span class="seg-icon">⚙</span> CUSTOM
+            </button>
+            <button class="seg-btn" data-mode="full">
+              <span class="seg-icon">🔍</span> FULL 84
+            </button>
           </div>
 
-          <!-- Разворачиваемый блок чекбоксов для ручного выбора -->
-          <div class="custom-checkboxes-panel" id="customCheckboxesPanel" style="display: none;">
-            <label class="checkbox-row">
+          <!-- Кастомные чекбоксы -->
+          <div class="custom-panel" id="customCheckboxesPanel" style="display: none;">
+            <label class="custom-chk-label">
               <input type="checkbox" id="chkFrame1" checked disabled>
-              <span>Кадр 1: Обороты, Скорость, Дроссель, ДМРВ, УОЗ, Впрыск, ТОЖ (База)</span>
+              <span class="chk-box-custom"></span>
+              <span class="chk-text">Кадр 1 (Базовый): Обороты, Дроссель, ДМРВ, Впрыск, УОЗ, ТОЖ</span>
             </label>
-            <label class="checkbox-row">
+            <label class="custom-chk-label">
               <input type="checkbox" id="chkFrame2">
-              <span>Кадр 2: Каналы АЦП датчиков (ДМРВ 0.996В, ДПДЗ, ДТОЖ, Лямбда 1/2)</span>
+              <span class="chk-box-custom"></span>
+              <span class="chk-text">Кадр 2 (АЦП): Напряжения покоя ДМРВ, ДПДЗ, ДТОЖ, Лямбда</span>
             </label>
-            <label class="checkbox-row">
+            <label class="custom-chk-label">
               <input type="checkbox" id="chkFrame3">
-              <span>Кадр 3: Топливные коррекции, адсорбер, адаптации смеси</span>
+              <span class="chk-box-custom"></span>
+              <span class="chk-text">Кадр 3 (Смесь): Коррекции, адаптации, клапан адсорбера</span>
             </label>
-            <label class="checkbox-row">
+            <label class="custom-chk-label">
               <input type="checkbox" id="chkFrame4">
-              <span>Кадр 4: Пропуски воспламенения по цилиндрам 1, 2, 3, 4</span>
+              <span class="chk-box-custom"></span>
+              <span class="chk-text">Кадр 4 (Пропуски): Счетчики 1, 2, 3, 4 цилиндров</span>
             </label>
           </div>
         </div>
 
-        <!-- Блок управления скоростным логгером -->
-        <div class="logger-control-card">
-          <div class="logger-info">
-            <div class="logger-status-dot" id="loggerStatusDot"></div>
-            <div>
-              <div class="logger-title">Логгер поездки в Excel (.xlsx)</div>
-              <div class="logger-stats" id="loggerStatsText">Запись остановлена (0 записей)</div>
+        <!-- Карточка управления телеметрическим логгером -->
+        <div class="cockpit-panel logger-panel">
+          <div class="logger-status-row">
+            <div class="rec-beacon-wrap">
+              <span class="rec-beacon" id="loggerStatusDot"></span>
+              <span class="rec-state-text" id="recStateLabel">REC STANDBY</span>
             </div>
+            <div class="logger-counter" id="loggerStatsText">0 SAMPLES</div>
           </div>
-          <div class="logger-actions">
-            <button id="btnToggleLog" class="btn btn-action btn-record" disabled>
-              ⏺ Начать запись
+          <div class="logger-btns-row">
+            <button id="btnToggleLog" class="btn-rec-action btn-record" disabled>
+              <span class="rec-circle"></span> REC TELEMETRY
             </button>
-            <button id="btnExportXlsx" class="btn btn-action btn-export" disabled>
-              📥 Экспорт XLSX
+            <button id="btnExportXlsx" class="btn-rec-action btn-export" disabled>
+              <span class="export-icon">⤓</span> EXPORT XLSX
             </button>
           </div>
         </div>
 
-        <!-- Сетка основных параметров -->
-        <div class="gauges-grid">
-          <!-- Обороты -->
-          <div class="gauge-card highlight">
-            <span class="gauge-label">Обороты двигателя</span>
-            <div class="gauge-value-wrap">
-              <span class="gauge-value" id="valRpm">---</span>
-              <span class="gauge-unit">об/мин</span>
+        <!-- ГЛАВНЫЕ ГЕРОЙ-ПРИБОРЫ (HERO GAUGES) -->
+        <div class="hero-gauges-row">
+          <!-- Обороты (Главный циферблат) -->
+          <div class="hero-gauge-card rpm-hero">
+            <div class="hero-gauge-header">
+              <span class="panel-tag">ENGINE RPM</span>
+              <span class="peak-tag" id="valPeakRpm">PEAK: ---</span>
             </div>
-            <div class="gauge-bar-bg">
-              <div class="gauge-bar" id="barRpm" style="width: 0%;"></div>
+            <div class="hero-value-wrap">
+              <span class="hero-digital-val" id="valRpm">---</span>
+              <span class="hero-unit">RPM</span>
+            </div>
+            <div class="racing-bar-track">
+              <div class="racing-bar-fill" id="barRpm" style="width: 0%;"></div>
             </div>
           </div>
 
           <!-- Скорость -->
-          <div class="gauge-card">
-            <span class="gauge-label">Скорость</span>
-            <div class="gauge-value-wrap">
-              <span class="gauge-value" id="valSpeed">---</span>
-              <span class="gauge-unit">км/ч</span>
+          <div class="hero-gauge-card speed-hero">
+            <div class="hero-gauge-header">
+              <span class="panel-tag">GROUND SPEED</span>
             </div>
-          </div>
-
-          <!-- Температура ОЖ -->
-          <div class="gauge-card">
-            <span class="gauge-label">Температура ОЖ</span>
-            <div class="gauge-value-wrap">
-              <span class="gauge-value" id="valTemp">---</span>
-              <span class="gauge-unit">°C</span>
+            <div class="hero-value-wrap">
+              <span class="hero-digital-val cyan-glow" id="valSpeed">---</span>
+              <span class="hero-unit">KM/H</span>
             </div>
-            <div class="gauge-bar-bg">
-              <div class="gauge-bar temp-bar" id="barTemp" style="width: 0%;"></div>
-            </div>
-          </div>
-
-          <!-- Положение дросселя (ДПДЗ) -->
-          <div class="gauge-card">
-            <span class="gauge-label">Дроссель</span>
-            <div class="gauge-value-wrap">
-              <span class="gauge-value" id="valThrottle">---</span>
-              <span class="gauge-unit">%</span>
-            </div>
-          </div>
-
-          <!-- ДМРВ (Массовый расход воздуха) -->
-          <div class="gauge-card highlight">
-            <span class="gauge-label">Расход воздуха (ДМРВ)</span>
-            <div class="gauge-value-wrap">
-              <span class="gauge-value" id="valMaf">---</span>
-              <span class="gauge-unit">кг/ч</span>
-            </div>
-          </div>
-
-          <!-- Цикловой расход воздуха (мг/такт) -->
-          <div class="gauge-card highlight">
-            <span class="gauge-label">Цикловой расход</span>
-            <div class="gauge-value-wrap">
-              <span class="gauge-value" id="valCycleAir">---</span>
-              <span class="gauge-unit">мг/такт</span>
-            </div>
-          </div>
-
-          <!-- УОЗ (Угол опережения зажигания) -->
-          <div class="gauge-card">
-            <span class="gauge-label">УОЗ / Отскок</span>
-            <div class="gauge-value-wrap">
-              <span class="gauge-value" id="valSpark">---</span>
-              <span class="gauge-unit" id="valRetard">0°</span>
-            </div>
-          </div>
-
-          <!-- Время впрыска / Загрузка форс -->
-          <div class="gauge-card">
-            <span class="gauge-label">Впрыск / Загрузка</span>
-            <div class="gauge-value-wrap">
-              <span class="gauge-value" id="valInjTime">---</span>
-              <span class="gauge-unit" id="valDuty">0%</span>
-            </div>
-          </div>
-
-          <!-- Расход топлива (л/ч) -->
-          <div class="gauge-card">
-            <span class="gauge-label">Расход топлива</span>
-            <div class="gauge-value-wrap">
-              <span class="gauge-value" id="valFuelRate">---</span>
-              <span class="gauge-unit">л/ч</span>
-            </div>
-          </div>
-
-          <!-- Напряжение бортсети -->
-          <div class="gauge-card">
-            <span class="gauge-label">Бортсеть</span>
-            <div class="gauge-value-wrap">
-              <span class="gauge-value" id="valVoltage">---</span>
-              <span class="gauge-unit">В</span>
+            <div class="speed-sub-metrics">
+              <span>GEAR: <strong id="valEstGear">-</strong></span>
+              <span>TPS: <strong id="valThrottleSub">0%</strong></span>
             </div>
           </div>
         </div>
 
-        <!-- Быстрые флаги -->
-        <div class="flags-card">
-          <div class="flag-item" id="flagIdle"><span class="flag-dot"></span> Холостой ход</div>
-          <div class="flag-item" id="flagLambda"><span class="flag-dot"></span> Лямбда-регулирование</div>
-          <div class="flag-item" id="flagKnock"><span class="flag-dot"></span> Детонация</div>
-          <div class="flag-item" id="flagFuelCut"><span class="flag-dot"></span> Отсечка впрыска</div>
+        <!-- СЕТКА КЛЮЧЕВЫХ ПАРАМЕТРОВ (TELEMETRY MATRIX) -->
+        <div class="telemetry-grid">
+          
+          <!-- ДМРВ (Расход воздуха) -->
+          <div class="telemetry-card">
+            <span class="tel-label">ВОЗДУХ ДМРВ</span>
+            <div class="tel-val-wrap">
+              <span class="tel-val cyan-val" id="valMaf">---</span>
+              <span class="tel-unit">кг/ч</span>
+            </div>
+          </div>
+
+          <!-- Цикловой расход (мг/такт) -->
+          <div class="telemetry-card highlight-card">
+            <span class="tel-label">ЦИКЛОВОЙ РАСХОД</span>
+            <div class="tel-val-wrap">
+              <span class="tel-val amber-val" id="valCycleAir">---</span>
+              <span class="tel-unit">мг/такт</span>
+            </div>
+          </div>
+
+          <!-- Время впрыска форсунок -->
+          <div class="telemetry-card">
+            <span class="tel-label">ВПРЫСК</span>
+            <div class="tel-val-wrap">
+              <span class="tel-val" id="valInjTime">---</span>
+              <span class="tel-unit">мс</span>
+            </div>
+          </div>
+
+          <!-- Загрузка форсунок (%) -->
+          <div class="telemetry-card highlight-card">
+            <span class="tel-label">ЗАГРУЗКА ФОРС</span>
+            <div class="tel-val-wrap">
+              <span class="tel-val" id="valDuty">---%</span>
+              <span class="tel-unit">DUTY</span>
+            </div>
+          </div>
+
+          <!-- УОЗ и отскок детонации -->
+          <div class="telemetry-card knock-detect-card" id="cardSpark">
+            <span class="tel-label">УОЗ / ОТСКОК</span>
+            <div class="tel-val-wrap">
+              <span class="tel-val" id="valSpark">---</span>
+              <span class="tel-retard-badge" id="valRetard">0.0°</span>
+            </div>
+          </div>
+
+          <!-- Дроссель ДПДЗ -->
+          <div class="telemetry-card">
+            <span class="tel-label">ДРОССЕЛЬ (TPS)</span>
+            <div class="tel-val-wrap">
+              <span class="tel-val" id="valThrottle">---</span>
+              <span class="tel-unit">%</span>
+            </div>
+          </div>
+
+          <!-- Температура двигателя (ДТОЖ) -->
+          <div class="telemetry-card">
+            <span class="tel-label">ТЕМПЕРАТУРА ОЖ</span>
+            <div class="tel-val-wrap">
+              <span class="tel-val" id="valTemp">---</span>
+              <span class="tel-unit">°C</span>
+            </div>
+            <div class="mini-bar-track">
+              <div class="mini-bar-fill temp-fill" id="barTemp" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <!-- Бортовое напряжение -->
+          <div class="telemetry-card">
+            <span class="tel-label">БОРТСЕТЬ</span>
+            <div class="tel-val-wrap">
+              <span class="tel-val" id="valVoltage">---</span>
+              <span class="tel-unit">V</span>
+            </div>
+          </div>
+
+          <!-- Расход топлива л/ч -->
+          <div class="telemetry-card">
+            <span class="tel-label">РАСХОД ТОПЛИВА</span>
+            <div class="tel-val-wrap">
+              <span class="tel-val" id="valFuelRate">---</span>
+              <span class="tel-unit">л/ч</span>
+            </div>
+          </div>
+
+          <!-- РХХ (Шаги) -->
+          <div class="telemetry-card">
+            <span class="tel-label">ПОЗИЦИЯ РХХ</span>
+            <div class="tel-val-wrap">
+              <span class="tel-val" id="valIac">---</span>
+              <span class="tel-unit">ШАГ</span>
+            </div>
+          </div>
+
         </div>
+
+        <!-- ГОНОЧНЫЕ ФЛАГИ СОСТОЯНИЯ (STATUS PINS) -->
+        <div class="status-pins-row">
+          <div class="status-pin" id="flagIdle">
+            <span class="pin-led"></span>
+            <span class="pin-name">ХХ (IDLE)</span>
+          </div>
+          <div class="status-pin" id="flagLambda">
+            <span class="pin-led"></span>
+            <span class="pin-name">ЛЯМБДА (LOOP)</span>
+          </div>
+          <div class="status-pin knock-pin" id="flagKnock">
+            <span class="pin-led"></span>
+            <span class="pin-name">ДЕТОНАЦИЯ</span>
+          </div>
+          <div class="status-pin" id="flagFuelCut">
+            <span class="pin-led"></span>
+            <span class="pin-name">ОТСЕЧКА</span>
+          </div>
+        </div>
+
       </section>
 
       <!-- ВКЛАДКА 2: ОШИБКИ ЭБУ (DTC) -->
       <section id="tab-dtc" class="tab-pane">
-        <div class="section-card">
-          <div class="card-header-actions">
-            <h2>Коды неисправностей (DTC)</h2>
-            <div class="action-buttons-group">
-              <button id="btnReadDtc" class="btn btn-secondary">Прочитать ошибки</button>
-              <button id="btnClearDtc" class="btn btn-danger">Сбросить ошибки</button>
+        <div class="cockpit-panel">
+          <div class="panel-toolbar">
+            <div>
+              <span class="panel-tag">DIAGNOSTIC TROUBLE CODES</span>
+              <h2 class="panel-title">Память ошибок ЭБУ</h2>
+            </div>
+            <div class="toolbar-btns">
+              <button id="btnReadDtc" class="btn-tool btn-tool-primary">Считать DTC</button>
+              <button id="btnClearDtc" class="btn-tool btn-tool-danger">Сбросить DTC</button>
             </div>
           </div>
-          <div class="dtc-list" id="dtcList">
-            <div class="empty-state">Нажмите «Прочитать ошибки» для сканирования ЭБУ</div>
+          <div class="dtc-stream-box" id="dtcList">
+            <div class="empty-stream-msg">Нажмите «Считать DTC» для опроса памяти процессора М73</div>
           </div>
         </div>
       </section>
 
-      <!-- ВКЛАДКА 3: АЦП И ДАТЧИКИ -->
+      <!-- ВКЛАДКА 3: АЦП И СЧЁТЧИКИ ПРОПУСКОВ -->
       <section id="tab-adc" class="tab-pane">
-        <div class="section-card">
-          <h2>Каналы АЦП (Кадр 21 02)</h2>
-          <div class="adc-grid">
-            <div class="adc-item">
-              <span class="adc-label">АЦП ДМРВ (Покой = 0.996-1.02В)</span>
-              <span class="adc-val" id="adcMaf">--- В</span>
+        <div class="cockpit-panel">
+          <span class="panel-tag">CYLINDER HEALTH MATRIX</span>
+          <h2 class="panel-title">Счётчики пропусков зажигания</h2>
+          <div class="misfire-matrix">
+            <div class="misfire-cell">
+              <span class="misfire-cyl">CYL 1</span>
+              <span class="misfire-count" id="misCyl1">0</span>
             </div>
-            <div class="adc-item">
-              <span class="adc-label">АЦП ДПДЗ (Дроссель)</span>
-              <span class="adc-val" id="adcThrottle">--- В</span>
+            <div class="misfire-cell">
+              <span class="misfire-cyl">CYL 2</span>
+              <span class="misfire-count" id="misCyl2">0</span>
             </div>
-            <div class="adc-item">
-              <span class="adc-label">АЦП ДТОЖ (Температура ОЖ)</span>
-              <span class="adc-val" id="adcTemp">--- В</span>
+            <div class="misfire-cell">
+              <span class="misfire-cyl">CYL 3</span>
+              <span class="misfire-count" id="misCyl3">0</span>
             </div>
-            <div class="adc-item">
-              <span class="adc-label">АЦП Датчика кислорода 1</span>
-              <span class="adc-val" id="adcO2">--- В</span>
-            </div>
-            <div class="adc-item">
-              <span class="adc-label">АЦП Бортового напряжения</span>
-              <span class="adc-val" id="adcVolt">--- В</span>
+            <div class="misfire-cell">
+              <span class="misfire-cyl">CYL 4</span>
+              <span class="misfire-count" id="misCyl4">0</span>
             </div>
           </div>
         </div>
 
-        <div class="section-card">
-          <h2>Счётчики пропусков зажигания (Кадр 21 04)</h2>
-          <div class="misfires-grid">
-            <div class="misfire-box"><span class="misfire-num">Цилиндр 1</span><span class="misfire-val" id="misCyl1">0</span></div>
-            <div class="misfire-box"><span class="misfire-num">Цилиндр 2</span><span class="misfire-val" id="misCyl2">0</span></div>
-            <div class="misfire-box"><span class="misfire-num">Цилиндр 3</span><span class="misfire-val" id="misCyl3">0</span></div>
-            <div class="misfire-box"><span class="misfire-num">Цилиндр 4</span><span class="misfire-val" id="misCyl4">0</span></div>
+        <div class="cockpit-panel">
+          <span class="panel-tag">RAW SENSOR VOLTAGE (ADC)</span>
+          <h2 class="panel-title">Каналы АЦП микроконтроллера</h2>
+          <div class="adc-stack">
+            <div class="adc-row highlight-adc">
+              <span class="adc-name">АЦП ДМРВ (Покой = 0.996...1.02 В)</span>
+              <span class="adc-voltage" id="adcMaf">--- В</span>
+            </div>
+            <div class="adc-row">
+              <span class="adc-name">АЦП ДПДЗ (Дроссель)</span>
+              <span class="adc-voltage" id="adcThrottle">--- В</span>
+            </div>
+            <div class="adc-row">
+              <span class="adc-name">АЦП ДТОЖ (Температура ОЖ)</span>
+              <span class="adc-voltage" id="adcTemp">--- В</span>
+            </div>
+            <div class="adc-row">
+              <span class="adc-name">АЦП Датчика кислорода 1 (Лямбда)</span>
+              <span class="adc-voltage" id="adcO2">--- В</span>
+            </div>
+            <div class="adc-row">
+              <span class="adc-name">АЦП Бортового напряжения</span>
+              <span class="adc-voltage" id="adcVolt">--- В</span>
+            </div>
           </div>
         </div>
       </section>
 
       <!-- ВКЛАДКА 4: ИСПОЛНИТЕЛЬНЫЕ МЕХАНИЗМЫ И СБРОС С ИНИЦИАЛИЗАЦИЕЙ -->
       <section id="tab-actuators" class="tab-pane">
-        <div class="section-card">
-          <h2>Управление механизмами</h2>
-          <p class="section-desc">Тестирование реле и клапанов при включенном зажигании (на заглушенном авто)</p>
-          <div class="actuator-controls">
-            <div class="actuator-row">
-              <span>Реле вентилятора 1 (Низкая скорость)</span>
-              <button class="btn btn-outline" onclick="M73App.testActuator('fan1_on')">ВКЛ (5 сек)</button>
+        <div class="cockpit-panel">
+          <span class="panel-tag">ACTUATORS OVERRIDE</span>
+          <h2 class="panel-title">Тестирование реле и клапанов</h2>
+          <p class="panel-caption">Заглушите мотор, включите зажигание перед проведением тестов</p>
+          
+          <div class="actuator-stack">
+            <div class="actuator-item">
+              <span class="act-name">Реле вентилятора 1 (Низкая скорость)</span>
+              <button class="btn-act-trigger" onclick="M73App.testActuator('fan1_on')">ВКЛ (5с)</button>
             </div>
-            <div class="actuator-row">
-              <span>Реле вентилятора 2 (Высокая скорость)</span>
-              <button class="btn btn-outline" onclick="M73App.testActuator('fan2_on')">ВКЛ (5 сек)</button>
+            <div class="actuator-item">
+              <span class="act-name">Реле вентилятора 2 (Высокая скорость)</span>
+              <button class="btn-act-trigger" onclick="M73App.testActuator('fan2_on')">ВКЛ (5с)</button>
             </div>
-            <div class="actuator-row">
-              <span>Реле бензонасоса</span>
-              <button class="btn btn-outline" onclick="M73App.testActuator('pump_on')">ВКЛ (5 сек)</button>
+            <div class="actuator-item">
+              <span class="act-name">Реле бензонасоса</span>
+              <button class="btn-act-trigger" onclick="M73App.testActuator('pump_on')">ВКЛ (5с)</button>
             </div>
-            <div class="actuator-row">
-              <span>Тест лампы Check Engine</span>
-              <button class="btn btn-outline" onclick="M73App.testActuator('mil_test')">Тест</button>
+            <div class="actuator-item">
+              <span class="act-name">Тест лампы Check Engine (MIL)</span>
+              <button class="btn-act-trigger" onclick="M73App.testActuator('mil_test')">ТЕСТ</button>
             </div>
           </div>
 
-          <hr class="divider">
-
-          <div class="actuator-reset-block">
-            <h3>Сброс ЭБУ с инициализацией</h3>
-            <p class="reset-desc">Очищает накопленные топливные адаптации и таблицы самообучения М73 к заводским настройкам.</p>
-            <button id="btnEcuReset" class="btn btn-danger-outline" onclick="M73App.resetWithInit()">
-              Выполнить сброс с инициализацией
+          <div class="reset-zone-box">
+            <span class="danger-tag">CRITICAL ROUTINE</span>
+            <h3 class="reset-title">Сброс ЭБУ с инициализацией (31 01)</h3>
+            <p class="reset-caption">Очищает накопленные таблицы самообучения топлива и угла зажигания М73 к исходным заводским значениям.</p>
+            <button class="btn-reset-fire" onclick="M73App.resetWithInit()">
+              ВЫПОЛНИТЬ ИНИЦИАЛИЗАЦИЮ
             </button>
           </div>
         </div>
@@ -293,47 +385,49 @@
 
       <!-- ВКЛАДКА 5: ТЕРМИНАЛ / ЛОГ ОБМЕНА -->
       <section id="tab-terminal" class="tab-pane">
-        <div class="section-card terminal-card">
-          <div class="terminal-header">
-            <h2>Сырой обмен (ELM327 BLE)</h2>
-            <button class="btn btn-small" onclick="M73App.clearTerminal()">Очистить</button>
+        <div class="cockpit-panel terminal-panel-custom">
+          <div class="terminal-ctrl-bar">
+            <div>
+              <span class="panel-tag">RAW K-LINE PACKETS</span>
+              <h2 class="panel-title">Терминал обмена ELM327 BLE</h2>
+            </div>
+            <button class="btn-clear-term" onclick="M73App.clearTerminal()">ОЧИСТИТЬ</button>
           </div>
-          <div class="terminal-log" id="terminalLog"></div>
-          <div class="terminal-input-wrap">
-            <input type="text" id="terminalInput" placeholder="Команда (например: ATZ или 21 01)" />
-            <button class="btn btn-secondary" onclick="M73App.sendManualCommand()">Отправить</button>
+          <div class="terminal-screen" id="terminalLog"></div>
+          <div class="terminal-sender-row">
+            <input type="text" id="terminalInput" class="term-input" placeholder="Команда (например: 21 01 или ATZ)" />
+            <button class="btn-term-send" onclick="M73App.sendManualCommand()">SEND</button>
           </div>
         </div>
       </section>
 
     </main>
 
-    <!-- Нижняя панель навигации по вкладкам -->
-    <nav class="bottom-nav">
-      <button class="nav-tab active" data-tab="tab-dashboard">
-        <span class="tab-icon">⚡</span>
-        <span class="tab-text">Панель</span>
+    <!-- ПАРЯЩАЯ НИЖНЯЯ ПРИБОРНАЯ НАВИГАЦИЯ -->
+    <nav class="floating-dock">
+      <button class="dock-tab active" data-tab="tab-dashboard">
+        <span class="dock-icon">⚡</span>
+        <span class="dock-text">ПАНЕЛЬ</span>
       </button>
-      <button class="nav-tab" data-tab="tab-dtc">
-        <span class="tab-icon">⚠</span>
-        <span class="tab-text">Ошибки</span>
+      <button class="dock-tab" data-tab="tab-dtc">
+        <span class="dock-icon">⚠</span>
+        <span class="dock-text">ОШИБКИ</span>
       </button>
-      <button class="nav-tab" data-tab="tab-adc">
-        <span class="tab-icon">📊</span>
-        <span class="tab-text">АЦП / Пропуски</span>
+      <button class="dock-tab" data-tab="tab-adc">
+        <span class="dock-icon">📊</span>
+        <span class="dock-text">АЦП / ДВС</span>
       </button>
-      <button class="nav-tab" data-tab="tab-actuators">
-        <span class="tab-icon">⚙</span>
-        <span class="tab-text">Управление</span>
+      <button class="dock-tab" data-tab="tab-actuators">
+        <span class="dock-icon">⚙</span>
+        <span class="dock-text">ТЕСТЫ</span>
       </button>
-      <button class="nav-tab" data-tab="tab-terminal">
-        <span class="tab-icon">💻</span>
-        <span class="tab-text">Терминал</span>
+      <button class="dock-tab" data-tab="tab-terminal">
+        <span class="dock-icon">💻</span>
+        <span class="dock-text">ТЕРМИНАЛ</span>
       </button>
     </nav>
   </div>
 
-  <!-- Скрипты приложения -->
   <script src="elm327.js"></script>
   <script src="m73.js"></script>
   <script src="logger.js"></script>

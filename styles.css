@@ -1,17 +1,25 @@
-/* Стили для автомобильного интерфейса Priora Diag M73 ProLog */
+/* ==========================================================================
+   M73 PRO-TELEMETRY COCKPIT UI THEME (MOTORSPORT EDITION)
+   High-contrast, OLED-optimized, telemetry cluster for Priora 16V / Itelma M73
+   ========================================================================== */
+
 :root {
-  --bg-main: #0b0f19;
-  --bg-card: #151d30;
-  --bg-card-highlight: #1b2640;
-  --border-color: #23314f;
-  --text-main: #f1f5f9;
-  --text-muted: #94a3b8;
-  --accent-cyan: #06b6d4;
-  --accent-green: #10b981;
-  --accent-amber: #f59e0b;
-  --accent-red: #ef4444;
-  --accent-glow: rgba(6, 182, 212, 0.25);
-  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --bg-deep: #030508;
+  --bg-panel: rgba(14, 20, 32, 0.75);
+  --bg-panel-border: rgba(255, 255, 255, 0.08);
+  --bg-card: rgba(10, 15, 25, 0.65);
+  --bg-card-border: rgba(40, 54, 85, 0.4);
+
+  --neon-cyan: #00f0ff;
+  --neon-cyan-glow: rgba(0, 240, 255, 0.25);
+  --neon-green: #00ff88;
+  --neon-green-glow: rgba(0, 255, 136, 0.3);
+  --racing-red: #ff2a55;
+  --racing-red-glow: rgba(255, 42, 85, 0.4);
+  --racing-amber: #ffaa00;
+
+  --font-digital: "SF Mono", "DIN Alternate", "Roboto Mono", "Chakra Petch", Menlo, monospace;
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", sans-serif;
 }
 
 * {
@@ -23,16 +31,21 @@
 }
 
 body {
-  background-color: var(--bg-main);
-  color: var(--text-main);
-  font-family: var(--font-family);
-  font-size: 14px;
-  overflow: hidden;
+  background-color: var(--bg-deep);
+  background-image: 
+    radial-gradient(circle at 50% 0%, rgba(0, 240, 255, 0.05) 0%, transparent 60%),
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 100% 100%, 32px 32px, 32px 32px;
+  color: #f1f5f9;
+  font-family: var(--font-ui);
   height: 100vh;
   height: 100dvh;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 
-.app-container {
+.cockpit-container {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -40,119 +53,144 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* ШАПКА */
-.app-header {
+/* ==========================================================================
+   ВЕРХНЯЯ ШАПКА ТЕЛЕМЕТРИИ
+   ========================================================================== */
+.cockpit-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  background-color: rgba(21, 29, 48, 0.85);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border-color);
-  z-index: 10;
+  padding: 10px 16px;
+  background: rgba(8, 12, 20, 0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--bg-panel-border);
+  z-index: 50;
 }
 
-.header-left {
+.brand-group {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
-.logo-title {
-  font-size: 1.15rem;
+.brand-badge {
+  font-family: var(--font-digital);
+  font-size: 0.75rem;
   font-weight: 800;
-  letter-spacing: -0.5px;
-  background: linear-gradient(135deg, #38bdf8, #818cf8);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.ecu-tag {
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 2px 6px;
-  background-color: rgba(6, 182, 212, 0.15);
-  color: var(--accent-cyan);
+  color: var(--neon-cyan);
+  background: rgba(0, 240, 255, 0.1);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  padding: 3px 6px;
   border-radius: 4px;
-  border: 1px solid rgba(6, 182, 212, 0.3);
+  letter-spacing: 0.5px;
 }
 
-.header-right {
+.brand-title {
+  font-size: 1.1rem;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  line-height: 1.1;
+  color: #fff;
+}
+
+.neon-cyan {
+  color: var(--neon-cyan);
+  text-shadow: 0 0 10px var(--neon-cyan-glow);
+}
+
+.brand-sub {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  color: #64748b;
+  font-family: var(--font-digital);
+}
+
+.header-controls {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 /* Индикатор частоты опроса */
-.hz-indicator {
+.speed-hz-box {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  background-color: #0b1120;
-  padding: 4px 8px;
+  background: rgba(3, 7, 15, 0.9);
+  padding: 3px 8px;
   border-radius: 6px;
-  border: 1px solid var(--border-color);
+  border: 1px solid rgba(0, 255, 136, 0.25);
+  min-width: 68px;
 }
 
-.hz-value {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--accent-green);
-  font-variant-numeric: tabular-nums;
+.hz-digital {
+  font-family: var(--font-digital);
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: var(--neon-green);
+  text-shadow: 0 0 8px var(--neon-green-glow);
   line-height: 1;
 }
 
-.hz-unit {
-  font-size: 0.65rem;
-  color: var(--text-muted);
+.hz-sub {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #64748b;
+  font-family: var(--font-digital);
 }
 
-/* Кнопка подключения */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: none;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-family: inherit;
+.ms-pill {
+  color: var(--neon-cyan);
 }
 
-.btn-connect {
-  background: linear-gradient(135deg, #0284c7, #0369a1);
+/* Кнопка Connect в стиле спорткара */
+.btn-cockpit-connect {
+  position: relative;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
   color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
   padding: 8px 14px;
-  font-size: 0.85rem;
-  box-shadow: 0 2px 10px rgba(2, 132, 199, 0.3);
+  font-family: var(--font-digital);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(2, 132, 199, 0.35);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
 }
 
-.btn-connect.connected {
-  background: linear-gradient(135deg, #059669, #047857);
-  box-shadow: 0 2px 10px rgba(5, 150, 105, 0.3);
+.btn-cockpit-connect.connected {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  box-shadow: 0 4px 15px rgba(5, 150, 105, 0.4);
+  border-color: rgba(52, 211, 153, 0.5);
 }
 
-.pulse-icon {
-  width: 8px;
-  height: 8px;
+.btn-radar {
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background-color: #38bdf8;
+  background: #38bdf8;
   display: inline-block;
 }
 
-.btn-connect.connected .pulse-icon {
-  background-color: #34d399;
-  box-shadow: 0 0 8px #34d399;
+.btn-cockpit-connect.connected .btn-radar {
+  background: var(--neon-green);
+  box-shadow: 0 0 8px var(--neon-green);
 }
 
-/* ОСНОВНОЙ КОНТЕНТ */
-.main-content {
+/* ==========================================================================
+   VIEWPORT И ТАХОМЕТРИЧЕСКИЙ БАР
+   ========================================================================== */
+.cockpit-viewport {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 12px;
+  padding: 10px 12px 75px 12px;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -164,502 +202,764 @@ body {
   display: block;
 }
 
-/* СЕЛЕКТОР РЕЖИМОВ ОПРОСА */
-.mode-selector-card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
+/* Светодиодный Shift-Light Bar */
+.shift-lights-bar {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  background: rgba(3, 7, 15, 0.95);
+  border: 1px solid var(--bg-panel-border);
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.led {
+  flex: 1;
+  height: 6px;
+  border-radius: 2px;
+  background: #1e293b;
+  transition: all 0.08s ease-out;
+}
+
+.led.active.led-green {
+  background: var(--neon-green);
+  box-shadow: 0 0 10px var(--neon-green);
+}
+
+.led.active.led-yellow {
+  background: var(--racing-amber);
+  box-shadow: 0 0 10px var(--racing-amber);
+}
+
+.led.active.led-red {
+  background: var(--racing-red);
+  box-shadow: 0 0 12px var(--racing-red);
+}
+
+.led.active.led-blue.blink {
+  background: #38bdf8;
+  box-shadow: 0 0 16px #38bdf8;
+  animation: ledPulse 0.15s infinite;
+}
+
+@keyframes ledPulse {
+  50% { opacity: 0.2; }
+}
+
+/* ==========================================================================
+   ПАНЕЛИ (PANELS & SEGMENTED CONTROLS)
+   ========================================================================== */
+.cockpit-panel {
+  background: var(--bg-panel);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--bg-panel-border);
   border-radius: 12px;
   padding: 12px;
+  margin-bottom: 10px;
+}
+
+.panel-tag {
+  font-family: var(--font-digital);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #64748b;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.panel-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.panel-caption {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-top: 4px;
   margin-bottom: 12px;
 }
 
-.mode-selector-header {
+/* Селектор режимов */
+.mode-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.mode-readout {
+  font-family: var(--font-digital);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--neon-green);
+}
+
+.segmented-control {
+  display: flex;
+  background: rgba(3, 7, 15, 0.8);
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  gap: 3px;
+}
+
+.seg-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 4px;
+  font-family: var(--font-digital);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.seg-btn.active {
+  background: linear-gradient(180deg, rgba(40, 54, 85, 0.8) 0%, rgba(20, 28, 45, 0.9) 100%);
+  color: #fff;
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.custom-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.custom-chk-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: #cbd5e1;
+  cursor: pointer;
+}
+
+.custom-chk-label input {
+  accent-color: var(--neon-cyan);
+  width: 16px;
+  height: 16px;
+}
+
+/* ==========================================================================
+   ЛОГГЕР КАРТОЧКА
+   ========================================================================== */
+.logger-status-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
 }
 
-.mode-label {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
-.mode-badge {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--accent-green);
-  padding: 2px 8px;
-  background-color: rgba(16, 185, 129, 0.15);
-  border-radius: 6px;
-  border: 1px solid rgba(16, 185, 129, 0.3);
-}
-
-.mode-pills {
+.rec-beacon-wrap {
   display: flex;
-  gap: 6px;
-}
-
-.pill-btn {
-  flex: 1;
-  padding: 8px 6px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  border-radius: 8px;
-  background-color: #0b1120;
-  color: var(--text-muted);
-  border: 1px solid var(--border-color);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.pill-btn.active {
-  background: linear-gradient(135deg, #0284c7, #0369a1);
-  color: #fff;
-  border-color: #38bdf8;
-  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.3);
-}
-
-.custom-checkboxes-panel {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
 }
 
-.checkbox-row {
+.rec-beacon {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #475569;
+}
+
+.rec-beacon.recording {
+  background: var(--racing-red);
+  box-shadow: 0 0 10px var(--racing-red);
+  animation: ledPulse 0.8s infinite;
+}
+
+.rec-state-text {
+  font-family: var(--font-digital);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: #94a3b8;
+}
+
+.logger-counter {
+  font-family: var(--font-digital);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--neon-cyan);
+}
+
+.logger-btns-row {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-rec-action {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  font-family: var(--font-digital);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
   display: flex;
   align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.btn-record {
+  background: rgba(30, 41, 59, 0.7);
+  color: #fff;
+}
+
+.btn-record.active {
+  background: rgba(255, 42, 85, 0.2);
+  color: var(--racing-red);
+  border-color: var(--racing-red);
+  box-shadow: 0 0 12px var(--racing-red-glow);
+}
+
+.rec-circle {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--racing-red);
+  display: inline-block;
+}
+
+.btn-export {
+  background: rgba(0, 255, 136, 0.1);
+  color: var(--neon-green);
+  border-color: rgba(0, 255, 136, 0.3);
+}
+
+.btn-rec-action:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ==========================================================================
+   ГЛАВНЫЕ ГЕРОЙ-ПРИБОРЫ (RPM & SPEED)
+   ========================================================================== */
+.hero-gauges-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
   gap: 10px;
+  margin-bottom: 10px;
+}
+
+.hero-gauge-card {
+  background: linear-gradient(160deg, rgba(20, 28, 48, 0.8) 0%, rgba(8, 12, 22, 0.9) 100%);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.rpm-hero {
+  border-color: rgba(0, 240, 255, 0.4);
+}
+
+.speed-hero {
+  border-color: rgba(40, 54, 85, 0.6);
+}
+
+.hero-gauge-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.peak-tag {
+  font-family: var(--font-digital);
+  font-size: 0.6rem;
+  color: #64748b;
+}
+
+.hero-value-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.hero-digital-val {
+  font-family: var(--font-digital);
+  font-size: 2.3rem;
+  font-weight: 900;
+  line-height: 1;
+  color: #fff;
+  letter-spacing: -1px;
+}
+
+.cyan-glow {
+  color: var(--neon-cyan);
+  text-shadow: 0 0 14px var(--neon-cyan-glow);
+}
+
+.hero-unit {
+  font-family: var(--font-digital);
   font-size: 0.75rem;
-  color: var(--text-main);
-  cursor: pointer;
+  font-weight: 700;
+  color: #64748b;
 }
 
-.checkbox-row input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent-cyan);
+.racing-bar-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(3, 7, 15, 0.9);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* СЕТКА ПРОПУСКОВ ЗАЖИГАНИЯ */
-.misfires-grid {
+.racing-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--neon-cyan) 0%, var(--neon-green) 60%, var(--racing-amber) 85%, var(--racing-red) 100%);
+  transition: width 0.08s ease-out;
+}
+
+.speed-sub-metrics {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-digital);
+  font-size: 0.7rem;
+  color: #64748b;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.speed-sub-metrics strong {
+  color: #f1f5f9;
+}
+
+/* ==========================================================================
+   СЕТКА ТЕЛЕМЕТРИИ (TELEMETRY GRID)
+   ========================================================================== */
+.telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.telemetry-card {
+  background: var(--bg-card);
+  border: 1px solid var(--bg-card-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 68px;
+  transition: all 0.15s ease;
+}
+
+.telemetry-card.highlight-card {
+  border-color: rgba(255, 170, 0, 0.35);
+  background: linear-gradient(150deg, rgba(25, 30, 45, 0.8) 0%, rgba(10, 15, 25, 0.7) 100%);
+}
+
+.tel-label {
+  font-family: var(--font-digital);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.5px;
+}
+
+.tel-val-wrap {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 2px;
+}
+
+.tel-val {
+  font-family: var(--font-digital);
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: #fff;
+  line-height: 1;
+}
+
+.cyan-val {
+  color: var(--neon-cyan);
+}
+
+.amber-val {
+  color: var(--racing-amber);
+}
+
+.tel-unit {
+  font-family: var(--font-digital);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.tel-retard-badge {
+  font-family: var(--font-digital);
+  font-size: 0.85rem;
+  font-weight: 900;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+}
+
+.knock-alert {
+  border-color: var(--racing-red) !important;
+  background: rgba(255, 42, 85, 0.15) !important;
+  box-shadow: 0 0 15px var(--racing-red-glow);
+}
+
+.mini-bar-track {
+  width: 100%;
+  height: 3px;
+  background: #03070f;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.mini-bar-fill {
+  height: 100%;
+}
+
+.temp-fill {
+  background: linear-gradient(90deg, #38bdf8, #00ff88, #ffaa00, #ff2a55);
+}
+
+/* ==========================================================================
+   ГОНОЧНЫЕ ПИНЫ СОСТОЯНИЯ (STATUS PINS)
+   ========================================================================== */
+.status-pins-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 8px;
+  background: rgba(10, 15, 25, 0.75);
+  border: 1px solid var(--bg-panel-border);
+  border-radius: 10px;
+}
+
+.status-pin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(3, 7, 15, 0.6);
+  border-radius: 6px;
+}
+
+.pin-led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #334155;
+  transition: all 0.15s ease;
+}
+
+.status-pin.active .pin-led {
+  background: var(--neon-green);
+  box-shadow: 0 0 8px var(--neon-green);
+}
+
+.status-pin.knock-pin.active .pin-led {
+  background: var(--racing-red);
+  box-shadow: 0 0 10px var(--racing-red);
+}
+
+.pin-name {
+  font-family: var(--font-digital);
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #64748b;
+  text-align: center;
+}
+
+.status-pin.active .pin-name {
+  color: #fff;
+}
+
+/* ==========================================================================
+   ВКЛАДКИ АЦП И МАТРИЦА ПРОПУСКОВ
+   ========================================================================== */
+.misfire-matrix {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   margin-top: 8px;
 }
 
-.misfire-box {
-  background-color: #0b1120;
-  border: 1px solid var(--border-color);
+.misfire-cell {
+  background: rgba(3, 7, 15, 0.85);
+  border: 1px solid var(--bg-card-border);
   border-radius: 8px;
   padding: 10px 4px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
+  text-align: center;
 }
 
-.misfire-num {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-}
-
-.misfire-val {
-  font-size: 1.3rem;
-  font-weight: 800;
-  color: #34d399;
-}
-
-.misfire-val.has-misfires {
-  color: var(--accent-red);
-  text-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
-}
-
-/* КАРТОЧКА ЛОГГЕРА */
-.logger-control-card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 12px 14px;
-  margin-bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.logger-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.logger-status-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background-color: #64748b;
-  flex-shrink: 0;
-}
-
-.logger-status-dot.recording {
-  background-color: var(--accent-red);
-  box-shadow: 0 0 10px var(--accent-red);
-  animation: blink 1s infinite;
-}
-
-@keyframes blink {
-  50% { opacity: 0.3; }
-}
-
-.logger-title {
+.misfire-cyl {
+  font-family: var(--font-digital);
+  font-size: 0.65rem;
   font-weight: 700;
-  font-size: 0.95rem;
+  color: #64748b;
+  display: block;
 }
 
-.logger-stats {
-  font-size: 0.75rem;
-  color: var(--text-muted);
+.misfire-count {
+  font-family: var(--font-digital);
+  font-size: 1.4rem;
+  font-weight: 900;
+  color: var(--neon-green);
 }
 
-.logger-actions {
+.misfire-count.has-misfires {
+  color: var(--racing-red);
+  text-shadow: 0 0 10px var(--racing-red);
+}
+
+.adc-stack {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.adc-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(3, 7, 15, 0.8);
+  border: 1px solid var(--bg-card-border);
+  border-radius: 8px;
+}
+
+.adc-row.highlight-adc {
+  border-color: rgba(0, 240, 255, 0.4);
+  background: rgba(0, 240, 255, 0.05);
+}
+
+.adc-name {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.adc-voltage {
+  font-family: var(--font-digital);
+  font-size: 0.95rem;
+  font-weight: 900;
+  color: var(--neon-cyan);
+}
+
+/* ==========================================================================
+   УПРАВЛЕНИЕ И СБРОС С ИНИЦИАЛИЗАЦИЕЙ
+   ========================================================================== */
+.actuator-stack {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
-.btn-action {
-  flex: 1;
-  padding: 10px;
-  font-size: 0.85rem;
-}
-
-.btn-record {
-  background-color: #1e293b;
-  color: var(--text-main);
-  border: 1px solid var(--border-color);
-}
-
-.btn-record.active {
-  background-color: rgba(239, 68, 68, 0.2);
-  color: var(--accent-red);
-  border-color: var(--accent-red);
-}
-
-.btn-export {
-  background-color: rgba(16, 185, 129, 0.15);
-  color: var(--accent-green);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-}
-
-.btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-/* СЕТКА ПРИБОРОВ */
-.gauges-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.gauge-card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 12px;
+.actuator-item {
   display: flex;
-  flex-direction: column;
   justify-content: space-between;
-  min-height: 84px;
-  position: relative;
-  overflow: hidden;
+  align-items: center;
+  padding: 10px 12px;
+  background: rgba(3, 7, 15, 0.8);
+  border: 1px solid var(--bg-card-border);
+  border-radius: 8px;
 }
 
-.gauge-card.highlight {
-  border-color: rgba(6, 182, 212, 0.4);
-  background: linear-gradient(180deg, var(--bg-card-highlight) 0%, var(--bg-card) 100%);
+.act-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #e2e8f0;
 }
 
-.gauge-label {
+.btn-act-trigger {
+  padding: 6px 12px;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid var(--bg-card-border);
+  color: #fff;
+  border-radius: 6px;
+  font-family: var(--font-digital);
   font-size: 0.75rem;
-  color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 700;
+  cursor: pointer;
 }
 
-.gauge-value-wrap {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-  margin-top: 4px;
+.reset-zone-box {
+  margin-top: 20px;
+  padding: 14px;
+  background: rgba(255, 42, 85, 0.06);
+  border: 1px solid rgba(255, 42, 85, 0.3);
+  border-radius: 10px;
 }
 
-.gauge-value {
-  font-size: 1.6rem;
+.danger-tag {
+  font-family: var(--font-digital);
+  font-size: 0.65rem;
+  font-weight: 900;
+  color: var(--racing-red);
+  letter-spacing: 1px;
+}
+
+.reset-title {
+  font-size: 0.95rem;
   font-weight: 800;
   color: #fff;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
+  margin-top: 2px;
 }
 
-.gauge-unit {
+.reset-caption {
   font-size: 0.75rem;
-  color: var(--text-muted);
+  color: #94a3b8;
+  margin: 6px 0 12px 0;
 }
 
-.gauge-bar-bg {
+.btn-reset-fire {
   width: 100%;
-  height: 4px;
-  background-color: #0b1120;
-  border-radius: 2px;
-  margin-top: 8px;
-  overflow: hidden;
-}
-
-.gauge-bar {
-  height: 100%;
-  background: linear-gradient(90deg, #38bdf8, #06b6d4);
-  transition: width 0.08s ease-out;
-}
-
-.gauge-bar.temp-bar {
-  background: linear-gradient(90deg, #38bdf8, #10b981, #f59e0b, #ef4444);
-}
-
-/* ФЛАГИ СОСТОЯНИЯ */
-.flags-card {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
   padding: 12px;
+  background: linear-gradient(135deg, rgba(255, 42, 85, 0.8) 0%, rgba(200, 20, 60, 0.9) 100%);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-family: var(--font-digital);
+  font-size: 0.85rem;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 15px rgba(255, 42, 85, 0.35);
+  cursor: pointer;
 }
 
-.flag-item {
+/* ==========================================================================
+   ОШИБКИ И ТЕРМИНАЛ
+   ========================================================================== */
+.panel-toolbar {
   display: flex;
+  justify-content: space-between;
   align-items: center;
+  margin-bottom: 12px;
+}
+
+.toolbar-btns {
+  display: flex;
   gap: 8px;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  padding: 4px 6px;
+}
+
+.btn-tool {
+  padding: 8px 12px;
   border-radius: 6px;
-  background-color: rgba(11, 15, 25, 0.5);
+  font-family: var(--font-digital);
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+  border: none;
 }
 
-.flag-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: #475569;
-  flex-shrink: 0;
+.btn-tool-primary {
+  background: rgba(2, 132, 199, 0.2);
+  color: var(--neon-cyan);
+  border: 1px solid rgba(0, 240, 255, 0.4);
 }
 
-.flag-item.active {
-  color: #fff;
-  font-weight: 600;
+.btn-tool-danger {
+  background: rgba(255, 42, 85, 0.2);
+  color: var(--racing-red);
+  border: 1px solid rgba(255, 42, 85, 0.4);
 }
 
-.flag-item.active .flag-dot {
-  background-color: var(--accent-green);
-  box-shadow: 0 0 6px var(--accent-green);
-}
-
-/* РАЗДЕЛЫ */
-.section-card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 12px;
-}
-
-.section-card h2 {
-  font-size: 1.05rem;
-  margin-bottom: 8px;
-}
-
-.section-desc {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  margin-bottom: 14px;
-}
-
-.card-header-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.action-buttons-group {
-  display: flex;
-  gap: 8px;
-}
-
-.btn-secondary {
-  background-color: #1e293b;
-  color: #fff;
-  border: 1px solid var(--border-color);
-  padding: 8px 12px;
-}
-
-.btn-danger {
-  background-color: rgba(239, 68, 68, 0.2);
-  color: var(--accent-red);
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  padding: 8px 12px;
-}
-
-.btn-danger-outline {
-  width: 100%;
-  padding: 12px;
-  background-color: transparent;
-  color: var(--accent-red);
-  border: 1px solid var(--accent-red);
-}
-
-.btn-outline {
-  padding: 6px 12px;
-  background-color: transparent;
-  border: 1px solid var(--border-color);
-  color: var(--text-main);
-  font-size: 0.8rem;
-}
-
-.dtc-list {
+.dtc-stream-box {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-height: 80px;
+  min-height: 120px;
 }
 
 .dtc-item {
-  background-color: #0b1120;
-  border: 1px solid var(--border-color);
-  border-left: 3px solid var(--accent-amber);
-  border-radius: 6px;
+  background: rgba(3, 7, 15, 0.9);
+  border: 1px solid rgba(255, 170, 0, 0.3);
+  border-left: 4px solid var(--racing-amber);
+  border-radius: 8px;
   padding: 10px 12px;
 }
 
 .dtc-code {
-  font-weight: 700;
-  color: var(--accent-amber);
-  font-size: 0.95rem;
-  margin-bottom: 2px;
+  font-family: var(--font-digital);
+  font-size: 1rem;
+  font-weight: 900;
+  color: var(--racing-amber);
 }
 
 .dtc-desc {
   font-size: 0.8rem;
-  color: var(--text-main);
+  color: #cbd5e1;
+  margin-top: 2px;
 }
 
-.empty-state {
+.empty-stream-msg {
   text-align: center;
-  color: var(--text-muted);
+  color: #64748b;
   font-size: 0.85rem;
-  padding: 24px 0;
+  padding: 30px 0;
 }
 
-/* АЦП */
-.adc-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.adc-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 12px;
-  background-color: #0b1120;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-}
-
-.adc-label {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
-.adc-val {
-  font-weight: 700;
-  color: var(--accent-cyan);
-  font-variant-numeric: tabular-nums;
-  font-size: 0.95rem;
-}
-
-/* УПРАВЛЕНИЕ МЕХАНИЗМАМИ */
-.actuator-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.actuator-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px;
-  background-color: #0b1120;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-  font-size: 0.85rem;
-}
-
-.divider {
-  border: none;
-  border-top: 1px solid var(--border-color);
-  margin: 18px 0;
-}
-
-.actuator-reset-block h3 {
-  font-size: 0.95rem;
-  margin-bottom: 6px;
-  color: var(--accent-red);
-}
-
-.reset-desc {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  margin-bottom: 12px;
-}
-
-/* ТЕРМИНАЛ */
-.terminal-card {
+/* Терминал */
+.terminal-panel-custom {
   display: flex;
   flex-direction: column;
   height: 480px;
 }
 
-.terminal-header {
+.terminal-ctrl-bar {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
+  align-items: baseline;
+  margin-bottom: 8px;
 }
 
-.btn-small {
+.btn-clear-term {
   padding: 4px 8px;
-  font-size: 0.75rem;
-  background-color: #1e293b;
-  color: var(--text-muted);
-  border: 1px solid var(--border-color);
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid var(--bg-card-border);
+  color: #94a3b8;
+  font-family: var(--font-digital);
+  font-size: 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
 }
 
-.terminal-log {
+.terminal-screen {
   flex: 1;
-  background-color: #050811;
-  border: 1px solid var(--border-color);
+  background: #020408;
+  border: 1px solid var(--bg-card-border);
   border-radius: 8px;
-  padding: 8px 10px;
-  font-family: "SF Mono", Menlo, Consolas, monospace;
+  padding: 10px;
+  font-family: var(--font-digital);
   font-size: 0.75rem;
   overflow-y: auto;
   display: flex;
@@ -667,73 +967,91 @@ body {
   gap: 4px;
 }
 
-.log-entry.tx {
-  color: #38bdf8;
-}
+.log-entry.tx { color: var(--neon-cyan); }
+.log-entry.rx { color: var(--neon-green); }
+.log-entry.info { color: #94a3b8; }
+.log-entry.err { color: var(--racing-red); }
 
-.log-entry.rx {
-  color: #4ade80;
-}
-
-.log-entry.info {
-  color: #94a3b8;
-}
-
-.log-entry.err {
-  color: #f87171;
-}
-
-.terminal-input-wrap {
+.terminal-sender-row {
   display: flex;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
-.terminal-input-wrap input {
+.term-input {
   flex: 1;
-  background-color: #0b1120;
-  border: 1px solid var(--border-color);
+  background: #03070f;
+  border: 1px solid var(--bg-card-border);
   border-radius: 8px;
-  color: #fff;
   padding: 8px 12px;
+  color: #fff;
+  font-family: var(--font-digital);
   font-size: 0.85rem;
   outline: none;
-  font-family: inherit;
 }
 
-/* НИЖНЯЯ НАВИГАЦИЯ */
-.bottom-nav {
+.btn-term-send {
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-family: var(--font-digital);
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   ПАРЯЩАЯ НИЖНЯЯ ПРИБОРНАЯ НАВИГАЦИЯ (FLOATING DOCK)
+   ========================================================================== */
+.floating-dock {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom) + 8px);
+  left: 12px;
+  right: 12px;
+  background: rgba(10, 15, 25, 0.88);
+  backdrop-filter: blur(25px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 6px 4px;
   display: flex;
-  background-color: rgba(21, 29, 48, 0.95);
-  backdrop-filter: blur(12px);
-  border-top: 1px solid var(--border-color);
-  padding-bottom: 4px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+  z-index: 100;
 }
 
-.nav-tab {
+.dock-tab {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 2px;
-  padding: 8px 0;
-  background: none;
+  background: transparent;
   border: none;
-  color: var(--text-muted);
+  color: #64748b;
   cursor: pointer;
+  padding: 4px 0;
   transition: all 0.15s ease;
 }
 
-.nav-tab.active {
-  color: var(--accent-cyan);
+.dock-tab.active {
+  color: var(--neon-cyan);
 }
 
-.tab-icon {
-  font-size: 1.15rem;
+.dock-tab.active .dock-icon {
+  transform: scale(1.15);
+  text-shadow: 0 0 10px var(--neon-cyan-glow);
 }
 
-.tab-text {
-  font-size: 0.65rem;
-  font-weight: 600;
+.dock-icon {
+  font-size: 1.1rem;
+  transition: transform 0.15s ease;
+}
+
+.dock-text {
+  font-family: var(--font-digital);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
 }
