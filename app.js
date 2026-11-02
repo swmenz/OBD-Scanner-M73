@@ -36,8 +36,12 @@ class M73Application {
     this.barTemp = document.getElementById('barTemp');
     this.valThrottle = document.getElementById('valThrottle');
     this.valMaf = document.getElementById('valMaf');
+    this.valCycleAir = document.getElementById('valCycleAir');
     this.valSpark = document.getElementById('valSpark');
+    this.valRetard = document.getElementById('valRetard');
     this.valInjTime = document.getElementById('valInjTime');
+    this.valDuty = document.getElementById('valDuty');
+    this.valFuelRate = document.getElementById('valFuelRate');
     this.valVoltage = document.getElementById('valVoltage');
 
     // Флаги
@@ -187,8 +191,18 @@ class M73Application {
 
     this.valThrottle.textContent = data.throttle;
     this.valMaf.textContent = data.maf;
+    if (this.valCycleAir) this.valCycleAir.textContent = data.cycleAir;
+    
     this.valSpark.textContent = data.spark;
+    if (this.valRetard) {
+      this.valRetard.textContent = data.sparkRetard !== 0 ? `${data.sparkRetard}°` : `0°`;
+      this.valRetard.style.color = data.sparkRetard < 0 ? '#ef4444' : '#94a3b8';
+    }
+
     this.valInjTime.textContent = data.injTime;
+    if (this.valDuty) this.valDuty.textContent = `${data.dutyCycle}%`;
+    if (this.valFuelRate) this.valFuelRate.textContent = data.fuelRate;
+
     this.valVoltage.textContent = data.voltage;
 
     // Флаги

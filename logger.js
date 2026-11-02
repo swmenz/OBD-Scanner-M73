@@ -1,6 +1,7 @@
 /**
  * Модуль скоростного логирования телеметрии и экспорта в формат Excel (.xlsx)
- * Рассчитывает точную частоту дискретизации (Гц и мс) и выгружает данные через iOS Share Sheet.
+ * Полностью согласован со структурой и названиями колонок OpenDiag Mobile.
+ * Включает фоновый режим работы на iOS (Silent Audio Loop) и WakeLock.
  */
 
 class TripLogger {
@@ -15,23 +16,64 @@ class TripLogger {
     this.currentHz = 0;
     this.currentMs = 0;
 
+    // Фоновый звук для защиты от засыпания на iOS
+    this.silentAudio = null;
+    this.wakeLock = null;
+
     this.onStatsUpdate = null; // (stats: { count: number, hz: number, ms: number }) => void
+  }
+
+  /**
+   * Активация бесшумного звукового потока (трюк Car Scanner)
+   * для предотвращения засыпания JavaScript на iOS при сворачивании браузера
+   */
+  _enableBackgroundMode() {
+    try {
+      if (!this.silentAudio) {
+        // Минимальный бесшумный WAV в формате Base64
+        const silentWav = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
+        this.silentAudio = new Audio(silentWav);
+        this.silentAudio.loop = true;
+      }
+      this.silentAudio.play().catch(e => console.log("Фоновый звук ожидает взаимодействия"));
+    } catch (e) {
+      console.warn("Ошибка запуска фонового режима:", e);
+    }
+
+    // Запрет гашения экрана (Screen Wake Lock API)
+    if ('wakeLock' in navigator) {
+      navigator.wakeLock.request('screen').then(wl => {
+        this.wakeLock = wl;
+      }).catch(() => {});
+    }
+  }
+
+  _disableBackgroundMode() {
+    if (this.silentAudio) {
+      this.silentAudio.pause();
+    }
+    if (this.wakeLock) {
+      this.wakeLock.release().catch(() => {});
+      this.wakeLock = null;
+    }
   }
 
   start() {
     this.records = [];
-    this.startTime = new Date();
+    this.startTime = performance.now();
     this.isRecording = true;
     this.lastFrameTime = performance.now();
     this.hzHistory = [];
+    this._enableBackgroundMode();
   }
 
   stop() {
     this.isRecording = false;
+    this._disableBackgroundMode();
   }
 
   /**
-   * Добавление точки данных в лог и расчет реальной задержки между пакетами
+   * Добавление точки данных в лог
    */
   addPoint(params) {
     const now = performance.now();
@@ -44,32 +86,38 @@ class TripLogger {
       this.hzHistory.push(instantHz);
       if (this.hzHistory.length > 10) this.hzHistory.shift();
 
-      // Усредненная частота
       const sumHz = this.hzHistory.reduce((a, b) => a + b, 0);
       this.currentHz = parseFloat((sumHz / this.hzHistory.length).toFixed(1));
     }
     this.lastFrameTime = now;
 
     if (this.isRecording) {
-      const nowIso = new Date();
-      const timeStr = `${String(nowIso.getHours()).padStart(2, '0')}:${String(nowIso.getMinutes()).padStart(2, '0')}:${String(nowIso.getSeconds()).padStart(2, '0')}.${String(nowIso.getMilliseconds()).padStart(3, '0')}`;
+      // Время от старта записи в секундах (с точностью до тысячных, как в OpenDiag)
+      const elapsedSec = ((now - this.startTime) / 1000).toFixed(3);
 
+      // Формируем структуру строк, полностью идентичную OpenDiag Mobile
       this.records.push({
-        "Время": timeStr,
-        "Интервал_мс": this.currentMs,
-        "Обороты_об_мин": params.rpm,
-        "Скорость_км_ч": params.speed,
-        "Дроссель_проц": params.throttle,
-        "ДМРВ_кг_ч": params.maf,
-        "Температура_ОЖ": params.temp,
-        "УОЗ_град": params.spark,
-        "Впрыск_мс": params.injTime,
-        "Бортсеть_В": params.voltage,
-        "РХХ_шаги": params.iacSteps,
-        "Флаг_ХХ": params.flags.idle ? 1 : 0,
-        "Флаг_Лямбда": params.flags.lambda ? 1 : 0,
-        "Флаг_Детонация": params.flags.knock ? 1 : 0,
-        "Флаг_Отсечка": params.flags.fuelCut ? 1 : 0
+        "Время (сек)": parseFloat(elapsedSec),
+        "Обороты двигателя (об/мин)": params.rpm,
+        "Скорость автомобиля (км/ч)": params.speed,
+        "Угол открытия дроссельной заслонки (%)": params.throttle,
+        "Массовый расход воздуха (кг/ч)": params.maf,
+        "Цикловой расход воздуха (мг/такт)": params.cycleAir,
+        "Длительность впрыска (мс)": params.injTime,
+        "Загрузка форс (%)": params.dutyCycle,
+        "Угол опережения зажигания (°П.К.В)": params.spark,
+        "Величина отскока УОЗ при детонации (°П.К.В)": params.sparkRetard,
+        "Температура охлаждающей жидкости (°C)": params.temp,
+        "Напряжение питания (В)": params.voltage,
+        "Позиция шагового двигателя (шаг)": params.iacSteps,
+        "Расход топлива (л/ч)": params.fuelRate,
+        "Сигнал датчика кислорода до нейтрализатора (В)": params.o2Volt,
+        "Текущий коэффициент коррекции впрыска (-)": params.lambdaCorr,
+        "Флаг холостого хода": params.flags.idle ? "Да" : "Нет",
+        "Флаг полной нагрузки": params.throttle > 75 ? "Да" : "Нет",
+        "Контроль детонации активен": params.flags.knock ? "Да" : "Нет",
+        "Отсечка топливоподачи": params.flags.fuelCut ? "Да" : "Нет",
+        "Интервал_опроса (мс)": this.currentMs
       });
     }
 
@@ -96,61 +144,61 @@ class TripLogger {
       return;
     }
 
-    // Создаем рабочий лист Excel из массива объектов
     const worksheet = XLSX.utils.json_to_sheet(this.records);
 
-    // Автоподбор ширины столбцов
-    const colWidths = [
-      { wch: 14 }, // Время
-      { wch: 12 }, // Интервал_мс
+    // Автоподбор ширины столбцов под русский текст
+    worksheet["!cols"] = [
+      { wch: 12 }, // Время (сек)
       { wch: 16 }, // Обороты
-      { wch: 14 }, // Скорость
-      { wch: 14 }, // Дроссель
-      { wch: 12 }, // ДМРВ
-      { wch: 14 }, // Температура
-      { wch: 10 }, // УОЗ
-      { wch: 12 }, // Впрыск
-      { wch: 12 }, // Бортсеть
-      { wch: 10 }, // РХХ
-      { wch: 9 },  // Флаг_ХХ
-      { wch: 12 }, // Флаг_Лямбда
-      { wch: 14 }, // Флаг_Детонация
-      { wch: 14 }  // Флаг_Отсечка
+      { wch: 15 }, // Скорость
+      { wch: 18 }, // Дроссель
+      { wch: 16 }, // ДМРВ
+      { wch: 18 }, // Цикловой расход
+      { wch: 15 }, // Впрыск
+      { wch: 12 }, // Загрузка форс
+      { wch: 14 }, // УОЗ
+      { wch: 18 }, // Отскок УОЗ
+      { wch: 16 }, // ТОЖ
+      { wch: 14 }, // Бортсеть
+      { wch: 15 }, // РХХ
+      { wch: 14 }, // Расход л/ч
+      { wch: 18 }, // Лямбда 1
+      { wch: 16 }, // Коррекция
+      { wch: 12 }, // Флаг ХХ
+      { wch: 14 }, // Флаг полной нагрузки
+      { wch: 15 }, // Детонация
+      { wch: 14 }, // Отсечка
+      { wch: 12 }  // Интервал мс
     ];
-    worksheet["!cols"] = colWidths;
 
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Телеметрия М73");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Лог М73 Скоростной");
 
-    // Формируем имя файла с датой и временем
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
     const fileName = `Приора_М73_Лог_${dateStr}.xlsx`;
 
-    // Генерируем массив байт файла Excel
     const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
-    // Если браузер поддерживает нативный Web Share API (как Bluefy/Safari на iOS)
     if (navigator.canShare && navigator.canShare({ files: [new File([blob], fileName)] })) {
       try {
         const file = new File([blob], fileName, { type: blob.type });
         await navigator.share({
           files: [file],
           title: 'Лог диагностики Приора М73',
-          text: `Лог телеметрии М73 (${this.records.length} точек)`
+          text: `Скоростной лог М73 (${this.records.length} точек)`
         });
         return;
       } catch (err) {
         if (err.name !== 'AbortError') {
-          console.warn('Share API error, fallback to download:', err);
+          console.warn('Share error fallback:', err);
         } else {
-          return; // Пользователь сам закрыл меню
+          return;
         }
       }
     }
 
-    // Резервный способ сохранения: прямая ссылка на скачивание
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

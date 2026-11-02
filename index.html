@@ -111,21 +111,39 @@
             </div>
           </div>
 
-          <!-- УОЗ (Угол опережения зажигания) -->
-          <div class="gauge-card">
-            <span class="gauge-label">УОЗ</span>
+          <!-- Цикловой расход воздуха (мг/такт) -->
+          <div class="gauge-card highlight">
+            <span class="gauge-label">Цикловой расход</span>
             <div class="gauge-value-wrap">
-              <span class="gauge-value" id="valSpark">---</span>
-              <span class="gauge-unit">град</span>
+              <span class="gauge-value" id="valCycleAir">---</span>
+              <span class="gauge-unit">мг/такт</span>
             </div>
           </div>
 
-          <!-- Время впрыска -->
+          <!-- УОЗ (Угол опережения зажигания) -->
           <div class="gauge-card">
-            <span class="gauge-label">Время впрыска</span>
+            <span class="gauge-label">УОЗ / Отскок</span>
+            <div class="gauge-value-wrap">
+              <span class="gauge-value" id="valSpark">---</span>
+              <span class="gauge-unit" id="valRetard">0°</span>
+            </div>
+          </div>
+
+          <!-- Время впрыска / Загрузка форс -->
+          <div class="gauge-card">
+            <span class="gauge-label">Впрыск / Загрузка</span>
             <div class="gauge-value-wrap">
               <span class="gauge-value" id="valInjTime">---</span>
-              <span class="gauge-unit">мс</span>
+              <span class="gauge-unit" id="valDuty">0%</span>
+            </div>
+          </div>
+
+          <!-- Расход топлива (л/ч) -->
+          <div class="gauge-card">
+            <span class="gauge-label">Расход топлива</span>
+            <div class="gauge-value-wrap">
+              <span class="gauge-value" id="valFuelRate">---</span>
+              <span class="gauge-unit">л/ч</span>
             </div>
           </div>
 
