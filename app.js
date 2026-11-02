@@ -160,7 +160,7 @@ class M73Application {
       this.chkFrame3.checked = false;
       this.chkFrame4.checked = false;
       this.modeBadge.textContent = "Спорт (макс. скорость ~0.08 с)";
-      this.modeBadge.style.color = "var(--color-success)";
+      this.modeBadge.style.color = "var(--apple-green)";
     } else if (mode === 'full') {
       this.customCheckboxesPanel.style.display = 'none';
       this.framesConfig.frame2 = true;
@@ -170,7 +170,7 @@ class M73Application {
       this.chkFrame3.checked = true;
       this.chkFrame4.checked = true;
       this.modeBadge.textContent = "Полный опрос (все 84 датчика)";
-      this.modeBadge.style.color = "var(--color-primary)";
+      this.modeBadge.style.color = "var(--apple-blue)";
     } else if (mode === 'custom') {
       this.customCheckboxesPanel.style.display = 'flex';
       this.updateModeBadge();
@@ -184,7 +184,7 @@ class M73Application {
     if (this.framesConfig.frame4) count++;
     const estMs = count * 80;
     this.modeBadge.textContent = `Выбрано блоков: ${count} (~${estMs} мс)`;
-    this.modeBadge.style.color = "var(--color-warning)";
+    this.modeBadge.style.color = "var(--apple-amber)";
   }
 
   async toggleConnection() {
@@ -360,7 +360,7 @@ class M73Application {
       alert("Сначала подключитесь к адаптеру");
       return;
     }
-    this.dtcList.innerHTML = '<div class="empty-state">Опрос памяти ошибок ЭБУ...</div>';
+    this.dtcList.innerHTML = '<div class="empty-state-card">Опрос памяти ошибок ЭБУ...</div>';
     
     const prevPolling = this.isPolling;
     this.isPolling = false;
@@ -369,7 +369,7 @@ class M73Application {
     try {
       const errors = await this.m73.readDtcCodes();
       if (errors.length === 0) {
-        this.dtcList.innerHTML = '<div class="empty-state" style="color: var(--color-success)">Ошибок в памяти контроллера не обнаружено. Система исправна.</div>';
+        this.dtcList.innerHTML = '<div class="empty-state-card" style="color: var(--apple-green)">Ошибок в памяти контроллера не обнаружено. Система исправна.</div>';
       } else {
         this.dtcList.innerHTML = errors.map(e => `
           <div class="dtc-item">
@@ -379,7 +379,7 @@ class M73Application {
         `).join('');
       }
     } catch (err) {
-      this.dtcList.innerHTML = `<div class="empty-state" style="color: var(--color-danger)">Ошибка чтения: ${err.message}</div>`;
+      this.dtcList.innerHTML = `<div class="empty-state-card" style="color: var(--apple-rose)">Ошибка чтения: ${err.message}</div>`;
     } finally {
       if (prevPolling) this.startContinuousPolling();
     }
@@ -475,7 +475,10 @@ class M73Application {
     this.terminalInput.value = "";
     try {
       await this.elm.send(cmd);
-    } catch (e) {}
+      // Ответ автоматически отобразится через callback this.elm.onLog
+    } catch (err) {
+      this.appendTerminal('err', 'Ошибка отправки: ' + err.message);
+    }
   }
 
   delay(ms) {

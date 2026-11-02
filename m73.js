@@ -54,7 +54,6 @@ class ItelmaM73Protocol {
     await this.elm.send("AT SP 5");
     await this.elm.send("AT IB 10");
     await this.elm.send("AT SH 81 10 F1");
-    await this.elm.send("AT H1");
 
     await this.elm.send("AT AT 0");
     await this.elm.send("AT ST 19"); // Таймаут ~100мс
@@ -73,47 +72,47 @@ class ItelmaM73Protocol {
     }
     
     const cleanResp = startResp.replace(/\s+/g, '').toUpperCase();
-    if (cleanResp.includes("C1") || cleanResp.includes("83F110C1") || cleanResp.includes("8110F1") || cleanResp.includes("BUSINIT:OK") || cleanResp.includes("61")) {
-      this.isInitialized = true;
-      this.elm.log('info', '>>> СВЯЗЬ С ЭБУ ИТЭЛМА М73 УСПЕШНО УСТАНОВЛЕНА! <<<');
-      return true;
-    } else {
-      this.isInitialized = true;
-      this.elm.log('info', 'Сессия открыта: ' + cleanResp);
-      return true;
+    const isOk = cleanResp.includes("C1") || 
+                 cleanResp.includes("83F110C1") || 
+                 cleanResp.includes("8110F1") || 
+                 cleanResp.includes("BUSINIT:OK") || 
+                 cleanResp.includes("61");
+
+    if (!isOk) {
+      this.elm.log('err', 'Не удалось открыть сессию с ЭБУ М73: ' + cleanResp);
+      throw new Error("ЭБУ М73 не отвечает на Fast Init. Проверьте включено ли зажигание!");
     }
+
+    // Отключаем заголовки (AT H0), чтобы ELM отдавал чистый payload без 83 F1 10 и контрольной суммы
+    await this.elm.send("AT H0");
+
+    // Проверяем живой отклик тестовым запросом кадра 21 01
+    this.elm.log('info', 'Тестовый опрос кадра 21 01...');
+    const testResp = await this.elm.send("2101", 1000);
+    const cleanTest = testResp.replace(/\s+/g, '').toUpperCase();
+    if (!cleanTest.includes("6101")) {
+      throw new Error("ЭБУ открыл сессию, но не отдает кадр 21 01: " + testResp);
+    }
+
+    this.isInitialized = true;
+    this.elm.log('info', '>>> СВЯЗЬ С ЭБУ ИТЭЛМА М73 УСПЕШНО УСТАНОВЛЕНА И ПРОВЕРЕНА! <<<');
+    return true;
   }
 
   /**
-   * ДИНАМИЧЕСКИЙ ОПРОС ТОЛЬКО ВЫБРАННЫХ КАДРОВ
+   * ДИНАМИЧЕСКИЙ ОПРОС ВЫБРАННЫХ КАДРОВ
    * @param {Object} framesConfig - { frame1: bool, frame2: bool, frame3: bool, frame4: bool }
    */
   async readConfiguredCycle(framesConfig) {
-    // 1. Всегда опрашиваем базовый скоростной Кадр 1 (он обязателен)
+    // 1. Всегда опрашиваем базовый скоростной Кадр 1 (содержит параметры двигателя, смесь и пропуски)
     const raw1 = await this.elm.send("2101", 350);
     this.parseFrame2101(raw1);
 
-    // 2. Если включен Кадр 2 (Каналы АЦП)
+    // 2. Если включен Кадр 2 (Каналы АЦП - в М73 это кадр 21 03)
     if (framesConfig.frame2) {
       try {
-        const raw2 = await this.elm.send("2102", 350);
-        this.parseFrame2102(raw2);
-      } catch (e) {}
-    }
-
-    // 3. Если включен Кадр 3 (Адаптации и продувка адсорбера)
-    if (framesConfig.frame3) {
-      try {
-        const raw3 = await this.elm.send("2103", 350);
-        this.parseFrame2103(raw3);
-      } catch (e) {}
-    }
-
-    // 4. Если включен Кадр 4 (Пропуски зажигания по цилиндрам)
-    if (framesConfig.frame4) {
-      try {
-        const raw4 = await this.elm.send("2104", 350);
-        this.parseFrame2104(raw4);
+        const rawAdc = await this.elm.send("2103", 350);
+        this.parseFrame2103(rawAdc);
       } catch (e) {}
     }
 
@@ -122,7 +121,7 @@ class ItelmaM73Protocol {
   }
 
   /**
-   * Разбор Кадра 1 (21 01) — Основные ездовые параметры
+   * Разбор Кадра 1 (21 01, ответ 61 01) — Полная карта параметров М73 (32+ байта)
    */
   parseFrame2101(rawStr) {
     const hex = rawStr.replace(/[\s\r\n]/g, '').toUpperCase();
@@ -134,48 +133,93 @@ class ItelmaM73Protocol {
     for (let i = 0; i < payloadHex.length - 1; i += 2) {
       bytes.push(parseInt(payloadHex.substr(i, 2), 16));
     }
-    if (bytes.length < 14) return null;
+    if (bytes.length < 22) return null;
 
-    const rpm = (bytes[0] || 0) * 40;
-    const temp = (bytes[1] || 0) - 40;
-    const throttle = parseFloat(((bytes[2] || 0) * 0.5).toFixed(1));
-    const speed = bytes[3] || 0;
-    const spark = parseFloat((((bytes[4] || 0) * 0.5) - 30).toFixed(2));
-    
-    const mafRaw = ((bytes[5] || 0) << 8) | (bytes[6] || 0);
-    const maf = parseFloat((mafRaw * 0.1).toFixed(1));
+    // Флаги состояния (байты 0..3)
+    const b0 = bytes[0] || 0;
+    const b1 = bytes[1] || 0;
+    const b2 = bytes[2] || 0;
+    const b3 = bytes[3] || 0;
 
-    const injRaw = ((bytes[7] || 0) << 8) | (bytes[8] || 0);
-    const injTime = parseFloat((injRaw * 0.005).toFixed(2));
+    // Байт 4: Температура охлаждающей жидкости (°C)
+    const temp = bytes[4] - 40;
 
-    const voltage = parseFloat(((bytes[9] || 0) * 0.1).toFixed(1));
-    const iacSteps = bytes[10] || 0;
+    // Байт 5: Положение дроссельной заслонки (%)
+    const throttle = +(bytes[5] * 0.5).toFixed(1);
 
-    const retardRaw = bytes[11] || 0;
-    const sparkRetard = retardRaw > 0 ? parseFloat((-retardRaw * 0.75).toFixed(2)) : 0.0;
+    // Байты 6, 7: Обороты коленвала (16 бит, шаг 0.25 об/мин)
+    const rawRpm = ((bytes[6] << 8) | bytes[7]);
+    const rpm = Math.round(rawRpm * 0.25);
 
-    const o2Raw = bytes[12] || 0;
-    const o2Volt = parseFloat((o2Raw * 0.0049).toFixed(3));
-    
-    const lambdaCorrRaw = bytes[13] || 128;
-    const lambdaCorr = parseFloat((lambdaCorrRaw / 128.0).toFixed(3));
+    // Байт 8: Скорость автомобиля (км/ч)
+    const speed = bytes[8];
 
-    // Расчётные величины
-    let cycleAir = 0.0;
-    if (rpm > 100 && maf > 0) {
-      cycleAir = parseFloat(((maf * 8333.33) / rpm).toFixed(2));
+    // Байт 9: УОЗ (знаковый, шаг 0.5° ПКВ)
+    const rawSpark = bytes[9] > 127 ? bytes[9] - 256 : bytes[9];
+    const spark = +(rawSpark * 0.5).toFixed(1);
+
+    // Байты 10, 11: Массовый расход воздуха ДМРВ (16 бит, шаг 0.1 кг/ч)
+    const rawMaf = ((bytes[10] << 8) | bytes[11]);
+    const maf = +(rawMaf * 0.1).toFixed(1);
+
+    // Байты 12, 13: Время впрыска форсунок (16 бит, шаг 0.005 мс)
+    const rawInj = ((bytes[12] << 8) | bytes[13]);
+    const injTime = +(rawInj * 0.005).toFixed(2);
+
+    // Байт 14: Шаги РХХ
+    const iacSteps = bytes[14];
+
+    // Байт 15: Коэффициент коррекции времени впрыска по ДК
+    const lambdaCorr = +((bytes[15] || 128) / 128.0).toFixed(3);
+
+    // Байт 16: Бортовое напряжение (В)
+    const rawVolt = bytes[16];
+    const voltage = +(rawVolt > 160 ? 5.2 + rawVolt * 0.05 : rawVolt * 0.1).toFixed(1);
+
+    // Байт 17: Напряжение датчика кислорода ДК1 (В)
+    const o2Volt = +((bytes[17] * 1.25) / 256.0).toFixed(3);
+
+    // Байт 18: Отскок УОЗ по детонации (°ПКВ)
+    const sparkRetard = bytes[18] > 0 ? +(-bytes[18] * 0.5).toFixed(1) : 0.0;
+
+    // Байт 19: Степень продувки адсорбера (%)
+    const purgeRate = +(bytes[19] * 0.392).toFixed(1);
+
+    // Байт 20: Мультипликативная коррекция смеси
+    const multAdapt = +((bytes[20] || 128) / 128.0).toFixed(3);
+
+    // Байт 21: Аддитивная коррекция смеси (%)
+    const addAdapt = +(((bytes[21] || 128) - 128) * 0.078).toFixed(2);
+
+    // Байты 28..31: Счетчики пропусков воспламенения по цилиндрам 1, 2, 3, 4
+    if (bytes.length >= 32) {
+      this.latestData.misfires.cyl1 = bytes[28] || 0;
+      this.latestData.misfires.cyl2 = bytes[29] || 0;
+      this.latestData.misfires.cyl3 = bytes[30] || 0;
+      this.latestData.misfires.cyl4 = bytes[31] || 0;
+      this.latestData.misfires.total = this.latestData.misfires.cyl1 + 
+                                      this.latestData.misfires.cyl2 + 
+                                      this.latestData.misfires.cyl3 + 
+                                      this.latestData.misfires.cyl4;
     }
 
-    let dutyCycle = 0.0;
-    if (rpm > 100 && injTime > 0) {
-      dutyCycle = parseFloat(((injTime * rpm) / 1200.0).toFixed(2));
-    }
+    // Расчетные величины (физика двигателя Приоры 21126)
+    // Цикловой расход воздуха: (maf * 8333.33) / rpm (мг/такт)
+    const cycleAir = (rpm > 100 && maf > 0) ? Math.round((maf * 8333.33) / rpm) : 0;
+    // Скважность форсунок (duty cycle): (injTime * rpm) / 1200 (%)
+    const dutyCycle = (rpm > 100 && injTime > 0) ? +Math.min(100, Math.max(0, (injTime * rpm) / 1200)).toFixed(1) : 0.0;
+    // Часовой расход топлива: л/ч
+    const fuelRate = (rpm > 100 && injTime > 0) ? +((injTime * rpm * 0.000108)).toFixed(2) : 0.0;
 
-    let fuelRate = 0.0;
-    if (rpm > 100 && injTime > 0) {
-      fuelRate = parseFloat((injTime * rpm * 0.000325).toFixed(2));
-    }
+    // Флаги состояния
+    const flags = {
+      idle: (b1 & 0x01) !== 0 || (throttle === 0 && rpm < 1050),
+      lambda: (b1 & 0x08) !== 0,
+      fuelCut: (b1 & 0x02) !== 0 || (injTime === 0 && rpm > 1500),
+      knock: (b2 & 0x04) !== 0 || sparkRetard < 0
+    };
 
+    // Запись в latestData
     this.latestData.rpm = rpm;
     this.latestData.temp = temp;
     this.latestData.throttle = throttle;
@@ -191,42 +235,17 @@ class ItelmaM73Protocol {
     this.latestData.iacSteps = iacSteps;
     this.latestData.o2Volt = o2Volt;
     this.latestData.lambdaCorr = lambdaCorr;
-
-    this.latestData.flags.idle = throttle === 0 && rpm < 1050;
-    this.latestData.flags.lambda = o2Volt > 0.05 && o2Volt < 0.95;
-    this.latestData.flags.knock = sparkRetard < 0;
-    this.latestData.flags.fuelCut = injTime === 0 && rpm > 1500;
+    this.latestData.purgeRate = purgeRate;
+    this.latestData.multAdapt = multAdapt;
+    this.latestData.addAdapt = addAdapt;
+    this.latestData.flags = flags;
 
     return this.latestData;
   }
 
   /**
-   * Разбор Кадра 2 (21 02) — АЦП
-   */
-  parseFrame2102(rawStr) {
-    const hex = rawStr.replace(/[\s\r\n]/g, '').toUpperCase();
-    const idx = hex.indexOf("6102");
-    if (idx === -1) return null;
-
-    const payloadHex = hex.substring(idx + 4);
-    const bytes = [];
-    for (let i = 0; i < payloadHex.length - 1; i += 2) {
-      bytes.push(parseInt(payloadHex.substr(i, 2), 16));
-    }
-    if (bytes.length < 8) return null;
-
-    const mafAdcRaw = ((bytes[0] || 0) << 8) | (bytes[1] || 0);
-    this.latestData.adc.maf = (mafAdcRaw * (5.0 / 1023.0)).toFixed(3);
-    this.latestData.adc.tps = ((bytes[2] || 0) * (5.0 / 255.0)).toFixed(2);
-    this.latestData.adc.temp = ((bytes[3] || 0) * (5.0 / 255.0)).toFixed(2);
-    this.latestData.adc.o2 = ((bytes[4] || 0) * (1.25 / 255.0)).toFixed(3);
-    this.latestData.adc.volt = ((bytes[5] || 0) * 0.1).toFixed(1);
-
-    return this.latestData.adc;
-  }
-
-  /**
-   * Разбор Кадра 3 (21 03) — Адаптации и адсорбер
+   * Разбор Кадра АЦП (в М73 это 21 03, ответ 61 03)
+   * Квантование 8-битного АЦП процессора ST10F273: V = Byte * (5.0 / 256.0)
    */
   parseFrame2103(rawStr) {
     const hex = rawStr.replace(/[\s\r\n]/g, '').toUpperCase();
@@ -238,14 +257,15 @@ class ItelmaM73Protocol {
     for (let i = 0; i < payloadHex.length - 1; i += 2) {
       bytes.push(parseInt(payloadHex.substr(i, 2), 16));
     }
-    if (bytes.length < 6) return null;
+    if (bytes.length < 5) return null;
 
-    this.latestData.targetLambda = parseFloat(((bytes[0] || 128) / 128.0).toFixed(3));
-    this.latestData.purgeRate = parseFloat(((bytes[1] || 0) * 0.39).toFixed(1));
-    this.latestData.multAdapt = parseFloat(((bytes[2] || 128) / 128.0).toFixed(3));
-    this.latestData.addAdapt = parseFloat((((bytes[3] || 128) - 128) * 0.1).toFixed(2));
+    this.latestData.adc.temp = +(bytes[0] * 0.01953).toFixed(3);
+    this.latestData.adc.maf = +(bytes[1] * 0.01953).toFixed(3);
+    this.latestData.adc.tps = +(bytes[2] * 0.01953).toFixed(3);
+    this.latestData.adc.o2 = +(bytes[3] * 0.01953).toFixed(3);
+    this.latestData.adc.volt = +(bytes[4] * 0.1).toFixed(1);
 
-    return true;
+    return this.latestData.adc;
   }
 
   /**
@@ -274,10 +294,11 @@ class ItelmaM73Protocol {
 
   /**
    * ЧТЕНИЕ ОШИБОК ЭБУ (DTC)
+   * KWP2000 Service 0x18: 18 00 FF 00 (ответ 58 [count] [DTC1] [Status1] ...)
    */
   async readDtcCodes() {
-    this.elm.log('info', 'Запрос кодов ошибок DTC (18 00 FF 00)...');
-    const raw = await this.elm.send("1800FF00", 1200);
+    this.elm.log('info', 'Запрос кодов неисправностей DTC (18 00 FF 00)...');
+    const raw = await this.elm.send("1800FF00", 1500);
     const hex = raw.replace(/[\s\r\n]/g, '').toUpperCase();
 
     const dtcList = [];
@@ -285,13 +306,18 @@ class ItelmaM73Protocol {
     if (idx === -1) return dtcList;
 
     const payload = hex.substring(idx + 2);
-    for (let i = 2; i < payload.length - 5; i += 6) {
+    if (payload.length < 2) return dtcList;
+
+    const count = parseInt(payload.substr(0, 2), 16);
+    if (isNaN(count) || count === 0) return dtcList;
+
+    for (let i = 2; i + 4 <= payload.length && dtcList.length < count; i += 6) {
       const b1 = parseInt(payload.substr(i, 2), 16);
       const b2 = parseInt(payload.substr(i + 2, 2), 16);
-      if (b1 === 0 && b2 === 0) continue;
+      if (isNaN(b1) || isNaN(b2) || (b1 === 0 && b2 === 0)) continue;
 
       const codeStr = this._formatDtcCode(b1, b2);
-      const desc = ItelmaM73Protocol.DTC_DICTIONARY[codeStr] || "Неизвестный код ошибки ВАЗ";
+      const desc = ItelmaM73Protocol.DTC_DICTIONARY[codeStr] || "Неизвестный код ошибки контроллера ВАЗ";
       dtcList.push({ code: codeStr, desc });
     }
 
@@ -325,9 +351,19 @@ class ItelmaM73Protocol {
   }
 
   async resetWithInit() {
-    this.elm.log('info', 'Выполнение сброса ЭБУ с инициализацией (Routine 31 01)...');
-    const resp = await this.elm.send("3101FF", 2000);
-    return resp.includes("71") || resp.includes("OK");
+    this.elm.log('info', 'Выполнение сброса ЭБУ с инициализацией (KWP2000 Reset 11 01)...');
+    try {
+      const resp = await this.elm.send("1101", 2000);
+      const clean = resp.replace(/\s+/g, '').toUpperCase();
+      if (clean.includes("5101") || clean.includes("OK")) {
+        return true;
+      }
+    } catch (e) {}
+
+    // Резервная попытка через старт процедуры 31 01 00
+    this.elm.log('info', 'Резервная попытка сброса через 31 01 00...');
+    const resp2 = await this.elm.send("310100", 2000);
+    return resp2.includes("71") || resp2.includes("OK");
   }
 
   delay(ms) {

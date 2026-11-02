@@ -16,6 +16,7 @@ class Elm327BLE {
     this.activeResolver = null;
     this.activeRejecter = null;
     this.commandTimeoutTimer = null;
+    this._queue = Promise.resolve(); // Последовательная очередь команд (Mutex)
     
     this.onLog = null;
     this.onDisconnect = null;
@@ -208,46 +209,65 @@ class Elm327BLE {
     }
   }
 
-  async send(command, timeoutMs = 1200) {
+  send(command, timeoutMs = 1200) {
     if (!this.isConnected || !this.txCharacteristic) {
-      throw new Error("Адаптер не подключен");
+      return Promise.reject(new Error("Адаптер не подключен"));
     }
 
-    this.rxBuffer = "";
-
-    const encoder = new TextEncoder();
-    const cleanCmd = command.trim() + "\r";
-    const data = encoder.encode(cleanCmd);
-
-    this.log('tx', command);
-
-    return new Promise((resolve, reject) => {
-      this.activeResolver = (resp) => {
-        this.log('rx', resp);
-        resolve(resp);
-      };
-      this.activeRejecter = reject;
-
-      this.commandTimeoutTimer = setTimeout(() => {
-        const partial = this.rxBuffer;
+    // Последовательная очередь (Mutex) — исключает наложение и гонки команд
+    this._queue = this._queue.catch(() => {}).then(() => {
+      return new Promise((resolve, reject) => {
         this.rxBuffer = "";
-        this.activeResolver = null;
-        this.activeRejecter = null;
-        this.log('err', `Таймаут команды ${command} (${timeoutMs}мс)`);
-        reject(new Error(`Timeout: ${command}. Ответ: ${partial}`));
-      }, timeoutMs);
 
-      if (this.txCharacteristic.writeValueWithoutResponse) {
-        this.txCharacteristic.writeValueWithoutResponse(data).catch(err => {
-          this.txCharacteristic.writeValue(data).catch(reject);
+        const encoder = new TextEncoder();
+        const cleanCmd = command.trim() + "\r";
+        const data = encoder.encode(cleanCmd);
+
+        this.log('tx', command);
+
+        this.activeResolver = (resp) => {
+          this.log('rx', resp);
+          resolve(resp);
+        };
+        this.activeRejecter = reject;
+
+        this.commandTimeoutTimer = setTimeout(() => {
+          const partial = this.rxBuffer;
+          this.rxBuffer = "";
+          this.activeResolver = null;
+          this.activeRejecter = null;
+          this.log('err', `Таймаут команды ${command} (${timeoutMs}мс)`);
+          reject(new Error(`Timeout: ${command}. Ответ: ${partial}`));
+        }, timeoutMs);
+
+        const writePromise = this.txCharacteristic.writeValueWithoutResponse
+          ? this.txCharacteristic.writeValueWithoutResponse(data).catch(() => this.txCharacteristic.writeValue(data))
+          : this.txCharacteristic.writeValue(data);
+
+        writePromise.catch((err) => {
+          if (this.commandTimeoutTimer) {
+            clearTimeout(this.commandTimeoutTimer);
+            this.commandTimeoutTimer = null;
+          }
+          this.activeResolver = null;
+          this.activeRejecter = null;
+          reject(err);
         });
-      } else {
-        this.txCharacteristic.writeValue(data).catch(reject);
-      }
+      });
     });
+
+    return this._queue;
   }
 
   async disconnect() {
+    if (this.commandTimeoutTimer) {
+      clearTimeout(this.commandTimeoutTimer);
+      this.commandTimeoutTimer = null;
+    }
+    this.activeResolver = null;
+    this.activeRejecter = null;
+    this._queue = Promise.resolve();
+
     if (this.device && this.device.gatt.connected) {
       await this.device.gatt.disconnect();
     }
