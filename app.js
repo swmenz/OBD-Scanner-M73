@@ -203,7 +203,8 @@ class M73Application {
 
       this.startContinuousPolling();
     } catch (err) {
-      alert("Ошибка подключения: " + err.message);
+      const msg = err && err.message ? err.message : (typeof err === 'string' ? err : "Не удалось найти Bluetooth адаптер");
+      alert(msg);
       this.handleDisconnectedState();
     }
   }

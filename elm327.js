@@ -73,23 +73,21 @@ class Elm327BLE {
       "000018f0-0000-1000-8000-00805f9b34fb"
     ];
 
-    // Запрашиваем любое устройство, поддерживающее диагностические сервисы
-    this.device = await navigator.bluetooth.requestDevice({
-      filters: [
-        { namePrefix: "OBD" },
-        { namePrefix: "IOS" },
-        { namePrefix: "V-LINK" },
-        { namePrefix: "Viecar" },
-        { namePrefix: "ELM" }
-      ],
-      optionalServices: optionalServices
-    }).catch(async () => {
-      // Если по фильтру имени не нашло, открываем общий диалог
-      return await navigator.bluetooth.requestDevice({
+    try {
+      this.device = await navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
         optionalServices: optionalServices
       });
-    });
+    } catch (e) {
+      if (e.name === 'NotFoundError' || (e.message && e.message.includes('User cancelled'))) {
+        throw new Error("Устройство не выбрано. Вставьте ELM327 в разъём авто и включите зажигание.");
+      }
+      throw new Error(e.message || "Bluetooth устройство не найдено");
+    }
+
+    if (!this.device) {
+      throw new Error("Устройство не выбрано");
+    }
 
     this.log('info', `Выбран адаптер: ${this.device.name || 'Безымянный'}`);
 
