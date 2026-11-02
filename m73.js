@@ -62,10 +62,18 @@ class ItelmaM73Protocol {
     await this.elm.send("AT WM 81 10 F1 3E");
 
     this.elm.log('info', 'Открытие диагностической сессии (Fast Init 81)...');
-    const startResp = await this.elm.send("81", 3000);
+    let startResp = "";
+    try {
+      startResp = await this.elm.send("81", 2500);
+    } catch (e) {
+      this.elm.log('info', 'Пробуем встроенный Fast Init (AT FI)...');
+      try {
+        startResp = await this.elm.send("AT FI", 2500);
+      } catch (e2) {}
+    }
     
     const cleanResp = startResp.replace(/\s+/g, '').toUpperCase();
-    if (cleanResp.includes("C1") || cleanResp.includes("83F110C1") || cleanResp.includes("8110F1")) {
+    if (cleanResp.includes("C1") || cleanResp.includes("83F110C1") || cleanResp.includes("8110F1") || cleanResp.includes("BUSINIT:OK") || cleanResp.includes("61")) {
       this.isInitialized = true;
       this.elm.log('info', '>>> СВЯЗЬ С ЭБУ ИТЭЛМА М73 УСПЕШНО УСТАНОВЛЕНА! <<<');
       return true;

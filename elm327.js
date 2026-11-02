@@ -1,7 +1,6 @@
 /**
  * Драйвер скоростной связи с адаптером ELM327 по Bluetooth Low Energy (BLE)
- * Поддерживает автоопределение чипов BLE (FFF0, FFE0, Nordic UART и др.)
- * и агрессивную оптимизацию задержек для максимальной частоты опроса.
+ * Полностью адаптирован под iOS (браузер Bluefy) и адаптер "OBD BLE" (PIC18F25K80 BT 5.1).
  */
 
 class Elm327BLE {
@@ -9,8 +8,8 @@ class Elm327BLE {
     this.device = null;
     this.server = null;
     this.service = null;
-    this.txCharacteristic = null; // Для отправки команд в ELM
-    this.rxCharacteristic = null; // Для приема ответов от ELM
+    this.txCharacteristic = null;
+    this.rxCharacteristic = null;
     
     this.isConnected = false;
     this.rxBuffer = "";
@@ -18,34 +17,37 @@ class Elm327BLE {
     this.activeRejecter = null;
     this.commandTimeoutTimer = null;
     
-    // Подписчики на логирование терминала
-    this.onLog = null; // (type: 'tx'|'rx'|'info'|'err', message: string) => void
+    this.onLog = null;
     this.onDisconnect = null;
   }
 
-  // Распространенные UUID сервисов и характеристик для китайских клонов ELM327 BLE
+  // 128-битные строковые UUID (строго требуется для iOS WebKit / Bluefy)
   static get CANDIDATE_SERVICES() {
     return [
-      // 1. Стандартный чип BLE (Vgate, Viecar, большинство PIC18F25K80)
+      // 1. Стандартный чип BLE (Vgate, Viecar, OBD BLE, PIC18F25K80)
       {
-        service: 0xfff0,
-        tx: 0xfff2, // Write
-        rx: 0xfff1  // Notify
+        name: "FFF0 (Стандартный SPP BLE)",
+        service: "0000fff0-0000-1000-8000-00805f9b34fb",
+        tx: "0000fff2-0000-1000-8000-00805f9b34fb",
+        rx: "0000fff1-0000-1000-8000-00805f9b34fb"
       },
-      // 2. Альтернативный чип CC2541 / HM-10
+      // 2. Альтернативный чип CC2541 / HM-10 (FFE0)
       {
-        service: 0xffe0,
-        tx: 0xffe1,
-        rx: 0xffe1
+        name: "FFE0 (HM-10 / CC2541)",
+        service: "0000ffe0-0000-1000-8000-00805f9b34fb",
+        tx: "0000ffe1-0000-1000-8000-00805f9b34fb",
+        rx: "0000ffe1-0000-1000-8000-00805f9b34fb"
       },
       // 3. Nordic UART Service
       {
+        name: "Nordic UART",
         service: "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
         tx: "6e400002-b5a3-f393-e0a9-e50e24dcca9e",
         rx: "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
       },
       // 4. OBDLink / Carista
       {
+        name: "18F0 (OBDLink)",
         service: "000018f0-0000-1000-8000-00805f9b34fb",
         tx: "00002af0-0000-1000-8000-00805f9b34fb",
         rx: "00002af1-0000-1000-8000-00805f9b34fb"
@@ -58,35 +60,54 @@ class Elm327BLE {
   }
 
   /**
-   * Запуск стандартного системного диалога Web Bluetooth для выбора ELM327
+   * Запуск системного окна iOS для подключения к "OBD BLE"
    */
   async requestAndConnect() {
     if (!navigator.bluetooth) {
-      throw new Error("Web Bluetooth не поддерживается этим браузером. Откройте в Bluefy на iOS!");
+      throw new Error("Web Bluetooth не поддерживается. Откройте страницу в приложении Bluefy на iOS!");
     }
 
-    this.log('info', 'Поиск адаптера Bluetooth BLE...');
+    this.log('info', 'Поиск адаптера "OBD BLE"...');
 
+    // Только строковые 128-битные UUID (исправляет ошибку Bluefy: "Request payload could not be parsed")
     const optionalServices = [
-      0xfff0, 0xffe0, 
+      "0000fff0-0000-1000-8000-00805f9b34fb",
+      "0000ffe0-0000-1000-8000-00805f9b34fb",
       "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
       "000018f0-0000-1000-8000-00805f9b34fb"
     ];
 
     try {
+      // Ищем конкретно ваш адаптер "OBD BLE" или любые устройства с префиксами OBD/IOS/ELM
       this.device = await navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,
+        filters: [
+          { name: "OBD BLE" },
+          { namePrefix: "OBD" },
+          { namePrefix: "IOS" },
+          { namePrefix: "Viecar" },
+          { namePrefix: "V-LINK" },
+          { namePrefix: "ELM" }
+        ],
         optionalServices: optionalServices
       });
-    } catch (e) {
-      if (e.name === 'NotFoundError' || (e.message && e.message.includes('User cancelled'))) {
-        throw new Error("Устройство не выбрано. Вставьте ELM327 в разъём авто и включите зажигание.");
+    } catch (err1) {
+      this.log('info', 'Повторная попытка без фильтра имен...');
+      try {
+        // Резервный вариант, если имя адаптера скрыто
+        this.device = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: optionalServices
+        });
+      } catch (err2) {
+        if (err2.name === 'NotFoundError' || (err2.message && err2.message.includes('User cancelled'))) {
+          throw new Error("Окно выбора закрыто или устройство не выбрано");
+        }
+        throw new Error(err2.message || "Не удалось найти Bluetooth устройство");
       }
-      throw new Error(e.message || "Bluetooth устройство не найдено");
     }
 
     if (!this.device) {
-      throw new Error("Устройство не выбрано");
+      throw new Error("Адаптер не выбран");
     }
 
     this.log('info', `Выбран адаптер: ${this.device.name || 'Безымянный'}`);
@@ -97,18 +118,17 @@ class Elm327BLE {
       if (this.onDisconnect) this.onDisconnect();
     });
 
-    this.log('info', 'Подключение к GATT серверу...');
+    this.log('info', 'Подключение к GATT серверу адаптера...');
     this.server = await this.device.gatt.connect();
 
-    // Автоопределение сервиса и характеристик TX/RX
     await this._discoverSerialPort();
     
     this.isConnected = true;
-    this.log('info', 'Канал BLE успешно открыт!');
+    this.log('info', 'Порт BLE успешно открыт и готов к работе!');
   }
 
   /**
-   * Перебор профилей BLE для нахождения порта передачи данных
+   * Перебор профилей BLE для нахождения портов TX/RX
    */
   async _discoverSerialPort() {
     for (const candidate of Elm327BLE.CANDIDATE_SERVICES) {
@@ -123,25 +143,46 @@ class Elm327BLE {
         this.rxCharacteristic = rxChar;
         this.txCharacteristic = txChar;
 
-        // Включаем подписку на входящие уведомления от ELM
+        // Включаем уведомления от ELM
         await this.rxCharacteristic.startNotifications();
         this.rxCharacteristic.addEventListener(
           'characteristicvaluechanged', 
           (e) => this._onDataReceived(e)
         );
 
-        this.log('info', `Определен тип BLE чипа: Service 0x${candidate.service.toString(16)}`);
+        this.log('info', `Определен тип порта: ${candidate.name}`);
         return;
       } catch (e) {
         // Пробуем следующий сервис
       }
     }
-    throw new Error("Не удалось найти последовательный порт (SPP/UART) на этом адаптере");
+
+    // Если стандартные не подошли, пробуем получить все сервисы устройства
+    try {
+      const services = await this.server.getPrimaryServices();
+      for (const s of services) {
+        const chars = await s.getCharacteristics();
+        let rx = null;
+        let tx = null;
+        for (const c of chars) {
+          if (c.properties.notify || c.properties.indicate) rx = c;
+          if (c.properties.write || c.properties.writeWithoutResponse) tx = c;
+        }
+        if (rx && tx) {
+          this.service = s;
+          this.rxCharacteristic = rx;
+          this.txCharacteristic = tx;
+          await this.rxCharacteristic.startNotifications();
+          this.rxCharacteristic.addEventListener('characteristicvaluechanged', (e) => this._onDataReceived(e));
+          this.log('info', `Автоматически подобран порт в сервисе ${s.uuid}`);
+          return;
+        }
+      }
+    } catch (e) {}
+
+    throw new Error("Не удалось найти последовательный порт (SPP/UART) на адаптере");
   }
 
-  /**
-   * Обработчик входящих байт по радиоканалу Bluetooth
-   */
   _onDataReceived(event) {
     const value = event.target.value;
     const decoder = new TextDecoder('utf-8');
@@ -149,7 +190,6 @@ class Elm327BLE {
     
     this.rxBuffer += chunk;
 
-    // Символ '>' в протоколе ELM означает конец ответа и готовность к новой команде
     if (this.rxBuffer.includes('>')) {
       if (this.commandTimeoutTimer) {
         clearTimeout(this.commandTimeoutTimer);
@@ -157,7 +197,7 @@ class Elm327BLE {
       }
 
       const fullResponse = this.rxBuffer.replace(/>/g, '').trim();
-      this.rxBuffer = ""; // Очищаем буфер под следующий ответ
+      this.rxBuffer = "";
 
       if (this.activeResolver) {
         const resolve = this.activeResolver;
@@ -168,15 +208,11 @@ class Elm327BLE {
     }
   }
 
-  /**
-   * Скоростная отправка команды с таймаутом
-   */
   async send(command, timeoutMs = 1200) {
     if (!this.isConnected || !this.txCharacteristic) {
       throw new Error("Адаптер не подключен");
     }
 
-    // Если в буфере остался старый мусор, сбрасываем его
     this.rxBuffer = "";
 
     const encoder = new TextEncoder();
@@ -198,10 +234,9 @@ class Elm327BLE {
         this.activeResolver = null;
         this.activeRejecter = null;
         this.log('err', `Таймаут команды ${command} (${timeoutMs}мс)`);
-        reject(new Error(`Timeout: ${command}. Получено: ${partial}`));
+        reject(new Error(`Timeout: ${command}. Ответ: ${partial}`));
       }, timeoutMs);
 
-      // Отправляем байты в BLE характеристику
       if (this.txCharacteristic.writeValueWithoutResponse) {
         this.txCharacteristic.writeValueWithoutResponse(data).catch(err => {
           this.txCharacteristic.writeValue(data).catch(reject);
@@ -212,9 +247,6 @@ class Elm327BLE {
     });
   }
 
-  /**
-   * Разрыв соединения
-   */
   async disconnect() {
     if (this.device && this.device.gatt.connected) {
       await this.device.gatt.disconnect();
