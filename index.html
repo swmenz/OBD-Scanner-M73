@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#000000">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="М73 Диагностика">
@@ -53,8 +56,8 @@
           <!-- Обороты двигателя -->
           <div class="glass-card hero-card">
             <div class="card-top-row">
-              <span class="micro-header">Обороты двигателя</span>
-              <span class="peak-badge" id="valPeakRpm">Пик: 0 об/мин</span>
+              <span class="micro-header">Обороты</span>
+              <span class="peak-badge" id="valPeakRpm">Пик: 0</span>
             </div>
             <div class="hero-digital-row">
               <span class="hero-value" id="valRpm">0</span>
@@ -69,7 +72,7 @@
           <div class="glass-card hero-card">
             <div class="card-top-row">
               <span class="micro-header">Скорость</span>
-              <span class="gear-badge" id="valGearAux">Передача: —</span>
+              <span class="gear-badge" id="valGearAux">КПП: —</span>
             </div>
             <div class="hero-digital-row">
               <span class="hero-value" id="valSpeed">0</span>
@@ -256,10 +259,10 @@
       <!-- ВКЛАДКА 2: ОШИБКИ DTC -->
       <section id="tab-dtc" class="tab-pane">
         <div class="glass-card">
-          <div class="panel-header">
-            <div>
-              <h2 class="panel-heading">Коды неисправностей (DTC)</h2>
-              <p class="panel-sub">Память ошибок контроллера Итэлма М73</p>
+          <div class="panel-header dtc-panel-header">
+            <div class="panel-header-text">
+              <h2 class="panel-heading">Память ошибок (DTC)</h2>
+              <p class="panel-sub">Диагностические коды контроллера Итэлма М73</p>
             </div>
             <div class="panel-btns">
               <button id="btnReadDtc" class="glass-btn btn-glass-secondary">Считать ошибки</button>
@@ -420,7 +423,7 @@
           </div>
           <div class="terminal-display-glass" id="terminalLog"></div>
           <div class="terminal-input-bar">
-            <input type="text" id="terminalInput" class="glass-input" placeholder="Команда (например: 21 01 или ATZ)" />
+            <input type="text" id="terminalInput" class="glass-input" placeholder="Команда (21 01 или ATZ)" />
             <button class="glass-btn btn-primary-glass" onclick="M73App.sendManualCommand()">Отправить</button>
           </div>
         </div>

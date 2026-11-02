@@ -54,11 +54,20 @@ input[type="text"], .glass-input {
   font-size: 16px;
 }
 
+:root, html {
+  color-scheme: dark;
+  background-color: #000000;
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+}
+
 body {
-  background-color: var(--canvas-deep);
+  background-color: #000000;
+  color-scheme: dark;
   color: var(--text-primary);
   font-family: var(--font-apple);
-  height: 100vh;
+  height: 100%;
   height: 100dvh;
   overflow: hidden;
   position: relative;
@@ -262,7 +271,7 @@ body {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 16px 16px 95px 16px;
+  padding: 14px 14px calc(env(safe-area-inset-bottom) + 115px) 14px;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -294,8 +303,10 @@ body {
 .card-top-row {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
+  gap: 6px;
   margin-bottom: 6px;
+  min-height: 20px;
 }
 
 .micro-header {
@@ -303,13 +314,19 @@ body {
   font-weight: 600;
   color: var(--text-secondary);
   letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
 .peak-badge, .gear-badge {
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
   font-weight: 500;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 /* ==========================================================================
@@ -741,6 +758,27 @@ body {
   gap: 8px;
 }
 
+.dtc-panel-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.dtc-panel-header .panel-btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+
+.dtc-panel-header .panel-btns .glass-btn {
+  width: 100%;
+  justify-content: center;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+}
+
 .dtc-scroll-list {
   display: flex;
   flex-direction: column;
@@ -794,10 +832,11 @@ body {
 }
 
 .cyl-lbl {
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   color: var(--text-secondary);
   display: block;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .cyl-val {
@@ -825,6 +864,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   padding: 12px 14px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--glass-border);
@@ -837,23 +877,35 @@ body {
   background: rgba(10, 132, 255, 0.07);
 }
 
+.adc-info {
+  flex: 1;
+  min-width: 0;
+}
+
 .adc-info strong {
   display: block;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   color: #fff;
+  line-height: 1.3;
 }
 
 .adc-info span {
   font-size: 0.7rem;
   color: var(--text-tertiary);
+  margin-top: 2px;
+  display: block;
 }
 
 .adc-number {
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--apple-blue);
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono);
+  white-space: nowrap;
+  flex-shrink: 0;
+  text-align: right;
+  letter-spacing: -0.01em;
 }
 
 /* Тесты исполнительных механизмов */
@@ -936,6 +988,17 @@ body {
   display: flex;
   gap: 8px;
   margin-top: 10px;
+}
+
+.terminal-input-bar .glass-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.terminal-input-bar button {
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 0 16px;
 }
 
 .glass-input {

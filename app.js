@@ -200,7 +200,7 @@ class M73Application {
       this.connStateText.textContent = "Подключено к ЭБУ";
       this.btnToggleLog.disabled = false;
       this.peakRpm = 0;
-      this.valPeakRpm.textContent = "Пик: 0 об/мин";
+      this.valPeakRpm.textContent = "Пик: 0";
 
       this.startContinuousPolling();
     } catch (err) {
@@ -285,7 +285,7 @@ class M73Application {
     this.valRpm.textContent = data.rpm;
     if (data.rpm > this.peakRpm) {
       this.peakRpm = data.rpm;
-      this.valPeakRpm.textContent = `Пик: ${this.peakRpm} об/мин`;
+      this.valPeakRpm.textContent = `Пик: ${this.peakRpm}`;
     }
     const rpmRatio = Math.min(1, Math.max(0, data.rpm / 6800));
     this.barRpm.style.transform = `scaleX(${rpmRatio})`;
@@ -294,7 +294,7 @@ class M73Application {
     this.valSpeed.textContent = data.speed;
     this.valThrottleSub.textContent = `${data.throttle}%`;
     const gear = this.estimateGear(data.rpm, data.speed);
-    this.valGearAux.textContent = `Передача: ${gear}`;
+    this.valGearAux.textContent = `КПП: ${gear}`;
 
     // ДМРВ и цикловой расход
     this.valMaf.textContent = data.maf.toFixed(1);
