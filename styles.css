@@ -85,6 +85,8 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
+  max-width: 580px;
+  margin: 0 auto;
   position: relative;
   z-index: 1;
   padding-top: env(safe-area-inset-top);
@@ -400,9 +402,17 @@ body {
    ========================================================================== */
 .control-top {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+@media (min-width: 480px) {
+  .control-top {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
 }
 
 .card-title {
@@ -422,6 +432,11 @@ body {
 .control-buttons {
   display: flex;
   gap: 8px;
+  width: 100%;
+}
+
+.control-buttons .glass-btn {
+  flex: 1;
 }
 
 .btn-rec {
@@ -938,6 +953,8 @@ body {
   bottom: calc(env(safe-area-inset-bottom) + 10px);
   left: 14px;
   right: 14px;
+  max-width: 520px;
+  margin: 0 auto;
   background: rgba(14, 18, 26, 0.76);
   backdrop-filter: blur(35px) saturate(200%);
   -webkit-backdrop-filter: blur(35px) saturate(200%);
@@ -983,4 +1000,34 @@ body {
 .dock-label {
   font-size: 0.65rem;
   font-weight: 600;
+}
+
+/* ==========================================================================
+   АДАПТИВНОСТЬ ДЛЯ КОМПАКТНЫХ ЭКРАНОВ (IPHONE SE, MINI)
+   ========================================================================== */
+@media (max-width: 400px) {
+  .glass-navbar {
+    padding: 10px 14px;
+  }
+  .brand-name {
+    font-size: 1.05rem;
+  }
+  .cadence-detail {
+    display: none;
+  }
+  .cadence-pill {
+    padding: 5px 9px;
+  }
+  .hero-value {
+    font-size: 2.15rem;
+  }
+  .tile-num {
+    font-size: 1.45rem;
+  }
+}
+
+@media (max-width: 350px) {
+  .hero-grid {
+    grid-template-columns: 1fr;
+  }
 }
