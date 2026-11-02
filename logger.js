@@ -113,24 +113,20 @@ class TripLogger {
         "Интервал_опроса (мс)": this.currentMs
       };
 
-      // Если включен Кадр 3 (Адаптации)
-      if (framesConfig && framesConfig.frame3) {
-        record["Заданное значение лямбда (-)"] = params.targetLambda;
-        record["Коэффициент продувки адсорбера (%)"] = params.purgeRate;
-        record["Мультипликативная составляющая коррекции (-)"] = params.multAdapt;
-        record["Аддитивная составляющая коррекции (%)"] = params.addAdapt;
-      }
+      // Адаптации смеси и продувка адсорбера (приходят в базовом кадре 21 01)
+      record["Заданное значение лямбда (-)"] = params.targetLambda;
+      record["Коэффициент продувки адсорбера (%)"] = params.purgeRate;
+      record["Мультипликативная составляющая коррекции (-)"] = params.multAdapt;
+      record["Аддитивная составляющая коррекции (%)"] = params.addAdapt;
 
-      // Если включен Кадр 4 (Пропуски зажигания)
-      if (framesConfig && framesConfig.frame4) {
-        record["Пропуски цилиндр 1 (-)"] = params.misfires.cyl1;
-        record["Пропуски цилиндр 2 (-)"] = params.misfires.cyl2;
-        record["Пропуски цилиндр 3 (-)"] = params.misfires.cyl3;
-        record["Пропуски цилиндр 4 (-)"] = params.misfires.cyl4;
-        record["Суммарный счетчик пропусков (-)"] = params.misfires.total;
-      }
+      // Пропуски зажигания (приходят в базовом кадре 21 01)
+      record["Пропуски цилиндр 1 (-)"] = params.misfires.cyl1;
+      record["Пропуски цилиндр 2 (-)"] = params.misfires.cyl2;
+      record["Пропуски цилиндр 3 (-)"] = params.misfires.cyl3;
+      record["Пропуски цилиндр 4 (-)"] = params.misfires.cyl4;
+      record["Суммарный счетчик пропусков (-)"] = params.misfires.total;
 
-      // Если включен Кадр 2 (АЦП)
+      // Если включен опрос АЦП (Кадр 21 03)
       if (framesConfig && framesConfig.frame2) {
         record["АЦП ДМРВ (В)"] = params.adc.maf;
         record["АЦП ДПДЗ (В)"] = params.adc.tps;

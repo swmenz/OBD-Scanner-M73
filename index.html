@@ -58,7 +58,7 @@
               <span class="hero-unit">об/мин</span>
             </div>
             <div class="glass-progress-track">
-              <div class="glass-progress-bar" id="barRpm" style="width: 0%;"></div>
+              <div class="glass-progress-bar" id="barRpm"></div>
             </div>
           </div>
 
@@ -113,22 +113,22 @@
               <label class="glass-checkbox-row">
                 <input type="checkbox" id="chkFrame1" checked disabled>
                 <span class="chk-checkmark"></span>
-                <span class="chk-text">Кадр 1 (Базовый): Обороты, скорость, дроссель, ДМРВ, впрыск, УОЗ, ТОЖ</span>
+                <span class="chk-text">Кадр 1 (Базовый): Обороты, скорость, дроссель, ДМРВ, впрыск, УОЗ, ТОЖ, смесь и пропуски</span>
               </label>
               <label class="glass-checkbox-row">
                 <input type="checkbox" id="chkFrame2">
                 <span class="chk-checkmark"></span>
-                <span class="chk-text">Кадр 2 (АЦП): Напряжения покоя ДМРВ, ДПДЗ, ДТОЖ, датчики кислорода</span>
+                <span class="chk-text">Кадр 2 (АЦП): Напряжения покоя ДМРВ, ДПДЗ, ДТОЖ, датчики кислорода (Кадр 21 03)</span>
               </label>
               <label class="glass-checkbox-row">
-                <input type="checkbox" id="chkFrame3">
+                <input type="checkbox" id="chkFrame3" checked disabled>
                 <span class="chk-checkmark"></span>
-                <span class="chk-text">Кадр 3 (Смесь): Коррекции, адаптации смеси и клапан адсорбера</span>
+                <span class="chk-text">Кадр 3 (Смесь): Коррекции и продувка адсорбера (уже включены в Кадр 1)</span>
               </label>
               <label class="glass-checkbox-row">
-                <input type="checkbox" id="chkFrame4">
+                <input type="checkbox" id="chkFrame4" checked disabled>
                 <span class="chk-checkmark"></span>
-                <span class="chk-text">Кадр 4 (Пропуски): Счётчики воспламенения по цилиндрам 1, 2, 3, 4</span>
+                <span class="chk-text">Кадр 4 (Пропуски): Счетчики цилиндров 1–4 (уже включены в Кадр 1)</span>
               </label>
             </div>
           </div>
@@ -199,7 +199,7 @@
               <span class="tile-unit">°C</span>
             </div>
             <div class="mini-glass-track">
-              <div class="mini-glass-bar" id="barTemp" style="width: 0%;"></div>
+              <div class="mini-glass-bar" id="barTemp"></div>
             </div>
           </div>
 
@@ -312,7 +312,7 @@
           <div class="panel-header">
             <div>
               <h2 class="panel-heading">Каналы АЦП датчиков</h2>
-              <p class="panel-sub">Прямые электрические напряжения (Кадр 21 02)</p>
+              <p class="panel-sub">Прямые электрические напряжения (Кадр 21 03)</p>
             </div>
           </div>
           <div class="adc-stack">

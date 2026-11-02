@@ -234,10 +234,14 @@ class M73Application {
 
     while (this.isPolling && this.elm.isConnected) {
       try {
-        const data = await this.m73.readConfiguredCycle(this.framesConfig);
+        const activeConfig = {
+          ...this.framesConfig,
+          frame2: this.framesConfig.frame2 || this.currentTab === 'tab-adc'
+        };
+        const data = await this.m73.readConfiguredCycle(activeConfig);
         if (data) {
           this.updateDashboardUI(data);
-          this.logger.addPoint(data, this.framesConfig);
+          this.logger.addPoint(data, activeConfig);
         }
       } catch (err) {
         console.warn("Пауза в цикле: ", err);
@@ -315,11 +319,11 @@ class M73Application {
 
     // АЦП и пропуски
     if (data.adc && this.adcMaf) {
-      this.adcMaf.textContent = `${data.adc.maf} В`;
-      this.adcThrottle.textContent = `${data.adc.tps} В`;
-      this.adcTemp.textContent = `${data.adc.temp} В`;
-      this.adcO2.textContent = `${data.adc.o2} В`;
-      this.adcVolt.textContent = `${data.adc.volt} В`;
+      this.adcMaf.textContent = `${Number(data.adc.maf).toFixed(3)} В`;
+      this.adcThrottle.textContent = `${Number(data.adc.tps).toFixed(3)} В`;
+      this.adcTemp.textContent = `${Number(data.adc.temp).toFixed(3)} В`;
+      this.adcO2.textContent = `${Number(data.adc.o2).toFixed(3)} В`;
+      this.adcVolt.textContent = `${Number(data.adc.volt).toFixed(1)} В`;
     }
 
     if (data.misfires && this.misCyl1) {
@@ -410,7 +414,7 @@ class M73Application {
       const ok = await this.m73.clearDtcCodes();
       if (ok) {
         alert("Ошибки успешно сброшены!");
-        this.readDtc();
+        await this.readDtc();
       } else {
         alert("Контроллер отклонил команду сброса");
       }

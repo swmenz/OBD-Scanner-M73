@@ -269,30 +269,6 @@ class ItelmaM73Protocol {
   }
 
   /**
-   * Разбор Кадра 4 (21 04) — Пропуски зажигания
-   */
-  parseFrame2104(rawStr) {
-    const hex = rawStr.replace(/[\s\r\n]/g, '').toUpperCase();
-    const idx = hex.indexOf("6104");
-    if (idx === -1) return null;
-
-    const payloadHex = hex.substring(idx + 4);
-    const bytes = [];
-    for (let i = 0; i < payloadHex.length - 1; i += 2) {
-      bytes.push(parseInt(payloadHex.substr(i, 2), 16));
-    }
-    if (bytes.length < 5) return null;
-
-    this.latestData.misfires.cyl1 = bytes[0] || 0;
-    this.latestData.misfires.cyl2 = bytes[1] || 0;
-    this.latestData.misfires.cyl3 = bytes[2] || 0;
-    this.latestData.misfires.cyl4 = bytes[3] || 0;
-    this.latestData.misfires.total = bytes[4] || (bytes[0] + bytes[1] + bytes[2] + bytes[3]);
-
-    return this.latestData.misfires;
-  }
-
-  /**
    * ЧТЕНИЕ ОШИБОК ЭБУ (DTC)
    * KWP2000 Service 0x18: 18 00 FF 00 (ответ 58 [count] [DTC1] [Status1] ...)
    */

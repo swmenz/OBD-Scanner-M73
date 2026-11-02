@@ -994,7 +994,7 @@ body {
    ========================================================================== */
 @media (max-width: 400px) {
   .glass-navbar {
-    padding: 10px 14px;
+    padding: calc(env(safe-area-inset-top) + 8px) 14px 10px 14px;
   }
   .brand-name {
     font-size: 1.05rem;
