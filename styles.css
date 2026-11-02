@@ -7,7 +7,7 @@
 :root {
   /* Базовые цвета холста */
   --canvas-deep: #000000;
-  --canvas-surface: #0a0c12;
+  --canvas-surface: #0a0a0c;
 
   /* Материалы жидкого стекла (Liquid Glass) */
   --glass-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.02) 100%);
@@ -84,7 +84,7 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: calc(env(safe-area-inset-top) + 8px) 18px 12px 18px;
-  background: rgba(10, 12, 18, 0.82);
+  background: rgba(12, 12, 14, 0.82);
   backdrop-filter: blur(35px) saturate(190%);
   -webkit-backdrop-filter: blur(35px) saturate(190%);
   border-bottom: 1px solid var(--glass-border);
@@ -964,51 +964,85 @@ body {
   right: 14px;
   max-width: 520px;
   margin: 0 auto;
-  background: rgba(14, 18, 26, 0.82);
-  backdrop-filter: blur(35px) saturate(200%);
-  -webkit-backdrop-filter: blur(35px) saturate(200%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-top: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(18, 18, 20, 0.78);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.22);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.6);
   border-radius: 26px;
-  padding: 6px 8px;
+  padding: 5px 6px;
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
   box-shadow: 
-    0 16px 40px rgba(0, 0, 0, 0.65),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    0 16px 40px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
   z-index: 100;
 }
 
 .dock-item {
+  position: relative;
   flex: 1;
   background: transparent;
   border: none;
+  border-radius: 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  color: var(--text-tertiary);
+  gap: 3px;
+  color: rgba(255, 255, 255, 0.45);
   cursor: pointer;
   padding: 6px 0;
-  min-height: 48px;
-  transition: transform 0.12s cubic-bezier(0.2, 0, 0, 1), color 0.2s ease;
+  min-height: 50px;
+  transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dock-item:active {
+  transform: scale(0.95);
 }
 
 .dock-item.active {
-  color: var(--apple-blue);
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 .dock-icon {
-  font-size: 1.15rem;
-  transition: transform 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  transition: transform 0.2s ease, color 0.2s ease, filter 0.2s ease;
+}
+
+.dock-svg {
+  width: 21px;
+  height: 21px;
+  display: block;
 }
 
 .dock-item.active .dock-icon {
-  transform: scale(1.12);
+  color: var(--apple-blue);
+  transform: scale(1.08);
+  filter: drop-shadow(0 0 8px rgba(10, 132, 255, 0.5));
 }
 
 .dock-label {
   font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  transition: color 0.2s ease;
+}
+
+.dock-item.active .dock-label {
+  color: #ffffff;
   font-weight: 600;
 }
 
