@@ -9,7 +9,7 @@ const ASSETS_TO_CACHE = [
   './logger.js',
   './app.js',
   './manifest.json',
-  'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'
+  './xlsx.full.min.js'
 ];
 
 self.addEventListener('install', (event) => {
