@@ -250,14 +250,14 @@ class M73Application {
    * Отрисовка значений приборной панели
    */
   updateDashboardUI(data) {
-    // Обороты
+    // Обороты (Аппаратное ускорение через transform: scaleX для 120 FPS)
     this.valRpm.textContent = data.rpm;
     if (data.rpm > this.peakRpm) {
       this.peakRpm = data.rpm;
       this.valPeakRpm.textContent = `Пик: ${this.peakRpm} об/мин`;
     }
-    const rpmPercent = Math.min(100, (data.rpm / 6800) * 100);
-    this.barRpm.style.width = `${rpmPercent}%`;
+    const rpmRatio = Math.min(1, Math.max(0, data.rpm / 6800));
+    this.barRpm.style.transform = `scaleX(${rpmRatio})`;
 
     // Скорость и передача
     this.valSpeed.textContent = data.speed;
@@ -269,7 +269,7 @@ class M73Application {
     this.valMaf.textContent = data.maf.toFixed(1);
     if (this.valCycleAir) this.valCycleAir.textContent = data.cycleAir.toFixed(1);
 
-    // УОЗ и отскок детонации
+    // УОЗ и отскок детонации (Интеллектуальная тревожная подсветка)
     this.valSpark.textContent = data.spark.toFixed(1);
     if (this.valRetard) {
       this.valRetard.textContent = data.sparkRetard !== 0 ? `${data.sparkRetard}°` : `0.0°`;
@@ -279,6 +279,13 @@ class M73Application {
         this.valRetard.classList.remove('active-knock');
       }
     }
+    if (this.cardSpark) {
+      if (data.sparkRetard < 0) {
+        this.cardSpark.classList.add('alert-knock');
+      } else {
+        this.cardSpark.classList.remove('alert-knock');
+      }
+    }
 
     // Впрыск и форсунки
     this.valInjTime.textContent = data.injTime.toFixed(2);
@@ -286,11 +293,18 @@ class M73Application {
     if (this.valFuelRate) this.valFuelRate.textContent = data.fuelRate.toFixed(2);
     if (this.valIac) this.valIac.textContent = data.iacSteps;
 
-    // Дроссель и температура
+    // Дроссель и температура ОЖ (Аппаратное ускорение + градация нормы/перегрева)
     this.valThrottle.textContent = data.throttle.toFixed(1);
     this.valTemp.textContent = data.temp;
-    const tempPercent = Math.max(0, Math.min(100, ((data.temp - 40) / 75) * 100));
-    this.barTemp.style.width = `${tempPercent}%`;
+    const tempRatio = Math.max(0, Math.min(1, (data.temp - 40) / 75));
+    this.barTemp.style.transform = `scaleX(${tempRatio})`;
+    if (data.temp >= 103) {
+      this.barTemp.style.background = 'var(--apple-rose)';
+    } else if (data.temp >= 96) {
+      this.barTemp.style.background = 'var(--apple-amber)';
+    } else {
+      this.barTemp.style.background = 'linear-gradient(90deg, var(--apple-blue), var(--apple-green))';
+    }
     this.valVoltage.textContent = data.voltage.toFixed(1);
 
     // Флаги состояния
