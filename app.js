@@ -323,47 +323,18 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v34\n\n• Разгон частоты K-Line под возможности адаптера\n• Включен режим Турбо по умолчанию (AT AT 2, AT ST 19)\n• Интерактивное переключение скорости прямо по тапу на плашку (Гц / мс):\n  - Турбо (быстрый ~3.8–4.2 Гц)\n  - Экстрим (предел ~4.5 Гц)\n  - Стандарт (~3.0–3.3 Гц)\n• Защита от сбоев и автовосстановление");
+        alert("Диагностика М73 — Версия v35\n\n• Режим скорости Экстрим установлен стандартным (AT AT 2, AT ST 10)\n• Исправлены каналы АЦП ДПДЗ (~0.74 В) и ДНД (~2.50 В)\n• Устранён артефакт пускового слова ДМРВ 0xFFFE\n• Очищены заголовки колонок Excel лога\n• Убран лишний companion .txt файл при экспорте на iOS\n• Добавлен авто-повтор Fast Init K-Line для безупречного подключения");
       });
     }
 
-    // Навигация по вкладкам (iOS TabBar / Liquid Dock)
-    // Интерактивное переключение профилей скорости (Турбо / Экстрим / Стандарт)
+    // Режим скорости опроса K-Line: Экстрим (стандартный)
     const cadencePill = document.querySelector('.cadence-pill');
     if (cadencePill) {
-      cadencePill.style.cursor = 'pointer';
-      cadencePill.title = 'Нажмите для переключения режима скорости';
-      this.currentSpeedProfile = 'turbo';
+      cadencePill.title = 'Частота опроса K-Line: Режим Экстрим (Стандарт)';
+      this.currentSpeedProfile = 'extreme';
 
-      cadencePill.addEventListener('click', async () => {
-        if (!this.elm.isConnected) {
-          alert("⚡ Настройка скорости K-Line (v34)\n\n• Турбо (по умолчанию): AT AT 2 + ST 19 (~3.8–4.2 Гц)\n• Экстрим: AT AT 2 + ST 10 (до ~4.5 Гц)\n• Стандарт: AT AT 1 + ST 32 (~3.0–3.3 Гц)\n\nПодключитесь к машине, чтобы переключать профили прямо на ходу!");
-          return;
-        }
-
-        let next = 'extreme';
-        let desc = 'Экстрим (~4.5 Гц)';
-        if (this.currentSpeedProfile === 'turbo') {
-          next = 'extreme';
-          desc = 'Экстрим (~4.5 Гц)';
-        } else if (this.currentSpeedProfile === 'extreme') {
-          next = 'standard';
-          desc = 'Стандарт (~3.2 Гц)';
-        } else {
-          next = 'turbo';
-          desc = 'Турбо (~4.0 Гц)';
-        }
-
-        this.currentSpeedProfile = next;
-        await this.m73.setSpeedProfile(next);
-
-        const prevText = this.connStateText.textContent;
-        this.connStateText.textContent = `Скорость: ${desc}`;
-        setTimeout(() => {
-          if (this.elm.isConnected && this.connStateText.textContent.startsWith('Скорость:')) {
-            this.connStateText.textContent = prevText || "Подключено к ЭБУ";
-          }
-        }, 2500);
+      cadencePill.addEventListener('click', () => {
+        alert("⚡ Режим опроса: Экстрим (Стандарт v35)\n\n• Адаптивный тайминг: AT AT 2\n• Таймаут шины: AT ST 10 (~64 мс)\n• Максимальная отзывчивость датчиков\n• Опрос кадров: 3.2–4.2 Гц без задержек");
       });
     }
 
