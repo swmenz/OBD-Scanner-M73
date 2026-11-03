@@ -291,6 +291,21 @@ class M73Application {
   bindEvents() {
     this.btnConnect.addEventListener('click', () => this.toggleConnection());
 
+    const badge = document.getElementById('appVersionBadge');
+    if (badge) {
+      badge.style.cursor = 'pointer';
+      badge.title = 'Нажмите для проверки обновлений';
+      badge.addEventListener('click', async () => {
+        try {
+          if ('serviceWorker' in navigator) {
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (reg) await reg.update();
+          }
+        } catch (e) {}
+        alert("Диагностика М73 — Версия v29\n\n• АЦП ДМРВ: 1.012 В (эталон Bosch 116)\n• Сигнал ДК1: живое напряжение смеси\n• Добавлены ДТВ и ДНД\n• Тесты исполнительных механизмов\n• Фоновый режим работы и автоподключение");
+      });
+    }
+
     // Навигация по вкладкам (iOS TabBar / Liquid Dock)
     document.querySelectorAll('.tabbar-item, .dock-item').forEach(btn => {
       btn.addEventListener('click', () => {
