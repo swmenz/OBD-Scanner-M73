@@ -71,6 +71,8 @@ class M73Application {
     this.valFuelRate = document.getElementById('valFuelRate');
     this.valIac = document.getElementById('valIac');
     this.valVoltage = document.getElementById('valVoltage');
+    this.valMultAdapt = document.getElementById('valMultAdapt');
+    this.valAddAdapt = document.getElementById('valAddAdapt');
 
     // Флаги
     this.flagIdle = document.getElementById('flagIdle');
@@ -394,6 +396,30 @@ class M73Application {
     if (this.valDuty) this.valDuty.textContent = `${data.dutyCycle.toFixed(1)}%`;
     if (this.valFuelRate) this.valFuelRate.textContent = data.fuelRate.toFixed(2);
     if (this.valIac) this.valIac.textContent = data.iacSteps;
+
+    // Топливные адаптации смеси (Мультипликатив и Аддитив, Кадр 21 01)
+    if (this.valMultAdapt && data.multAdapt !== undefined && data.multAdapt !== null) {
+      this.valMultAdapt.textContent = data.multAdapt.toFixed(3);
+      if (data.multAdapt >= 0.95 && data.multAdapt <= 1.05) {
+        this.valMultAdapt.style.color = 'var(--apple-green)';
+      } else if (data.multAdapt >= 0.88 && data.multAdapt <= 1.12) {
+        this.valMultAdapt.style.color = 'var(--apple-amber)';
+      } else {
+        this.valMultAdapt.style.color = 'var(--apple-rose)';
+      }
+    }
+    if (this.valAddAdapt && data.addAdapt !== undefined && data.addAdapt !== null) {
+      const sign = data.addAdapt > 0 ? '+' : '';
+      this.valAddAdapt.textContent = `${sign}${data.addAdapt.toFixed(2)}%`;
+      const absAdd = Math.abs(data.addAdapt);
+      if (absAdd <= 3.0) {
+        this.valAddAdapt.style.color = 'var(--apple-green)';
+      } else if (absAdd <= 7.0) {
+        this.valAddAdapt.style.color = 'var(--apple-amber)';
+      } else {
+        this.valAddAdapt.style.color = 'var(--apple-rose)';
+      }
+    }
 
     // Дроссель и температура ОЖ (Аппаратное ускорение + градация нормы/перегрева)
     this.valThrottle.textContent = data.throttle.toFixed(1);
