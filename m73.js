@@ -101,23 +101,29 @@ class ItelmaM73Protocol {
   }
 
   /**
-   * ДИНАМИЧЕСКИЙ ОПРОС ВЫБРАННЫХ КАДРОВ
-   * @param {Object} framesConfig - { frame1: bool, frame2: bool, frame3: bool, frame4: bool }
+   * ДИНАМИЧЕСКИЙ ОПРОС КАДРОВ (РАЗДЕЛЬНЫЙ ОПРОС КАК В OPENDIAG)
+   * Поддерживает как передачу строкового идентификатора '2101'/'2103', так и объекта конфигурации
    */
-  async readConfiguredCycle(framesConfig) {
-    // 1. Всегда опрашиваем базовый скоростной Кадр 1 (содержит параметры двигателя, смесь и пропуски)
-    // Таймаут 1000 мс — защита от зависания. Ответ принимается мгновенно по символу «>» (обычно 350–450 мс)
-    const raw1 = await this.elm.send("2101", 1000);
-    // Если ЭБУ не вернул корректный кадр (NO DATA, обрыв K-Line), не выдаём устаревшие данные за свежие
-    if (!this.parseFrame2101(raw1)) return null;
-
-    // 2. Если включен Кадр 2 (Каналы АЦП - в М73 это кадр 21 03)
-    if (framesConfig.frame2) {
-      try {
-        const rawAdc = await this.elm.send("2103", 1000);
-        this.parseFrame2103(rawAdc);
-      } catch (e) {}
+  async readConfiguredCycle(configOrFrame = '2101') {
+    let target = '2101';
+    if (typeof configOrFrame === 'string') {
+      target = configOrFrame;
+    } else if (configOrFrame && typeof configOrFrame === 'object') {
+      target = configOrFrame.targetFrame || (configOrFrame.frame2 ? '2103' : '2101');
     }
+
+    if (target === '2103') {
+      const rawAdc = await this.elm.send("2103", 1000);
+      if (this.parseFrame2103(rawAdc)) {
+        this.latestData.timestamp = new Date();
+        return this.latestData;
+      }
+      return null;
+    }
+
+    // По умолчанию — базовый скоростной Кадр 1 (21 01)
+    const raw1 = await this.elm.send("2101", 1000);
+    if (!this.parseFrame2101(raw1)) return null;
 
     this.latestData.timestamp = new Date();
     return this.latestData;
@@ -199,11 +205,13 @@ class ItelmaM73Protocol {
     // Аддитивная составляющая в кадре 21 01 пока не определена достоверно — не выводим выдуманное значение
     const addAdapt = null;
 
-    // Счетчики пропусков воспламенения (16 бит). Порядок в пакете: цилиндры 1, 3, 4, 2
+    // Счетчики пропусков воспламенения (16 бит). Порядок в пакете M73 (OpenDiag): цилиндры 1, 3, 4, 2
     this.latestData.misfires.cyl1 = u16(36);
     this.latestData.misfires.cyl3 = u16(38);
     this.latestData.misfires.cyl4 = u16(40);
     this.latestData.misfires.cyl2 = u16(42);
+    // 5-й счетчик (байты 44-45 в payload / 46-47 в ответе): активные цикловые пропуски за последние 1000 об
+    this.latestData.misfires.cycle = bytes.length >= 46 ? u16(44) : 0;
     this.latestData.misfires.total = this.latestData.misfires.cyl1 +
                                     this.latestData.misfires.cyl2 +
                                     this.latestData.misfires.cyl3 +
@@ -255,25 +263,43 @@ class ItelmaM73Protocol {
 
   /**
    * Разбор Кадра АЦП (в М73 это 21 03, ответ 61 03)
-   * Квантование 8-битного АЦП процессора ST10F273: V = Byte * (5.0 / 256.0)
+   * Точные формулы декомпилированного OpenDiag (hk.java метод E1) для процессора ST10F273 (Итэлма М73)
    */
   parseFrame2103(rawStr) {
     const hex = rawStr.replace(/[\s\r\n]/g, '').toUpperCase();
     const idx = hex.indexOf("6103");
     if (idx === -1) return null;
 
-    const payloadHex = hex.substring(idx + 4);
+    // Срез байтов, начиная с заголовка 61 03 (байт 0 = 61, байт 1 = 03)
+    const frameHex = hex.substring(idx);
     const bytes = [];
-    for (let i = 0; i < payloadHex.length - 1; i += 2) {
-      bytes.push(parseInt(payloadHex.substr(i, 2), 16));
+    for (let i = 0; i < frameHex.length - 1; i += 2) {
+      bytes.push(parseInt(frameHex.substr(i, 2), 16));
     }
-    if (bytes.length < 5 || bytes.some(Number.isNaN)) return null;
+    if (bytes.length < 12 || bytes.some(Number.isNaN)) return null;
 
-    this.latestData.adc.temp = +(bytes[0] * 0.01953).toFixed(3);
-    this.latestData.adc.maf = +(bytes[1] * 0.01953).toFixed(3);
-    this.latestData.adc.tps = +(bytes[2] * 0.01953).toFixed(3);
-    this.latestData.adc.o2 = +(bytes[3] * 0.01953).toFixed(3);
-    this.latestData.adc.volt = +(bytes[4] * 0.1).toFixed(1);
+    const u8 = (i) => bytes[i] || 0;
+    const u16 = (i) => ((bytes[i] || 0) << 8) | (bytes[i + 1] || 0);
+
+    // Точная карта регистров АЦП ЭБУ М73:
+    // Байт 2-3: Бортовое напряжение ADC (16 бит) -> raw * 0.0176 В
+    this.latestData.adc.volt = +(u16(2) * 0.0176).toFixed(2);
+    // Байт 4: Температура ОЖ ТОЖ (8 бит) -> raw * 5.0 / 256.0 В
+    this.latestData.adc.temp = +(u8(4) * (5.0 / 256.0)).toFixed(3);
+    // Байт 5-6: Температура воздуха ДТВ (16 бит) -> raw * 5.0 / 1024.0 В
+    this.latestData.adc.airTemp = +(u16(5) * (5.0 / 1024.0)).toFixed(3);
+    // Байт 7-8: ДМРВ 16-бит АЦП (16 бит) -> raw * 1.25 / 16384.0 (Bosch HFM5: 0.996 - 1.020 В в покое)
+    this.latestData.adc.maf = +(u16(7) * (5.0 / 65536.0)).toFixed(3);
+    // Байт 9-10: Положение дросселя ДПДЗ (16 бит) -> raw * 5.0 / 1024.0 В
+    this.latestData.adc.tps = +(u16(9) * (5.0 / 1024.0)).toFixed(3);
+    // Байт 11: Управляющий датчик кислорода УДК ДК1 (8 бит) -> raw * 5.0 / 256.0 В
+    this.latestData.adc.o2 = +(u8(11) * (5.0 / 256.0)).toFixed(3);
+    // Байт 12-13: Диагностический датчик кислорода ДДК ДК2 (16 бит) -> raw * 5.0 / 1024.0 В
+    this.latestData.adc.o2_2 = +(u16(12) * (5.0 / 1024.0)).toFixed(3);
+    // Байт 17-18: Датчик неровной дороги ДНД (16 бит) -> raw * 5.0 / 1024.0 В
+    if (bytes.length >= 19) {
+      this.latestData.adc.roughRoad = +(u16(17) * (5.0 / 1024.0)).toFixed(3);
+    }
 
     return this.latestData.adc;
   }
@@ -329,21 +355,48 @@ class ItelmaM73Protocol {
 
   async runActuatorTest(testType) {
     this.elm.log('info', `Запуск теста механизма: ${testType}`);
-    const commands = {
-      fan1_on: "300107",
-      fan2_on: "300207",
-      pump_on: "300307",
-      mil_test: "300407"
+    
+    // Точные команды KWP2000 службы 0x30 из OpenDiag (m73_im_menu.xml) для Итэлма М73:
+    // 0A - Реле вентилятора 1 (низкая скорость)
+    // 0D - Реле вентилятора 2 (высокая скорость)
+    // 09 - Реле бензонасоса
+    // 0C - Контрольная лампа Check Engine (MIL)
+    const map = {
+      fan1_on: { id: "0A", duration: 4000, name: "Вентилятор 1" },
+      fan2_on: { id: "0D", duration: 4000, name: "Вентилятор 2" },
+      pump_on: { id: "09", duration: 3000, name: "Бензонасос" },
+      mil_test: { id: "0C", duration: 3000, name: "Лампа Check Engine" }
     };
-    const cmd = commands[testType];
-    if (!cmd) throw new Error("Неизвестный тест механизма");
 
-    const resp = (await this.elm.send(cmd, 1000)).replace(/\s+/g, '').toUpperCase();
-    // Положительный ответ сервиса 0x30 начинается с 0x70; всё остальное — отказ ЭБУ
-    if (!resp.startsWith("70")) {
-      throw new Error("ЭБУ не принял команду теста (ответ: " + (resp || "пусто") + ")");
+    const target = map[testType];
+    if (!target) throw new Error("Неизвестный тест механизма: " + testType);
+
+    // 1. Включение механизма (30 <ID> 01)
+    const cmdOn = `30${target.id}01`;
+    this.elm.log('info', `[Тест ИМ] Включение ${target.name}: ${cmdOn}`);
+    const respOn = (await this.elm.send(cmdOn, 1500)).replace(/\s+/g, '').toUpperCase();
+    
+    if (respOn.includes("7F3022")) {
+      throw new Error("ЭБУ отклонил тест: двигатель должен быть заглушен (обороты 0) и включено зажигание!");
     }
-    return resp;
+    if (respOn.startsWith("7F")) {
+      throw new Error(`ЭБУ отклонил команду (код: ${respOn})`);
+    }
+    if (!respOn.startsWith("70")) {
+      throw new Error(`Некорректный ответ ЭБУ: ${respOn || "нет ответа"}`);
+    }
+
+    // 2. Удержание в активном состоянии
+    await new Promise(r => setTimeout(r, target.duration));
+
+    // 3. Выключение механизма (30 <ID> 00)
+    const cmdOff = `30${target.id}00`;
+    this.elm.log('info', `[Тест ИМ] Выключение ${target.name}: ${cmdOff}`);
+    try {
+      await this.elm.send(cmdOff, 1500);
+    } catch (e) {}
+
+    return true;
   }
 
   async resetWithInit() {

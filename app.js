@@ -97,6 +97,7 @@ class M73Application {
     this.misCyl2 = document.getElementById('misCyl2');
     this.misCyl3 = document.getElementById('misCyl3');
     this.misCyl4 = document.getElementById('misCyl4');
+    this.misCycle = document.getElementById('misCycle');
 
     // Терминал
     this.terminalLog = document.getElementById('terminalLog');
@@ -250,30 +251,65 @@ class M73Application {
 
   async _pollLoop() {
     let failures = 0;
+    let lastTesterPresent = Date.now();
 
     while (this.isPolling && this.elm.isConnected) {
       try {
-        const activeConfig = {
-          ...this.framesConfig,
-          frame2: this.framesConfig.frame2 || this.currentTab === 'tab-adc'
-        };
-        const data = await this.m73.readConfiguredCycle(activeConfig);
+        // РАЗДЕЛЬНЫЙ ОПРОС ЭКРАНОВ (КАК В OPENDIAG):
+        // 1. На вкладках Ошибок, Тестов или Терминала фоновый циклический опрос 2101/2103 приостанавливается,
+        // чтобы не занимать шину K-Line и исключить коллизии с ручными сервисными запросами.
+        if (this.currentTab === 'tab-dtc' || this.currentTab === 'tab-actuators' || this.currentTab === 'tab-terminal') {
+          // Раз в 2 секунды отправляем легкий Tester Present (3E), чтобы сессия ЭБУ не закрылась по таймауту
+          if (Date.now() - lastTesterPresent > 2000) {
+            try {
+              await this.elm.send("3E", 500);
+              lastTesterPresent = Date.now();
+            } catch (e) {}
+          }
+          await this.delay(250);
+          continue;
+        }
+
+        // 2. Опрос строго активного экрана:
+        // - На вкладке "Датчики / АЦП" (tab-adc) -> опрашиваем кадр АЦП 21 03 на полной скорости
+        // - На вкладке "Панель" (tab-dashboard) -> опрашиваем скоростной кадр параметров 21 01
+        let targetFrame = '2101';
+        if (this.currentTab === 'tab-adc') {
+          targetFrame = '2103';
+        } else if (this.framesConfig.frame2) {
+          targetFrame = '2103';
+        }
+
+        const data = await this.m73.readConfiguredCycle(targetFrame);
         if (data) {
-          if (failures >= 10) this.connStateText.textContent = "Подключено к ЭБУ";
+          if (failures >= 5) this.connStateText.textContent = "Подключено к ЭБУ";
           failures = 0;
+          lastTesterPresent = Date.now();
           this.updateDashboardUI(data);
-          this.logger.addPoint(data, activeConfig);
+          if (targetFrame === '2101') {
+            this.logger.addPoint(data, { frame1: true });
+          }
         } else {
           throw new Error("Пустой кадр");
         }
       } catch (err) {
         failures++;
-        if (failures === 10) this.connStateText.textContent = "ЭБУ не отвечает";
-        await this.delay(failures < 10 ? 80 : 250);
+        if (failures === 5) this.connStateText.textContent = "ЭБУ не отвечает";
+
+        // Автовосстановление K-Line сессии при серии сбоев
+        if (failures === 6) {
+          try { await this.elm.send("3E", 500); } catch (e) {}
+        } else if (failures === 10) {
+          try {
+            this.elm.log('info', 'Попытка автовосстановления сессии K-Line (AT FI)...');
+            await this.elm.send("ATFI", 1500);
+          } catch (e) {}
+        }
+        await this.delay(failures < 5 ? 80 : 250);
       }
     }
 
-    // Цикл завершён (обрыв связи или остановка) — сбрасываем флаг, иначе повторный запуск после переподключения будет заблокирован
+    // Цикл завершён (обрыв связи или остановка)
     this.isPolling = false;
   }
 
@@ -350,7 +386,7 @@ class M73Application {
       this.adcThrottle.textContent = `${Number(data.adc.tps).toFixed(3)} В`;
       this.adcTemp.textContent = `${Number(data.adc.temp).toFixed(3)} В`;
       this.adcO2.textContent = `${Number(data.adc.o2).toFixed(3)} В`;
-      this.adcVolt.textContent = `${Number(data.adc.volt).toFixed(1)} В`;
+      this.adcVolt.textContent = `${Number(data.adc.volt).toFixed(2)} В`;
     }
 
     if (data.misfires && this.misCyl1) {
@@ -358,6 +394,9 @@ class M73Application {
       this.updateMisfireBox(this.misCyl2, data.misfires.cyl2);
       this.updateMisfireBox(this.misCyl3, data.misfires.cyl3);
       this.updateMisfireBox(this.misCyl4, data.misfires.cyl4);
+      if (this.misCycle && data.misfires.cycle !== undefined) {
+        this.misCycle.textContent = data.misfires.cycle;
+      }
     }
   }
 
@@ -453,15 +492,23 @@ class M73Application {
   async testActuator(testType) {
     if (!this.elm.isConnected) return alert("Адаптер не подключен");
     
+    // Проверка условий безопасности: тесты разрешены ТОЛЬКО при RPM == 0
+    if (this.m73.latestData && this.m73.latestData.rpm > 0) {
+      alert("Внимание! Тесты исполнительных механизмов разрешены только при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nЭБУ M73 аппаратно блокирует тесты при заведённом моторе для безопасности.");
+      return;
+    }
+
     const prevPolling = this.isPolling;
     await this.stopPolling();
 
     try {
+      this.connStateText.textContent = "Выполняется тест...";
       await this.m73.runActuatorTest(testType);
-      alert("Команда теста отправлена в блок управления!");
+      alert("Тест успешно выполнен!");
     } catch (err) {
       alert("Ошибка выполнения: " + err.message);
     } finally {
+      this.connStateText.textContent = "Подключено к ЭБУ";
       if (prevPolling) this.startContinuousPolling();
     }
   }
