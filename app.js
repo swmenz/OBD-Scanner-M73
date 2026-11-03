@@ -169,7 +169,18 @@ class M73Application {
   }
 
   async toggleConnection() {
-    if (this.connecting) return;
+    // Если поиск уже идёт — повторное нажатие служит кнопкой быстрой отмены!
+    if (this.connecting) {
+      this.connecting = false;
+      this.btnConnect.disabled = false;
+      this.btnConnectText.textContent = "Подключить";
+      this.btnConnect.classList.remove('connected');
+      this.connIndicator.classList.remove('connected');
+      this.connStateText.textContent = "Не подключено";
+      this.elm.log('info', 'Поиск отменён пользователем');
+      try { await this.elm.disconnect(); } catch (e) {}
+      return;
+    }
 
     if (this.elm.isConnected) {
       await this.stopPolling();
@@ -179,9 +190,11 @@ class M73Application {
     }
 
     this.connecting = true;
-    this.btnConnect.disabled = true;
+    // Оставляем кнопку активной с текстом "Отмена", чтобы пользователь мог прервать поиск в любой момент
+    this.btnConnect.disabled = false;
+    this.btnConnectText.textContent = "Отмена";
+
     try {
-      this.btnConnectText.textContent = "Поиск...";
       await this.elm.requestAndConnect();
       
       this.btnConnectText.textContent = "Связь...";

@@ -1,5 +1,5 @@
 // Сервис-воркер для 100% оффлайн работы приложения в машине без интернета
-const CACHE_NAME = 'm73-diag-cache-v23';
+const CACHE_NAME = 'm73-diag-cache-v24';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -46,7 +46,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Перехват запросов: если сети нет, отдаем из памяти телефона
+// Перехват запросов: приоритет сети при наличии интернета, надежный оффлайн в машине
 self.addEventListener('fetch', (event) => {
   const request = event.request;
 
@@ -55,16 +55,16 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Открытие страницы: сначала сеть (свежая версия), но не дольше 3 секунд —
+  // Открытие страницы: сначала сеть (свежая версия), но не дольше 2 секунд —
   // при слабом/отсутствующем интернете в машине сразу отдаём страницу из кэша
   if (request.mode === 'navigate') {
     event.respondWith(
       Promise.race([
         fetch(request),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
       ]).catch(async () => {
         const cached = (await caches.match('./index.html')) || (await caches.match('./'));
-        return cached || new Response('Нет сети, а приложение ещё не сохранено в память телефона. Откройте его один раз с интернетом.', {
+        return cached || new Response('Оффлайн режим. Запустите приложение с интернетом хотя бы один раз.', {
           status: 503,
           headers: { 'Content-Type': 'text/plain; charset=utf-8' }
         });
@@ -73,23 +73,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Скрипты, стили, иконки: мгновенно из кэша, а в фоне обновляем копию (stale-while-revalidate)
+  // Скрипты, стили, иконки: сначала пробуем сеть (таймаут 1.5 с), чтобы
+  // любые обновления доставлялись сразу при перезагрузке. Если сети нет — мгновенно из кэша!
   event.respondWith(
-    caches.match(request, { ignoreSearch: true }).then((cachedResponse) => {
-      const networkFetch = fetch(request).then((networkResponse) => {
+    Promise.race([
+      fetch(request).then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
           const clone = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
         }
         return networkResponse;
-      });
-
-      if (cachedResponse) {
-        // Ошибку фонового обновления (нет сети) глушим — пользователь уже получил файл из кэша
-        networkFetch.catch(() => {});
-        return cachedResponse;
-      }
-      return networkFetch;
-    })
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500))
+    ]).catch(() => caches.match(request, { ignoreSearch: true }))
   );
 });
