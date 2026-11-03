@@ -76,7 +76,7 @@ class TripLogger {
   /**
    * Добавление точки данных в лог
    */
-  addPoint(params, framesConfig) {
+  addPoint(params) {
     const now = performance.now();
     
     if (this.lastFrameTime > 0) {
@@ -95,7 +95,7 @@ class TripLogger {
     if (this.isRecording) {
       const elapsedSec = ((now - this.startTime) / 1000).toFixed(3);
 
-      // Базовые параметры (Кадр 1)
+      // Базовые параметры (Кадр 1 - 21 01)
       const record = {
         "Время (сек)": parseFloat(elapsedSec),
         "Обороты двигателя (об/мин)": params.rpm,
@@ -120,26 +120,19 @@ class TripLogger {
         "Интервал_опроса (мс)": this.currentMs
       };
 
-      // Адаптации смеси и продувка адсорбера (приходят в базовом кадре 21 01)
+      // Адаптации смеси и продувка адсорбера
       record["Заданное значение лямбда (-)"] = params.targetLambda;
       record["Коэффициент продувки адсорбера (%)"] = params.purgeRate;
       record["Мультипликативная составляющая коррекции (-)"] = params.multAdapt;
       record["Аддитивная составляющая коррекции (%)"] = params.addAdapt;
 
-      // Пропуски зажигания (приходят в базовом кадре 21 01)
+      // Пропуски зажигания
       record["Пропуски цилиндр 1 (-)"] = params.misfires.cyl1;
       record["Пропуски цилиндр 2 (-)"] = params.misfires.cyl2;
       record["Пропуски цилиндр 3 (-)"] = params.misfires.cyl3;
       record["Пропуски цилиндр 4 (-)"] = params.misfires.cyl4;
       record["Суммарный счетчик пропусков (-)"] = params.misfires.total;
-
-      // Если включен опрос АЦП (Кадр 21 03)
-      if (framesConfig && framesConfig.frame2) {
-        record["АЦП ДМРВ (В)"] = params.adc.maf;
-        record["АЦП ДПДЗ (В)"] = params.adc.tps;
-        record["АЦП ДТОЖ (В)"] = params.adc.temp;
-        record["АЦП Лямбда 1 (В)"] = params.adc.o2;
-      }
+      record["Активные пропуски за цикл (1000 об)"] = (params.misfires && params.misfires.cycle !== undefined) ? params.misfires.cycle : 0;
 
       this.records.push(record);
     }

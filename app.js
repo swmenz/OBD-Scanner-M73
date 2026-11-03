@@ -11,19 +11,10 @@ class M73Application {
 
     this.isPolling = false;
     this.currentTab = 'tab-dashboard';
-
-    // Конфигурация активных кадров
-    this.currentMode = 'sport';
-    this.framesConfig = {
-      frame1: true,
-      frame2: false
-    };
-
     this.peakRpm = 0;
 
     // Состояние подключения и терминала
     this.connecting = false;
-    this.isPolling = false;
     this.pollPromise = null;
     this.termBuffer = [];
     this.TERM_LIMIT = 300;
@@ -39,12 +30,6 @@ class M73Application {
     this.connStateText = document.getElementById('connStateText');
     this.hzValue = document.getElementById('hzValue');
     this.msValue = document.getElementById('msValue');
-    
-    // Селектор режимов
-    this.modeBadge = document.getElementById('modeBadge');
-    this.customCheckboxesPanel = document.getElementById('customCheckboxesPanel');
-    this.chkFrame1 = document.getElementById('chkFrame1');
-    this.chkFrame2 = document.getElementById('chkFrame2');
 
     // Логгер
     this.btnToggleLog = document.getElementById('btnToggleLog');
@@ -107,22 +92,6 @@ class M73Application {
   bindEvents() {
     this.btnConnect.addEventListener('click', () => this.toggleConnection());
 
-    // Переключение режимов
-    document.querySelectorAll('.segment-btn, .liquid-seg-item').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.segment-btn, .liquid-seg-item').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        this.setMode(btn.getAttribute('data-mode'));
-      });
-    });
-
-    const updateCheckboxes = () => {
-      this.framesConfig.frame2 = this.chkFrame2.checked;
-      this.updateModeBadge();
-    };
-
-    this.chkFrame2.addEventListener('change', updateCheckboxes);
-
     // Навигация по вкладкам (iOS TabBar / Liquid Dock)
     document.querySelectorAll('.tabbar-item, .dock-item').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -147,33 +116,6 @@ class M73Application {
 
     this.btnReadDtc.addEventListener('click', () => this.readDtc());
     this.btnClearDtc.addEventListener('click', () => this.clearDtc());
-  }
-
-  setMode(mode) {
-    this.currentMode = mode;
-    if (mode === 'sport') {
-      this.customCheckboxesPanel.style.display = 'none';
-      this.framesConfig.frame2 = false;
-      this.chkFrame2.checked = false;
-      this.modeBadge.textContent = "Спорт (макс. скорость ~0.08 с)";
-      this.modeBadge.style.color = "var(--apple-green)";
-    } else if (mode === 'full') {
-      this.customCheckboxesPanel.style.display = 'none';
-      this.framesConfig.frame2 = true;
-      this.chkFrame2.checked = true;
-      this.modeBadge.textContent = "Все датчики + АЦП (~0.16 с)";
-      this.modeBadge.style.color = "var(--apple-blue)";
-    } else if (mode === 'custom') {
-      this.customCheckboxesPanel.style.display = 'flex';
-      this.updateModeBadge();
-    }
-  }
-
-  updateModeBadge() {
-    const count = this.framesConfig.frame2 ? 2 : 1;
-    const estTime = count === 1 ? "0.08" : "0.16";
-    this.modeBadge.textContent = `Выбрано блоков: ${count} (~${estTime} с)`;
-    this.modeBadge.style.color = "var(--apple-amber)";
   }
 
   async toggleConnection() {
@@ -270,39 +212,26 @@ class M73Application {
           continue;
         }
 
-        // 2. Логика опроса кадров в зависимости от вкладки и режима:
-        if (this.currentTab === 'tab-adc') {
-          // На вкладке «Датчики» опрашиваем АЦП (21 03) и регулярно обновляем базовый кадр (21 01) для счетчиков пропусков
-          const dataAdc = await this.m73.readConfiguredCycle('2103');
-          if (dataAdc) {
-            this.updateDashboardUI(dataAdc);
-          } else {
-            throw new Error("Пустой кадр АЦП");
-          }
-
-          // Каждый второй цикл запрашиваем 21 01 для обновления пропусков зажигания
-          if (!this._adcSubCycle || this._adcSubCycle % 2 === 0) {
-            const dataBase = await this.m73.readConfiguredCycle('2101');
-            if (dataBase) {
-              this.updateDashboardUI(dataBase);
-              this.logger.addPoint(dataBase, this.framesConfig);
-            }
-          }
-          this._adcSubCycle = (this._adcSubCycle || 0) + 1;
-
-        } else {
-          // На главной панели («Панель»):
-          // Всегда опрашиваем базовый скоростной Кадр 1 (21 01)
+        // 2. Логика строго раздельного опроса (1 вкладка = 1 кадр):
+        if (this.currentTab === 'tab-dashboard') {
+          // Главная панель: опрашиваем ИСКЛЮЧИТЕЛЬНО Кадр 1 (21 01) на максимальной скорости K-Line
           const data = await this.m73.readConfiguredCycle('2101');
           if (data) {
-            // Если пользователь включил Кадр 2 (режим «Все датчики» или чекбокс АЦП) — дополнительно читаем 21 03
-            if (this.framesConfig.frame2) {
-              await this.m73.readConfiguredCycle('2103');
-            }
-            this.updateDashboardUI(this.m73.latestData);
-            this.logger.addPoint(this.m73.latestData, this.framesConfig);
+            this.updateDashboardUI(data);
+            this.logger.addPoint(data);
           } else {
-            throw new Error("Пустой кадр");
+            throw new Error("Пустой кадр 21 01");
+          }
+        } else if (this.currentTab === 'tab-adc') {
+          // Вкладка АЦП: опрашиваем ИСКЛЮЧИТЕЛЬНО Кадр 3 (21 03) для оценки напряжений покоя датчиков
+          const dataAdc = await this.m73.readConfiguredCycle('2103');
+          if (dataAdc) {
+            this.updateAdcUI(dataAdc);
+            if (!this.logger.isRecording) {
+              this.logger.addPoint(dataAdc);
+            }
+          } else {
+            throw new Error("Пустой кадр АЦП 21 03");
           }
         }
 
@@ -398,15 +327,7 @@ class M73Application {
     this.setFlag(this.flagKnock, data.flags.knock);
     this.setFlag(this.flagFuelCut, data.flags.fuelCut);
 
-    // АЦП и пропуски
-    if (data.adc && this.adcMaf) {
-      this.adcMaf.textContent = `${Number(data.adc.maf).toFixed(3)} В`;
-      this.adcThrottle.textContent = `${Number(data.adc.tps).toFixed(3)} В`;
-      this.adcTemp.textContent = `${Number(data.adc.temp).toFixed(3)} В`;
-      this.adcO2.textContent = `${Number(data.adc.o2).toFixed(3)} В`;
-      this.adcVolt.textContent = `${Number(data.adc.volt).toFixed(2)} В`;
-    }
-
+    // Пропуски зажигания (Кадр 21 01)
     if (data.misfires && this.misCyl1) {
       this.updateMisfireBox(this.misCyl1, data.misfires.cyl1);
       this.updateMisfireBox(this.misCyl2, data.misfires.cyl2);
@@ -415,6 +336,19 @@ class M73Application {
       if (this.misCycle && data.misfires.cycle !== undefined) {
         this.misCycle.textContent = data.misfires.cycle;
       }
+    }
+  }
+
+  /**
+   * Отрисовка напряжений каналов АЦП (Кадр 21 03)
+   */
+  updateAdcUI(data) {
+    if (data && data.adc && this.adcMaf) {
+      this.adcMaf.textContent = `${Number(data.adc.maf).toFixed(3)} В`;
+      this.adcThrottle.textContent = `${Number(data.adc.tps).toFixed(3)} В`;
+      this.adcTemp.textContent = `${Number(data.adc.temp).toFixed(3)} В`;
+      this.adcO2.textContent = `${Number(data.adc.o2).toFixed(3)} В`;
+      this.adcVolt.textContent = `${Number(data.adc.volt).toFixed(2)} В`;
     }
   }
 
