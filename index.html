@@ -82,22 +82,35 @@
           </div>
         </div>
 
-        <!-- КАРТОЧКА ЛОГГЕРА В EXCEL -->
-        <div class="glass-card control-card">
-          <div class="control-top" style="margin-bottom: 0;">
-            <div class="control-info">
-              <div class="card-title">Запись поездки в Excel</div>
-              <div class="card-subtitle" id="loggerStatsText">Запись не ведётся • 0 точек</div>
+        <!-- ПРОПУСКИ ЗАЖИГАНИЯ (Кадр 21 01) -->
+        <div class="glass-card">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-heading">Пропуски зажигания</h2>
+              <p class="panel-sub">Счётчики пропусков воспламенения по цилиндрам</p>
             </div>
-            <div class="control-buttons">
-              <button id="btnToggleLog" class="glass-btn btn-rec" disabled>
-                <span class="rec-beacon" id="loggerStatusDot"></span>
-                <span id="recBtnLabel">Начать запись</span>
-              </button>
-              <button id="btnExportXlsx" class="glass-btn btn-glass-secondary" disabled>
-                Экспорт XLSX
-              </button>
+          </div>
+          <div class="cyl-matrix">
+            <div class="cyl-tile">
+              <span class="cyl-lbl">Цилиндр 1</span>
+              <span class="cyl-val" id="misCyl1">0</span>
             </div>
+            <div class="cyl-tile">
+              <span class="cyl-lbl">Цилиндр 2</span>
+              <span class="cyl-val" id="misCyl2">0</span>
+            </div>
+            <div class="cyl-tile">
+              <span class="cyl-lbl">Цилиндр 3</span>
+              <span class="cyl-val" id="misCyl3">0</span>
+            </div>
+            <div class="cyl-tile">
+              <span class="cyl-lbl">Цилиндр 4</span>
+              <span class="cyl-val" id="misCyl4">0</span>
+            </div>
+          </div>
+          <div class="misfire-cycle-summary" style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 13px; color: var(--text-secondary);">
+            <span>Активные пропуски за цикл (1000 об):</span>
+            <span class="mono-badge" id="misCycle" style="font-weight: 700; color: var(--text-primary); font-size: 16px; font-variant-numeric: tabular-nums;">0</span>
           </div>
         </div>
 
@@ -199,38 +212,6 @@
 
         </div>
 
-        <!-- ПРОПУСКИ ЗАЖИГАНИЯ (Кадр 21 01) -->
-        <div class="glass-card">
-          <div class="panel-header">
-            <div>
-              <h2 class="panel-heading">Пропуски зажигания</h2>
-              <p class="panel-sub">Счётчики пропусков воспламенения по цилиндрам</p>
-            </div>
-          </div>
-          <div class="cyl-matrix">
-            <div class="cyl-tile">
-              <span class="cyl-lbl">Цилиндр 1</span>
-              <span class="cyl-val" id="misCyl1">0</span>
-            </div>
-            <div class="cyl-tile">
-              <span class="cyl-lbl">Цилиндр 2</span>
-              <span class="cyl-val" id="misCyl2">0</span>
-            </div>
-            <div class="cyl-tile">
-              <span class="cyl-lbl">Цилиндр 3</span>
-              <span class="cyl-val" id="misCyl3">0</span>
-            </div>
-            <div class="cyl-tile">
-              <span class="cyl-lbl">Цилиндр 4</span>
-              <span class="cyl-val" id="misCyl4">0</span>
-            </div>
-          </div>
-          <div class="misfire-cycle-summary" style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 13px; color: var(--text-secondary);">
-            <span>Активные пропуски за цикл (1000 об):</span>
-            <span class="mono-badge" id="misCycle" style="font-weight: 700; color: var(--text-primary); font-size: 16px; font-variant-numeric: tabular-nums;">0</span>
-          </div>
-        </div>
-
         <!-- ФЛАГИ СОСТОЯНИЯ И РЕЖИМОВ -->
         <div class="glass-card flags-container">
           <span class="micro-header">Режимы и флаги состояния</span>
@@ -250,6 +231,25 @@
             <div class="glass-chip" id="flagFuelCut">
               <span class="chip-beacon"></span>
               <span>Отсечка топлива</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- КАРТОЧКА ЛОГГЕРА В EXCEL -->
+        <div class="glass-card control-card">
+          <div class="control-top" style="margin-bottom: 0;">
+            <div class="control-info">
+              <div class="card-title">Запись поездки в Excel</div>
+              <div class="card-subtitle" id="loggerStatsText">Запись не ведётся • 0 точек</div>
+            </div>
+            <div class="control-buttons">
+              <button id="btnToggleLog" class="glass-btn btn-rec" disabled>
+                <span class="rec-beacon" id="loggerStatusDot"></span>
+                <span id="recBtnLabel">Начать запись</span>
+              </button>
+              <button id="btnExportXlsx" class="glass-btn btn-glass-secondary" disabled>
+                Экспорт XLSX
+              </button>
             </div>
           </div>
         </div>
