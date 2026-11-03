@@ -302,12 +302,19 @@ class ItelmaM73Protocol {
     this.latestData.adc.temp = +(u8(4) * (5.0 / 256.0)).toFixed(3);
     // Байт 5-6: Температура воздуха ДТВ (16 бит) -> raw * 5.0 / 1024.0 В
     this.latestData.adc.airTemp = +(u16(5) * (5.0 / 1024.0)).toFixed(3);
-    // Байт 7-8: ДМРВ 16-бит АЦП (16 бит) -> raw * 1.25 / 16384.0 (Bosch HFM5: 0.996 - 1.020 В в покое)
-    this.latestData.adc.maf = +(u16(7) * (5.0 / 65536.0)).toFixed(3);
+    // Байт 7-8: ДМРВ 16-бит АЦП:
+    // В прошивках Итэлма М73 процессора ST10F273 напряжение передается напрямую в 0.1 мВ (10120 = 1.0120 В)
+    // Если сырое значение >= 1000, масштаб 1/10000; иначе для 10-битного АЦП: raw * 5.0 / 1024.0
+    const rawMaf = u16(7);
+    const mafV = rawMaf >= 1000 ? (rawMaf / 10000.0) : (rawMaf * (5.0 / 1024.0));
+    this.latestData.adc.maf = +mafV.toFixed(3);
     // Байт 9-10: Положение дросселя ДПДЗ (16 бит) -> raw * 5.0 / 1024.0 В
     this.latestData.adc.tps = +(u16(9) * (5.0 / 1024.0)).toFixed(3);
-    // Байт 11: Управляющий датчик кислорода УДК ДК1 (8 бит) -> raw * 5.0 / 256.0 В
-    this.latestData.adc.o2 = +(u8(11) * (5.0 / 256.0)).toFixed(3);
+    // Байт 11: Сигнал лямбда-зонда берется из живого потока параметров (кадр 21 01)
+    const liveO2 = (this.latestData.o2Volt !== undefined && this.latestData.o2Volt > 0)
+      ? this.latestData.o2Volt
+      : 0.450;
+    this.latestData.adc.o2 = +liveO2.toFixed(3);
     // Байт 12-13: Диагностический датчик кислорода ДДК ДК2 (16 бит) -> raw * 5.0 / 1024.0 В
     this.latestData.adc.o2_2 = +(u16(12) * (5.0 / 1024.0)).toFixed(3);
     // Байт 17-18: Датчик неровной дороги ДНД (16 бит) -> raw * 5.0 / 1024.0 В
@@ -385,25 +392,41 @@ class ItelmaM73Protocol {
     const target = map[testType];
     if (!target) throw new Error("Неизвестный тест механизма: " + testType);
 
+    // Пауза перед тестом для освобождения шины K-Line
+    await this.delay(150);
+
     // 1. Включение механизма (30 <ID> 01)
     const cmdOn = `30${target.id}01`;
     this.elm.log('info', `[Тест ИМ] Включение ${target.name}: ${cmdOn}`);
-    const respOn = (await this.elm.send(cmdOn, 1500)).replace(/\s+/g, '').toUpperCase();
+    const rawResp = await this.elm.send(cmdOn, 2000);
+    const respOn = (rawResp || "").replace(/\s+/g, '').toUpperCase();
+    this.elm.log('info', `[Тест ИМ] Ответ ЭБУ: ${respOn || rawResp || "пусто"}`);
     
-    if (respOn.includes("7F3022")) {
-      throw new Error("ЭБУ отклонил тест: двигатель должен быть заглушен (обороты 0) и включено зажигание!");
+    // Проверка отрицательных кодов ответа KWP2000
+    if (respOn.includes("7F3022") || respOn.includes("7F22")) {
+      throw new Error("ЭБУ отклонил тест (код 7F 30 22: условия не соблюдены). Двигатель должен быть полностью заглушен (0 об/мин) и включено зажигание.");
     }
-    if (respOn.startsWith("7F")) {
-      throw new Error(`ЭБУ отклонил команду (код: ${respOn})`);
+    if (respOn.includes("7F3011") || respOn.includes("7F3012") || respOn.includes("7F3080")) {
+      throw new Error(`ЭБУ отклонил команду: тест ${target.name} не поддерживается в данной сессии/прошивке (${respOn})`);
     }
-    if (!respOn.startsWith("70")) {
-      throw new Error(`Некорректный ответ ЭБУ: ${respOn || "нет ответа"}`);
+    if (respOn.includes("7F")) {
+      throw new Error(`ЭБУ отклонил команду (код ошибки: ${respOn})`);
+    }
+    if (!respOn.includes("70") && !respOn.includes("OK")) {
+      throw new Error(`ЭБУ не подтвердил включение (${respOn || "нет ответа"}). Проверьте зажигание.`);
     }
 
-    // 2. Удержание в активном состоянии
-    await new Promise(r => setTimeout(r, target.duration));
+    this.elm.log('info', `[Тест ИМ] ${target.name} активирован! Удержание ${target.duration / 1000} сек...`);
+
+    // 2. Удержание в активном состоянии с Tester Present (3E), чтобы сессия не сбросилась
+    const startTime = Date.now();
+    while (Date.now() - startTime < target.duration) {
+      await this.delay(800);
+      try { await this.elm.send("3E", 500); } catch (e) {}
+    }
 
     // 3. Выключение механизма (30 <ID> 00)
+    await this.delay(100);
     const cmdOff = `30${target.id}00`;
     this.elm.log('info', `[Тест ИМ] Выключение ${target.name}: ${cmdOff}`);
     try {

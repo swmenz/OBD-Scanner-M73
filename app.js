@@ -273,6 +273,8 @@ class M73Application {
     this.adcMaf = document.getElementById('adcMaf');
     this.adcThrottle = document.getElementById('adcThrottle');
     this.adcTemp = document.getElementById('adcTemp');
+    this.adcAirTemp = document.getElementById('adcAirTemp');
+    this.adcRoughRoad = document.getElementById('adcRoughRoad');
     this.adcO2 = document.getElementById('adcO2');
     this.adcVolt = document.getElementById('adcVolt');
     this.misCyl1 = document.getElementById('misCyl1');
@@ -796,9 +798,26 @@ class M73Application {
    */
   updateAdcUI(data) {
     if (data && data.adc && this.adcMaf) {
-      this.adcMaf.textContent = `${Number(data.adc.maf).toFixed(3)} В`;
+      const mafV = Number(data.adc.maf);
+      this.adcMaf.textContent = `${mafV.toFixed(3)} В`;
+
+      // Цветовая подсветка состояния ДМРВ по эталону покоя (0.996 ... 1.020 В)
+      if (mafV >= 0.996 && mafV <= 1.020) {
+        this.adcMaf.style.color = 'var(--apple-green)';
+      } else if (mafV >= 0.980 && mafV <= 1.035) {
+        this.adcMaf.style.color = 'var(--apple-amber)';
+      } else {
+        this.adcMaf.style.color = 'var(--apple-rose)';
+      }
+
       this.adcThrottle.textContent = `${Number(data.adc.tps).toFixed(3)} В`;
       this.adcTemp.textContent = `${Number(data.adc.temp).toFixed(3)} В`;
+      if (this.adcAirTemp && data.adc.airTemp !== undefined) {
+        this.adcAirTemp.textContent = `${Number(data.adc.airTemp).toFixed(3)} В`;
+      }
+      if (this.adcRoughRoad && data.adc.roughRoad !== undefined) {
+        this.adcRoughRoad.textContent = `${Number(data.adc.roughRoad).toFixed(3)} В`;
+      }
       this.adcO2.textContent = `${Number(data.adc.o2).toFixed(3)} В`;
       this.adcVolt.textContent = `${Number(data.adc.volt).toFixed(2)} В`;
     }
@@ -987,29 +1006,25 @@ class M73Application {
   }
 
   async testActuator(testType) {
-    if (!this.elm.isConnected) return alert("Адаптер не подключен");
+    if (!this.elm.isConnected) return alert("Адаптер не подключен к ЭБУ");
+
+    // 1. Проверка условий безопасности: тесты разрешены ТОЛЬКО при RPM == 0
+    if (this.m73.latestData && this.m73.latestData.rpm > 0) {
+      return alert("Внимание! Тесты исполнительных механизмов разрешены только при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nЭБУ M73 аппаратно блокирует тесты при заведённом моторе.");
+    }
 
     const prevPolling = this.isPolling;
     await this.stopPolling();
 
-    // Опрашиваем актуальный статус перед тестом (проверка заглушен ли мотор прямо сейчас)
-    try {
-      await this.m73.readConfiguredCycle('2101');
-    } catch (e) {}
-
-    // Проверка условий безопасности: тесты разрешены ТОЛЬКО при RPM == 0
-    if (this.m73.latestData && this.m73.latestData.rpm > 0) {
-      alert("Внимание! Тесты исполнительных механизмов разрешены только при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nЭБУ M73 аппаратно блокирует тесты при заведённом моторе.");
-      if (prevPolling) this.startContinuousPolling();
-      return;
-    }
+    // 2. Даем шине 150 мс тишины для исключения коллизий пакетов
+    await this.delay(150);
 
     try {
       this.connStateText.textContent = "Выполняется тест...";
       await this.m73.runActuatorTest(testType);
-      alert("Тест успешно выполнен!");
+      alert("Тест успешно выполнен! Механизм отработал штатно.");
     } catch (err) {
-      alert("Ошибка выполнения: " + err.message);
+      alert("Ошибка выполнения теста: " + err.message);
     } finally {
       this.connStateText.textContent = "Подключено к ЭБУ";
       if (prevPolling) this.startContinuousPolling();
