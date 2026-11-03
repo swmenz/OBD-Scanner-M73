@@ -37,6 +37,17 @@ class M73Application {
     this.loggerStatusDot = document.getElementById('loggerStatusDot');
     this.loggerStatsText = document.getElementById('loggerStatsText');
     this.recBtnLabel = document.getElementById('recBtnLabel');
+    this.chkAutoRecord = document.getElementById('chkAutoRecord');
+    this.btnOpenHistory = document.getElementById('btnOpenHistory');
+    this.historyCount = document.getElementById('historyCount');
+    this.tripSavedAlert = document.getElementById('tripSavedAlert');
+    this.tripSavedDetails = document.getElementById('tripSavedDetails');
+    this.btnQuickExport = document.getElementById('btnQuickExport');
+    this.historyModal = document.getElementById('historyModal');
+    this.historyList = document.getElementById('historyList');
+    this.btnCloseHistory = document.getElementById('btnCloseHistory');
+    this.btnClearHistory = document.getElementById('btnClearHistory');
+    this.lastAutoSavedTrip = null;
 
     // Главные приборы
     this.valRpm = document.getElementById('valRpm');
@@ -114,6 +125,45 @@ class M73Application {
     this.btnToggleLog.addEventListener('click', () => this.toggleLogging());
     this.btnExportXlsx.addEventListener('click', () => this.logger.exportToXlsx());
 
+    // Автозапись и история поездок
+    if (this.chkAutoRecord) {
+      const savedAutoRec = localStorage.getItem('m73_autorecord');
+      this.chkAutoRecord.checked = savedAutoRec !== 'false';
+      this.chkAutoRecord.addEventListener('change', () => {
+        localStorage.setItem('m73_autorecord', this.chkAutoRecord.checked);
+      });
+    }
+
+    if (this.btnOpenHistory) {
+      this.btnOpenHistory.addEventListener('click', () => this.openHistoryModal());
+    }
+    if (this.btnCloseHistory) {
+      this.btnCloseHistory.addEventListener('click', () => this.closeHistoryModal());
+    }
+    if (this.historyModal) {
+      this.historyModal.addEventListener('click', (e) => {
+        if (e.target === this.historyModal) this.closeHistoryModal();
+      });
+    }
+    if (this.btnClearHistory) {
+      this.btnClearHistory.addEventListener('click', async () => {
+        if (confirm("Удалить всю историю сохранённых поездок?")) {
+          await this.logger.storage.clearAll();
+          await this.refreshHistory();
+        }
+      });
+    }
+    if (this.btnQuickExport) {
+      this.btnQuickExport.addEventListener('click', () => {
+        if (this.lastAutoSavedTrip) {
+          this.logger.exportToXlsx(this.lastAutoSavedTrip.records, this.lastAutoSavedTrip.fileName);
+        } else {
+          this.logger.exportToXlsx();
+        }
+      });
+    }
+    this.refreshHistoryCount();
+
     this.btnReadDtc.addEventListener('click', () => this.readDtc());
     this.btnClearDtc.addEventListener('click', () => this.clearDtc());
   }
@@ -145,7 +195,15 @@ class M73Application {
       this.peakRpm = 0;
       this.valPeakRpm.textContent = "Пик: 0";
 
+      // Скрываем прошлый баннер о сохранённой поездке
+      if (this.tripSavedAlert) this.tripSavedAlert.style.display = 'none';
+
       this.startContinuousPolling();
+
+      // Автозапись при подключении (если тумблер включен)
+      if (this.chkAutoRecord && this.chkAutoRecord.checked && !this.logger.isRecording) {
+        this.startLogging();
+      }
     } catch (err) {
       const msg = err && err.message ? err.message : (typeof err === 'string' ? err : "Не удалось найти Bluetooth адаптер");
       alert(msg);
@@ -159,10 +217,12 @@ class M73Application {
     }
   }
 
-  handleDisconnectedState() {
+  async handleDisconnectedState() {
     this.isPolling = false;
-    // Обрыв связи во время записи: корректно завершаем запись, чтобы данные можно было выгрузить
-    if (this.logger.isRecording) this.toggleLogging();
+    // Обрыв связи или выключение зажигания: корректно завершаем запись и сохраняем поездку в IndexedDB
+    if (this.logger.isRecording) {
+      await this.stopLogging();
+    }
     this.btnConnect.classList.remove('connected');
     this.btnConnectText.textContent = "Подключить";
     this.connIndicator.classList.remove('connected');
@@ -171,6 +231,7 @@ class M73Application {
     this.btnExportXlsx.disabled = this.logger.records.length === 0;
     this.hzValue.textContent = "0.0";
     this.msValue.textContent = "0";
+    this.refreshHistoryCount();
   }
 
   startContinuousPolling() {
@@ -374,25 +435,113 @@ class M73Application {
     else element.classList.remove('active');
   }
 
-  toggleLogging() {
+  startLogging() {
+    this.logger.start();
+    this.btnToggleLog.classList.add('active');
+    this.recBtnLabel.textContent = "Остановить";
+    this.loggerStatusDot.classList.add('recording');
+    this.btnExportXlsx.disabled = true;
+    if (this.tripSavedAlert) this.tripSavedAlert.style.display = 'none';
+  }
+
+  async stopLogging() {
+    const saved = await this.logger.stop(this.peakRpm || 0);
+    this.btnToggleLog.classList.remove('active');
+    this.recBtnLabel.textContent = "Начать запись";
+    this.loggerStatusDot.classList.remove('recording');
+    this.loggerStatsText.textContent = `Запись завершена • ${this.logger.records.length} точек`;
+    this.btnExportXlsx.disabled = this.logger.records.length === 0;
+    if (saved) {
+      this.lastAutoSavedTrip = saved;
+      this.showTripSavedBanner(saved);
+      this.refreshHistoryCount();
+    }
+    return saved;
+  }
+
+  async toggleLogging() {
     if (!this.logger.isRecording) {
       if (this.logger.records && this.logger.records.length > 0) {
         if (!confirm(`Предыдущая сессия содержит ${this.logger.records.length} точек. Начать новую запись? Предыдущий лог будет очищен.`)) {
           return;
         }
       }
-      this.logger.start();
-      this.btnToggleLog.classList.add('active');
-      this.recBtnLabel.textContent = "Остановить";
-      this.loggerStatusDot.classList.add('recording');
-      this.btnExportXlsx.disabled = true;
+      this.startLogging();
     } else {
-      this.logger.stop();
-      this.btnToggleLog.classList.remove('active');
-      this.recBtnLabel.textContent = "Начать запись";
-      this.loggerStatusDot.classList.remove('recording');
-      this.loggerStatsText.textContent = `Запись завершена • ${this.logger.records.length} точек`;
-      this.btnExportXlsx.disabled = false;
+      await this.stopLogging();
+    }
+  }
+
+  showTripSavedBanner(trip) {
+    if (!this.tripSavedAlert) return;
+    this.tripSavedDetails.textContent = `${trip.pointCount} точек • ${trip.dateStr} (Пик: ${trip.maxRpm || 0} об/мин)`;
+    this.tripSavedAlert.style.display = 'flex';
+  }
+
+  async refreshHistoryCount() {
+    try {
+      const trips = await this.logger.storage.getAllTripsMeta();
+      if (this.historyCount) this.historyCount.textContent = trips.length;
+    } catch (e) {}
+  }
+
+  async openHistoryModal() {
+    if (this.historyModal) this.historyModal.classList.add('open');
+    await this.refreshHistory();
+  }
+
+  closeHistoryModal() {
+    if (this.historyModal) this.historyModal.classList.remove('open');
+  }
+
+  async refreshHistory() {
+    try {
+      const trips = await this.logger.storage.getAllTripsMeta();
+      if (this.historyCount) this.historyCount.textContent = trips.length;
+
+      if (!this.historyList) return;
+
+      if (trips.length === 0) {
+        this.historyList.innerHTML = '<div class="empty-state-card">История поездок пуста</div>';
+        if (this.btnClearHistory) this.btnClearHistory.style.display = 'none';
+        return;
+      }
+
+      if (this.btnClearHistory) this.btnClearHistory.style.display = 'block';
+      this.historyList.innerHTML = trips.map(t => `
+        <div class="history-item">
+          <div class="history-info">
+            <span class="history-date">${t.dateStr}</span>
+            <span class="history-meta">${t.pointCount} точек • Пик: ${t.maxRpm || 0} об/мин</span>
+          </div>
+          <div class="history-actions">
+            <button class="glass-btn btn-primary-glass btn-compact" onclick="M73App.exportHistoryTrip(${t.id})">Скачать</button>
+            <button class="glass-btn btn-glass-danger btn-compact" onclick="M73App.deleteHistoryTrip(${t.id})">&times;</button>
+          </div>
+        </div>
+      `).join('');
+    } catch (e) {
+      if (this.historyList) {
+        this.historyList.innerHTML = `<div class="empty-state-card" style="color: var(--apple-rose)">Ошибка: ${e.message}</div>`;
+      }
+    }
+  }
+
+  async exportHistoryTrip(id) {
+    try {
+      const trip = await this.logger.storage.getTrip(id);
+      if (trip && trip.records) {
+        await this.logger.exportToXlsx(trip.records, trip.fileName);
+      }
+    } catch (e) {
+      alert("Ошибка экспорта: " + e.message);
+    }
+  }
+
+  async deleteHistoryTrip(id) {
+    if (confirm("Удалить эту поездку из памяти?")) {
+      await this.logger.storage.deleteTrip(id);
+      await this.refreshHistory();
     }
   }
 

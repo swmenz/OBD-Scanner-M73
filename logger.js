@@ -1,14 +1,142 @@
 /**
+ * Хранилище логов в энергонезависимой памяти браузера (IndexedDB)
+ * Автоматически сохраняет поездки при выключении зажигания и защищает от потери данных.
+ */
+class TripStorage {
+  constructor() {
+    this.dbName = 'Priora_M73_Logs';
+    this.storeName = 'trips';
+    this.version = 1;
+    this.db = null;
+  }
+
+  async _openDb() {
+    if (this.db) return this.db;
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(this.dbName, this.version);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(this.storeName)) {
+          db.createObjectStore(this.storeName, { keyPath: 'id' });
+        }
+      };
+      req.onsuccess = (e) => {
+        this.db = e.target.result;
+        resolve(this.db);
+      };
+      req.onerror = (e) => reject(e.target.error);
+    });
+  }
+
+  async saveTrip(records, maxRpm = 0) {
+    if (!records || records.length === 0) return null;
+    const db = await this._openDb();
+    const now = new Date();
+    const dateFormatted = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const fileDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
+    
+    const trip = {
+      id: Date.now(),
+      dateStr: dateFormatted,
+      fileName: `Приора_М73_Лог_${fileDateStr}.xlsx`,
+      pointCount: records.length,
+      maxRpm: maxRpm,
+      records: records
+    };
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.storeName, 'readwrite');
+      const store = tx.objectStore(this.storeName);
+      store.add(trip);
+      tx.oncomplete = async () => {
+        await this._pruneOldTrips();
+        resolve(trip);
+      };
+      tx.onerror = (e) => reject(e.target.error);
+    });
+  }
+
+  async _pruneOldTrips(maxCount = 10) {
+    const trips = await this.getAllTripsMeta();
+    if (trips.length > maxCount) {
+      trips.sort((a, b) => b.id - a.id);
+      const toDelete = trips.slice(maxCount);
+      const db = await this._openDb();
+      const tx = db.transaction(this.storeName, 'readwrite');
+      const store = tx.objectStore(this.storeName);
+      for (const t of toDelete) {
+        store.delete(t.id);
+      }
+    }
+  }
+
+  async getAllTripsMeta() {
+    const db = await this._openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.storeName, 'readonly');
+      const store = tx.objectStore(this.storeName);
+      const req = store.getAll();
+      req.onsuccess = () => {
+        const all = req.result || [];
+        const meta = all.map(t => ({
+          id: t.id,
+          dateStr: t.dateStr,
+          fileName: t.fileName,
+          pointCount: t.pointCount,
+          maxRpm: t.maxRpm
+        })).sort((a, b) => b.id - a.id);
+        resolve(meta);
+      };
+      req.onerror = (e) => reject(e.target.error);
+    });
+  }
+
+  async getTrip(id) {
+    const db = await this._openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.storeName, 'readonly');
+      const store = tx.objectStore(this.storeName);
+      const req = store.get(id);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = (e) => reject(e.target.error);
+    });
+  }
+
+  async deleteTrip(id) {
+    const db = await this._openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.storeName, 'readwrite');
+      const store = tx.objectStore(this.storeName);
+      store.delete(id);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = (e) => reject(e.target.error);
+    });
+  }
+
+  async clearAll() {
+    const db = await this._openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.storeName, 'readwrite');
+      const store = tx.objectStore(this.storeName);
+      store.clear();
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = (e) => reject(e.target.error);
+    });
+  }
+}
+
+/**
  * Модуль скоростного логирования телеметрии и экспорта в формат Excel (.xlsx)
  * Полностью согласован со структурой и названиями колонок OpenDiag Mobile.
- * Включает фоновый режим работы на iOS (Silent Audio Loop) и WakeLock.
+ * Включает фоновый режим работы на iOS (Silent Audio Loop), WakeLock и автосохранение.
  */
-
 class TripLogger {
   constructor() {
     this.isRecording = false;
     this.records = [];
     this.startTime = null;
+    this.storage = new TripStorage();
+    this.lastSavedTrip = null;
     
     // Метрики частоты опроса
     this.lastFrameTime = 0;
@@ -68,9 +196,19 @@ class TripLogger {
     this._enableBackgroundMode();
   }
 
-  stop() {
+  async stop(maxRpm = 0) {
     this.isRecording = false;
     this._disableBackgroundMode();
+    if (this.records && this.records.length >= 5) {
+      try {
+        const saved = await this.storage.saveTrip(this.records, maxRpm);
+        this.lastSavedTrip = saved;
+        return saved;
+      } catch (err) {
+        console.warn("Ошибка автосохранения поездки:", err);
+      }
+    }
+    return null;
   }
 
   /**
@@ -149,8 +287,9 @@ class TripLogger {
   /**
    * Генерация файла .xlsx и вызов системного меню iOS «Поделиться»
    */
-  async exportToXlsx() {
-    if (this.records.length === 0) {
+  async exportToXlsx(recordsToExport = null, customFileName = null) {
+    const data = recordsToExport || this.records;
+    if (!data || data.length === 0) {
       alert("Нет записанных данных для сохранения!");
       return;
     }
@@ -160,14 +299,14 @@ class TripLogger {
       return;
     }
 
-    const worksheet = XLSX.utils.json_to_sheet(this.records);
+    const worksheet = XLSX.utils.json_to_sheet(data);
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Лог М73");
 
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
-    const fileName = `Приора_М73_Лог_${dateStr}.xlsx`;
+    const fileName = customFileName || `Приора_М73_Лог_${dateStr}.xlsx`;
 
     const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -179,7 +318,7 @@ class TripLogger {
         await navigator.share({
           files: [file],
           title: 'Лог диагностики Приора М73',
-          text: `Лог М73 (${this.records.length} точек)`
+          text: `Лог М73 (${data.length} точек)`
         });
         return;
       } catch (err) {

@@ -252,6 +252,28 @@
               </button>
             </div>
           </div>
+
+          <!-- Строка автозаписи и истории -->
+          <div class="auto-rec-row">
+            <label class="auto-rec-label">
+              <input type="checkbox" id="chkAutoRecord" checked>
+              <span class="switch-slider"></span>
+              <span class="auto-rec-text">Автозапись при подключении</span>
+            </label>
+            <button id="btnOpenHistory" class="history-link-btn" type="button">
+              История (<span id="historyCount">0</span>)
+            </button>
+          </div>
+
+          <!-- Баннер автосохраненной поездки -->
+          <div id="tripSavedAlert" class="trip-saved-alert" style="display: none;">
+            <div class="alert-icon">✓</div>
+            <div class="alert-content">
+              <strong>Поездка сохранена в память</strong>
+              <span id="tripSavedDetails">0 точек</span>
+            </div>
+            <button id="btnQuickExport" class="glass-btn btn-primary-glass btn-compact" type="button">Скачать</button>
+          </div>
         </div>
 
       </section>
@@ -463,6 +485,22 @@
       </button>
     </nav>
 
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО: ИСТОРИЯ ПОЕЗДОК -->
+  <div id="historyModal" class="modal-backdrop">
+    <div class="glass-modal">
+      <div class="modal-header">
+        <div class="modal-title">Сохранённые поездки</div>
+        <button id="btnCloseHistory" class="modal-close-btn" type="button">&times;</button>
+      </div>
+      <div class="modal-body" id="historyList">
+        <div class="empty-state-card">История поездок пуста</div>
+      </div>
+      <div class="modal-footer">
+        <button id="btnClearHistory" class="glass-btn btn-glass-danger btn-compact" type="button" style="display: none;">Очистить всё</button>
+      </div>
+    </div>
   </div>
 
   <script src="elm327.js"></script>
