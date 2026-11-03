@@ -100,7 +100,7 @@ class Elm327BLE {
     ];
 
     try {
-      // Ищем конкретно ваш адаптер "OBD BLE" или любые устройства с префиксами OBD/IOS/ELM
+      // Ищем адаптер "OBD BLE" или любые устройства с диагностическими префиксами
       this.device = await navigator.bluetooth.requestDevice({
         filters: [
           { name: "OBD BLE" },
@@ -108,32 +108,23 @@ class Elm327BLE {
           { namePrefix: "IOS" },
           { namePrefix: "Viecar" },
           { namePrefix: "V-LINK" },
-          { namePrefix: "ELM" }
+          { namePrefix: "ELM" },
+          { namePrefix: "iCar" },
+          { namePrefix: "K-Line" }
         ],
         optionalServices: optionalServices
       });
-    } catch (err1) {
-      // Если пользователь сам нажал «Отмена», не навязываем второй диалог выбора
-      if (err1.name === 'NotFoundError' || (err1.message && err1.message.includes('User cancelled'))) {
-        throw new Error("Поиск устройства отменен пользователем");
-      }
-      this.log('info', 'Повторная попытка без фильтра имен...');
-      try {
-        // Резервный вариант, если имя адаптера скрыто
-        this.device = await navigator.bluetooth.requestDevice({
-          acceptAllDevices: true,
-          optionalServices: optionalServices
-        });
-      } catch (err2) {
-        if (err2.name === 'NotFoundError' || (err2.message && err2.message.includes('User cancelled'))) {
-          throw new Error("Поиск устройства отменен пользователем");
-        }
-        throw new Error(err2.message || "Не удалось найти Bluetooth устройство");
-      }
+    } catch (err) {
+      this.log('info', 'Окно выбора адаптера закрыто');
+      const cancelErr = new Error("Поиск устройства отменен пользователем");
+      cancelErr.isCancelled = true;
+      throw cancelErr;
     }
 
     if (!this.device) {
-      throw new Error("Адаптер не выбран");
+      const cancelErr = new Error("Адаптер не выбран");
+      cancelErr.isCancelled = true;
+      throw cancelErr;
     }
 
     this.log('info', `Выбран адаптер: ${this.device.name || 'Безымянный'}`);

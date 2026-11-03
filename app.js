@@ -205,15 +205,29 @@ class M73Application {
         this.startLogging();
       }
     } catch (err) {
-      const msg = err && err.message ? err.message : (typeof err === 'string' ? err : "Не удалось найти Bluetooth адаптер");
-      alert(msg);
-      // Если Bluetooth уже открыт, а ЭБУ не ответил — обязательно закрываем канал,
-      // иначе кнопка «Подключить» превратится в «Отключить» без реальной связи
+      // Проверяем, была ли это намеренная отмена или закрытие окна пользователем
+      const isCancelled = err.isCancelled ||
+                          err.name === 'NotFoundError' ||
+                          err.name === 'AbortError' ||
+                          (err.message && /cancel|отмен|closed|dismiss|abort/i.test(err.message));
+
+      if (!isCancelled) {
+        alert(err && err.message ? err.message : "Не удалось найти Bluetooth адаптер");
+      }
+      this.elm.log('info', isCancelled ? 'Выбор устройства отменен пользователем' : 'Ошибка подключения: ' + (err.message || err));
+
+      // Если Bluetooth уже открыт, а ЭБУ не ответил — закрываем канал
       try { await this.elm.disconnect(); } catch (e) {}
       this.handleDisconnectedState();
     } finally {
       this.connecting = false;
       this.btnConnect.disabled = false;
+      if (!this.elm.isConnected) {
+        this.btnConnectText.textContent = "Подключить";
+        this.btnConnect.classList.remove('connected');
+        this.connIndicator.classList.remove('connected');
+        this.connStateText.textContent = "Не подключено";
+      }
     }
   }
 
