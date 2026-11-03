@@ -269,7 +269,7 @@ class M73Application {
       } catch (err) {
         failures++;
         if (failures === 10) this.connStateText.textContent = "ЭБУ не отвечает";
-        await this.delay(failures < 10 ? 30 : 250);
+        await this.delay(failures < 10 ? 80 : 250);
       }
     }
 

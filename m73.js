@@ -106,14 +106,15 @@ class ItelmaM73Protocol {
    */
   async readConfiguredCycle(framesConfig) {
     // 1. Всегда опрашиваем базовый скоростной Кадр 1 (содержит параметры двигателя, смесь и пропуски)
-    const raw1 = await this.elm.send("2101", 350);
+    // Таймаут 1000 мс — защита от зависания. Ответ принимается мгновенно по символу «>» (обычно 350–450 мс)
+    const raw1 = await this.elm.send("2101", 1000);
     // Если ЭБУ не вернул корректный кадр (NO DATA, обрыв K-Line), не выдаём устаревшие данные за свежие
     if (!this.parseFrame2101(raw1)) return null;
 
     // 2. Если включен Кадр 2 (Каналы АЦП - в М73 это кадр 21 03)
     if (framesConfig.frame2) {
       try {
-        const rawAdc = await this.elm.send("2103", 350);
+        const rawAdc = await this.elm.send("2103", 1000);
         this.parseFrame2103(rawAdc);
       } catch (e) {}
     }
