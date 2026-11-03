@@ -442,6 +442,11 @@ class M73Application {
 
   toggleLogging() {
     if (!this.logger.isRecording) {
+      if (this.logger.records && this.logger.records.length > 0) {
+        if (!confirm(`Предыдущая сессия содержит ${this.logger.records.length} точек. Начать новую запись? Предыдущий лог будет очищен.`)) {
+          return;
+        }
+      }
       this.logger.start();
       this.btnToggleLog.classList.add('active');
       this.recBtnLabel.textContent = "Остановить";
@@ -538,10 +543,27 @@ class M73Application {
   }
 
   async resetWithInit() {
-    if (!confirm("Внимание! Будут сброшены таблицы самообучения топлива и угла зажигания М73 к заводским значениям. Двигатель должен быть заглушен, зажигание включено. Продолжить?")) return;
+    if (!this.elm.isConnected) return alert("Адаптер не подключен");
 
     const prevPolling = this.isPolling;
     await this.stopPolling();
+
+    // Опрашиваем актуальный статус перед сбросом (проверка заглушен ли мотор)
+    try {
+      await this.m73.readConfiguredCycle('2101');
+    } catch (e) {}
+
+    // Проверка условий безопасности: сброс ЭБУ разрешен ТОЛЬКО при RPM == 0
+    if (this.m73.latestData && this.m73.latestData.rpm > 0) {
+      alert("Внимание! Сброс ЭБУ с инициализацией разрешен только при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nПерезапуск контроллера при заведённом двигателе или во время движения строго запрещен.");
+      if (prevPolling) this.startContinuousPolling();
+      return;
+    }
+
+    if (!confirm("Внимание! Будут сброшены таблицы самообучения топлива и угла зажигания М73 к заводским значениям. Двигатель должен быть заглушен, зажигание включено. Продолжить?")) {
+      if (prevPolling) this.startContinuousPolling();
+      return;
+    }
 
     let sessionEnded = false;
     try {

@@ -113,6 +113,10 @@ class Elm327BLE {
         optionalServices: optionalServices
       });
     } catch (err1) {
+      // Если пользователь сам нажал «Отмена», не навязываем второй диалог выбора
+      if (err1.name === 'NotFoundError' || (err1.message && err1.message.includes('User cancelled'))) {
+        throw new Error("Поиск устройства отменен пользователем");
+      }
       this.log('info', 'Повторная попытка без фильтра имен...');
       try {
         // Резервный вариант, если имя адаптера скрыто
@@ -122,7 +126,7 @@ class Elm327BLE {
         });
       } catch (err2) {
         if (err2.name === 'NotFoundError' || (err2.message && err2.message.includes('User cancelled'))) {
-          throw new Error("Окно выбора закрыто или устройство не выбрано");
+          throw new Error("Поиск устройства отменен пользователем");
         }
         throw new Error(err2.message || "Не удалось найти Bluetooth устройство");
       }
@@ -278,8 +282,13 @@ class Elm327BLE {
       clearTimeout(this.commandTimeoutTimer);
       this.commandTimeoutTimer = null;
     }
+    const pendingReject = this.activeRejecter;
     this.activeResolver = null;
     this.activeRejecter = null;
+    this.rxBuffer = "";
+    if (pendingReject) {
+      pendingReject(new Error("Соединение с адаптером разорвано"));
+    }
     this._queue = Promise.resolve();
 
     if (this.device && this.device.gatt.connected) {
