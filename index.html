@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" href="icon-192.png">
   <title>Диагностика М73 — Лада Приора</title>
   
-  <link rel="stylesheet" href="styles.css?v=25">
+  <link rel="stylesheet" href="styles.css?v=26">
   <script src="xlsx.full.min.js"></script>
   <link rel="manifest" href="manifest.json">
 </head>
@@ -201,12 +201,30 @@
             </div>
           </div>
 
+          <!-- Температура впуска (ДТВ) -->
+          <div class="glass-card metric-tile">
+            <span class="tile-label">Температура впуска (ДТВ)</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valIntakeTemp">0.0</span>
+              <span class="tile-unit">°C</span>
+            </div>
+          </div>
+
           <!-- Бортовое напряжение -->
           <div class="glass-card metric-tile">
             <span class="tile-label">Бортовая сеть</span>
             <div class="tile-val-wrap">
               <span class="tile-num" id="valVoltage">0.0</span>
               <span class="tile-unit">В</span>
+            </div>
+          </div>
+
+          <!-- Датчик неровной дороги (ДНД) -->
+          <div class="glass-card metric-tile">
+            <span class="tile-label">Неровная дорога (ДНД)</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valRoughRoad">0.00g</span>
+              <span class="tile-unit">ускорение</span>
             </div>
           </div>
 
@@ -521,9 +539,9 @@
     </div>
   </div>
 
-  <script src="elm327.js?v=25"></script>
-  <script src="m73.js?v=25"></script>
-  <script src="logger.js?v=25"></script>
-  <script src="app.js?v=25"></script>
+  <script src="elm327.js?v=26"></script>
+  <script src="m73.js?v=26"></script>
+  <script src="logger.js?v=26"></script>
+  <script src="app.js?v=26"></script>
 </body>
 </html>

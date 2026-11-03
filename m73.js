@@ -32,6 +32,8 @@ class ItelmaM73Protocol {
       purgeRate: 0,
       multAdapt: 1.0,
       addAdapt: 0,
+      intakeTemp: 0,
+      roughRoad: 0.0,
       misfires: { cyl1: 0, cyl2: 0, cyl3: 0, cyl4: 0, total: 0 },
       adc: { maf: 0, tps: 0, temp: 0, o2: 0, volt: 0 },
       flags: { idle: true, lambda: false, knock: false, fuelCut: false }
@@ -212,6 +214,10 @@ class ItelmaM73Protocol {
     // Точная формула декомпилированного OpenDiag hk.java (Case 59: u16 / 32768.0)
     const multAdapt = bytes.length >= 59 ? +(u16(57) / 32768).toFixed(3) : 1.0;
 
+    // Байты 59, 60: Датчик неровной дороги ДНД (вертикальное ускорение кузова в g)
+    // Точная формула декомпилированного OpenDiag hk.java (Case 61: s16 * 3.0 / 64.0)
+    const roughRoad = bytes.length >= 61 ? +((s16(59) * 3.0) / 64.0).toFixed(2) : 0.0;
+
     // Счетчики пропусков воспламенения (16 бит). Порядок в пакете M73 (OpenDiag): цилиндры 1, 3, 4, 2
     this.latestData.misfires.cyl1 = u16(36);
     this.latestData.misfires.cyl3 = u16(38);
@@ -263,6 +269,7 @@ class ItelmaM73Protocol {
     this.latestData.purgeRate = purgeRate;
     this.latestData.multAdapt = multAdapt;
     this.latestData.addAdapt = addAdapt;
+    this.latestData.roughRoad = roughRoad;
     this.latestData.flags = flags;
 
     return this.latestData;

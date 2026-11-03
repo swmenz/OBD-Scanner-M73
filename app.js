@@ -73,6 +73,8 @@ class M73Application {
     this.valVoltage = document.getElementById('valVoltage');
     this.valMultAdapt = document.getElementById('valMultAdapt');
     this.valAddAdapt = document.getElementById('valAddAdapt');
+    this.valIntakeTemp = document.getElementById('valIntakeTemp');
+    this.valRoughRoad = document.getElementById('valRoughRoad');
 
     // Флаги
     this.flagIdle = document.getElementById('flagIdle');
@@ -434,6 +436,23 @@ class M73Application {
       this.barTemp.style.background = 'linear-gradient(90deg, var(--apple-blue), var(--apple-green))';
     }
     this.valVoltage.textContent = data.voltage.toFixed(1);
+
+    // ДТВ (Температура впускного воздуха)
+    if (this.valIntakeTemp && data.intakeTemp !== undefined && data.intakeTemp !== null) {
+      this.valIntakeTemp.textContent = data.intakeTemp.toFixed(1);
+    }
+
+    // ДНД (Датчик неровной дороги, вертикальное ускорение кузова)
+    if (this.valRoughRoad && data.roughRoad !== undefined && data.roughRoad !== null) {
+      const gVal = data.roughRoad;
+      const sign = gVal > 0 ? '+' : '';
+      this.valRoughRoad.textContent = `${sign}${gVal.toFixed(2)}g`;
+      if (Math.abs(gVal) >= 0.5) {
+        this.valRoughRoad.style.color = 'var(--apple-amber)';
+      } else {
+        this.valRoughRoad.style.color = 'var(--text-primary)';
+      }
+    }
 
     // Флаги состояния
     this.setFlag(this.flagIdle, data.flags.idle);

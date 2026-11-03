@@ -246,6 +246,7 @@ class TripLogger {
         "Угол опережения зажигания (°П.К.В)": params.spark,
         "Величина отскока УОЗ при детонации (°П.К.В)": params.sparkRetard,
         "Температура охлаждающей жидкости (°C)": params.temp,
+        "Температура впускного воздуха (°C)": (params.intakeTemp !== undefined ? params.intakeTemp : 0),
         "Напряжение питания (В)": params.voltage,
         "Позиция шагового двигателя (шаг)": params.iacSteps,
         "Расход топлива (л/ч)": params.fuelRate,
@@ -263,6 +264,7 @@ class TripLogger {
       record["Коэффициент продувки адсорбера (%)"] = params.purgeRate;
       record["Мультипликативная составляющая коррекции (-)"] = params.multAdapt;
       record["Аддитивная составляющая коррекции (%)"] = params.addAdapt;
+      record["Датчик неровной дороги (g)"] = (params.roughRoad !== undefined ? params.roughRoad : 0);
 
       // Пропуски зажигания
       record["Пропуски цилиндр 1 (-)"] = params.misfires.cyl1;
