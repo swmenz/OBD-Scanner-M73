@@ -270,39 +270,57 @@ class M73Application {
           continue;
         }
 
-        // 2. Опрос строго активного экрана:
-        // - На вкладке "Датчики / АЦП" (tab-adc) -> опрашиваем кадр АЦП 21 03 на полной скорости
-        // - На вкладке "Панель" (tab-dashboard) -> опрашиваем скоростной кадр параметров 21 01
-        let targetFrame = '2101';
+        // 2. Логика опроса кадров в зависимости от вкладки и режима:
         if (this.currentTab === 'tab-adc') {
-          targetFrame = '2103';
-        } else if (this.framesConfig.frame2) {
-          targetFrame = '2103';
+          // На вкладке «Датчики» опрашиваем АЦП (21 03) и регулярно обновляем базовый кадр (21 01) для счетчиков пропусков
+          const dataAdc = await this.m73.readConfiguredCycle('2103');
+          if (dataAdc) {
+            this.updateDashboardUI(dataAdc);
+          } else {
+            throw new Error("Пустой кадр АЦП");
+          }
+
+          // Каждый второй цикл запрашиваем 21 01 для обновления пропусков зажигания
+          if (!this._adcSubCycle || this._adcSubCycle % 2 === 0) {
+            const dataBase = await this.m73.readConfiguredCycle('2101');
+            if (dataBase) {
+              this.updateDashboardUI(dataBase);
+              this.logger.addPoint(dataBase, this.framesConfig);
+            }
+          }
+          this._adcSubCycle = (this._adcSubCycle || 0) + 1;
+
+        } else {
+          // На главной панели («Панель»):
+          // Всегда опрашиваем базовый скоростной Кадр 1 (21 01)
+          const data = await this.m73.readConfiguredCycle('2101');
+          if (data) {
+            // Если пользователь включил Кадр 2 (режим «Все датчики» или чекбокс АЦП) — дополнительно читаем 21 03
+            if (this.framesConfig.frame2) {
+              await this.m73.readConfiguredCycle('2103');
+            }
+            this.updateDashboardUI(this.m73.latestData);
+            this.logger.addPoint(this.m73.latestData, this.framesConfig);
+          } else {
+            throw new Error("Пустой кадр");
+          }
         }
 
-        const data = await this.m73.readConfiguredCycle(targetFrame);
-        if (data) {
-          if (failures >= 5) this.connStateText.textContent = "Подключено к ЭБУ";
-          failures = 0;
-          lastTesterPresent = Date.now();
-          this.updateDashboardUI(data);
-          if (targetFrame === '2101') {
-            this.logger.addPoint(data, { frame1: true });
-          }
-        } else {
-          throw new Error("Пустой кадр");
-        }
+        if (failures >= 5) this.connStateText.textContent = "Подключено к ЭБУ";
+        failures = 0;
+        lastTesterPresent = Date.now();
       } catch (err) {
         failures++;
         if (failures === 5) this.connStateText.textContent = "ЭБУ не отвечает";
 
-        // Автовосстановление K-Line сессии при серии сбоев
+        // Автовосстановление K-Line сессии при серии сбоев:
         if (failures === 6) {
           try { await this.elm.send("3E", 500); } catch (e) {}
-        } else if (failures === 10) {
+        } else if (failures >= 10 && failures % 10 === 0) {
           try {
             this.elm.log('info', 'Попытка автовосстановления сессии K-Line (AT FI)...');
-            await this.elm.send("ATFI", 1500);
+            await this.elm.send("ATFI", 2000);
+            await this.elm.send("ATH0", 1000); // Обязательно выключаем заголовки после реконнекта
           } catch (e) {}
         }
         await this.delay(failures < 5 ? 80 : 250);
@@ -491,15 +509,21 @@ class M73Application {
 
   async testActuator(testType) {
     if (!this.elm.isConnected) return alert("Адаптер не подключен");
-    
-    // Проверка условий безопасности: тесты разрешены ТОЛЬКО при RPM == 0
-    if (this.m73.latestData && this.m73.latestData.rpm > 0) {
-      alert("Внимание! Тесты исполнительных механизмов разрешены только при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nЭБУ M73 аппаратно блокирует тесты при заведённом моторе для безопасности.");
-      return;
-    }
 
     const prevPolling = this.isPolling;
     await this.stopPolling();
+
+    // Опрашиваем актуальный статус перед тестом (проверка заглушен ли мотор прямо сейчас)
+    try {
+      await this.m73.readConfiguredCycle('2101');
+    } catch (e) {}
+
+    // Проверка условий безопасности: тесты разрешены ТОЛЬКО при RPM == 0
+    if (this.m73.latestData && this.m73.latestData.rpm > 0) {
+      alert("Внимание! Тесты исполнительных механизмов разрешены только при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nЭБУ M73 аппаратно блокирует тесты при заведённом моторе.");
+      if (prevPolling) this.startContinuousPolling();
+      return;
+    }
 
     try {
       this.connStateText.textContent = "Выполняется тест...";
