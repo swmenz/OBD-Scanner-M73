@@ -262,7 +262,28 @@ class M73Application {
     this.flagIdle = document.getElementById('flagIdle');
     this.flagLambda = document.getElementById('flagLambda');
     this.flagKnock = document.getElementById('flagKnock');
-    this.flagFuelCut = document.getElementById('flagFuelCut');
+        this.flagFuelCut = document.getElementById('flagFuelCut');
+
+    // Новые метрики ReadLogs / OpenDiag v31
+    this.valFrlLoad = document.getElementById('valFrlLoad');
+    this.valCalcLoad = document.getElementById('valCalcLoad');
+    this.valKnockVolt = document.getElementById('valKnockVolt');
+    this.valO2Volt = document.getElementById('valO2Volt');
+    this.valO2Volt2 = document.getElementById('valO2Volt2');
+    this.valLambdaCorr = document.getElementById('valLambdaCorr');
+    this.valTargetLambda = document.getElementById('valTargetLambda');
+    this.valPurgeRate = document.getElementById('valPurgeRate');
+    this.valIdleTarget = document.getElementById('valIdleTarget');
+    this.valPower = document.getElementById('valPower');
+    this.valTorque = document.getElementById('valTorque');
+    this.valAltitude = document.getElementById('valAltitude');
+
+    this.flagPump = document.getElementById('flagPump');
+    this.flagFan1 = document.getElementById('flagFan1');
+    this.flagFan2 = document.getElementById('flagFan2');
+    this.flagMil = document.getElementById('flagMil');
+    this.flagO2Ready = document.getElementById('flagO2Ready');
+    this.flagAc = document.getElementById('flagAc');
 
     // Ошибки DTC
     this.dtcList = document.getElementById('dtcList');
@@ -302,7 +323,7 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v30\n\n• АЦП ДМРВ: 1.012 В (эталон Bosch 116)\n• Сигнал ДК1: живое напряжение смеси\n• Добавлены ДТВ и ДНД\n• Тесты исполнительных механизмов\n• Фоновый режим работы и автоподключение");
+        alert("Диагностика М73 — Версия v31\n\n• Полный эталонный набор параметров OpenDiag и ReadLogs (83 канала)\n• Исправлены смещения адаптаций (FR / FRA)\n• Добавлены: нагрузка FRL, расчетная нагрузка, шум датчика детонации, ДК2, целевая лямбда, продувка адсорбера, мощность и момент\n• Расширено логирование в Excel со всеми 63 параметрами\n• Калибровка АЦП по ReadLogs (ДМРВ, ДТОЖ, ДТВ, ДК1/2, ДПДЗ)");
       });
     }
 
@@ -790,11 +811,49 @@ class M73Application {
       }
     }
 
+    // Новые параметры v31
+    if (this.valFrlLoad && data.frlLoad !== undefined) this.valFrlLoad.textContent = data.frlLoad.toFixed(1);
+    if (this.valCalcLoad && data.calcLoad !== undefined) this.valCalcLoad.textContent = data.calcLoad.toFixed(1);
+    if (this.valKnockVolt && data.knockVolt !== undefined) {
+      this.valKnockVolt.textContent = data.knockVolt.toFixed(3);
+      if (data.knockVolt > 1.2) {
+        this.valKnockVolt.style.color = 'var(--apple-rose)';
+      } else if (data.knockVolt > 0.7) {
+        this.valKnockVolt.style.color = 'var(--apple-amber)';
+      } else {
+        this.valKnockVolt.style.color = 'var(--text-primary)';
+      }
+    }
+    if (this.valO2Volt && data.o2Volt !== undefined) {
+      this.valO2Volt.textContent = data.o2Volt.toFixed(3);
+      if (data.o2Volt >= 0.6) {
+        this.valO2Volt.style.color = 'var(--apple-green)';
+      } else if (data.o2Volt <= 0.3) {
+        this.valO2Volt.style.color = 'var(--apple-blue)';
+      } else {
+        this.valO2Volt.style.color = 'var(--text-primary)';
+      }
+    }
+    if (this.valO2Volt2 && data.o2Volt2 !== undefined) this.valO2Volt2.textContent = data.o2Volt2.toFixed(3);
+    if (this.valLambdaCorr && data.lambdaCorr !== undefined) this.valLambdaCorr.textContent = data.lambdaCorr.toFixed(3);
+    if (this.valTargetLambda && data.targetLambda !== undefined) this.valTargetLambda.textContent = data.targetLambda.toFixed(3);
+    if (this.valPurgeRate && data.purgeRate !== undefined) this.valPurgeRate.textContent = data.purgeRate.toFixed(1);
+    if (this.valIdleTarget && data.idleTarget !== undefined) this.valIdleTarget.textContent = data.idleTarget;
+    if (this.valPower && data.enginePower !== undefined) this.valPower.textContent = data.enginePower.toFixed(1);
+    if (this.valTorque && data.engineTorque !== undefined) this.valTorque.textContent = data.engineTorque.toFixed(1);
+    if (this.valAltitude && data.altitudeFactor !== undefined) this.valAltitude.textContent = data.altitudeFactor.toFixed(3);
+
     // Флаги состояния
     this.setFlag(this.flagIdle, data.flags.idle);
     this.setFlag(this.flagLambda, data.flags.lambda);
     this.setFlag(this.flagKnock, data.flags.knock);
     this.setFlag(this.flagFuelCut, data.flags.fuelCut);
+    if (this.flagPump) this.setFlag(this.flagPump, data.flags.fuelPump);
+    if (this.flagFan1) this.setFlag(this.flagFan1, data.flags.fan1);
+    if (this.flagFan2) this.setFlag(this.flagFan2, data.flags.fan2);
+    if (this.flagMil) this.setFlag(this.flagMil, data.flags.mil);
+    if (this.flagO2Ready) this.setFlag(this.flagO2Ready, data.flags.o2Ready);
+    if (this.flagAc) this.setFlag(this.flagAc, data.flags.acRequest || data.flags.acAllowed);
 
     // Пропуски зажигания (Кадр 21 01)
     if (data.misfires && this.misCyl1) {

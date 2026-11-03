@@ -24,7 +24,7 @@
     <!-- ВЕРХНЯЯ СТЕКЛЯННАЯ ПАНЕЛЬ НАВИГАЦИИ -->
     <header class="glass-navbar">
       <div class="navbar-brand">
-        <div class="brand-title-row"><h1 class="brand-name">М73 Диагностика</h1><span class="app-version-badge" id="appVersionBadge">v30</span></div>
+        <div class="brand-title-row"><h1 class="brand-name">М73 Диагностика</h1><span class="app-version-badge" id="appVersionBadge">v31</span></div>
         <div class="brand-status">
           <span class="status-pulse" id="connIndicator"></span>
           <span class="status-text" id="connStateText">Не подключено</span>
@@ -246,6 +246,113 @@
             </div>
           </div>
 
+          <!-- РџР°СЂР°РјРµС‚СЂ РЅР°РіСЂСѓР·РєРё (FRL) -->
+          <div class="glass-card metric-tile">
+            <span class="tile-label">РќР°РіСЂСѓР·РєР° (FRL)</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valFrlLoad">0.0</span>
+              <span class="tile-unit">%</span>
+            </div>
+          </div>
+
+          <!-- Р Р°СЃС‡С‘С‚РЅР°СЏ РЅР°РіСЂСѓР·РєР° -->
+          <div class="glass-card metric-tile">
+            <span class="tile-label">Р Р°СЃС‡С‘С‚РЅР°СЏ РЅР°РіСЂСѓР·РєР°</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valCalcLoad">0.0</span>
+              <span class="tile-unit">%</span>
+            </div>
+          </div>
+
+          <!-- Р”Р°С‚С‡РёРє РґРµС‚РѕРЅР°С†РёРё (СѓСЂРѕРІРµРЅСЊ С€СѓРјР°) -->
+          <div class="glass-card metric-tile" id="cardKnockVolt">
+            <span class="tile-label">РЁСѓРј РґРµС‚РѕРЅР°С†РёРё (РђР¦Рџ Р”Р”)</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valKnockVolt">0.000</span>
+              <span class="tile-unit">Р’</span>
+            </div>
+          </div>
+
+          <!-- РЎРёРіРЅР°Р» Р”Рљ1 (Р»СЏРјР±РґР° РґРѕ РЅРµР№С‚СЂР°Р»РёР·Р°С‚РѕСЂР°) -->
+          <div class="glass-card metric-tile">
+            <span class="tile-label">РЎРёРіРЅР°Р» Р”Рљ1 (РґРѕ РєР°С‚Р°)</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valO2Volt">0.000</span>
+              <span class="tile-unit">Р’</span>
+            </div>
+          </div>
+
+          <!-- РЎРёРіРЅР°Р» Р”Рљ2 (Р»СЏРјР±РґР° РїРѕСЃР»Рµ РЅРµР№С‚СЂР°Р»РёР·Р°С‚РѕСЂР°) -->
+          <div class="glass-card metric-tile">
+            <span class="tile-label">РЎРёРіРЅР°Р» Р”Рљ2 (РїРѕСЃР»Рµ РєР°С‚Р°)</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valO2Volt2">0.000</span>
+              <span class="tile-unit">Р’</span>
+            </div>
+          </div>
+
+          <!-- РўРµРєСѓС‰Р°СЏ РєРѕСЂСЂРµРєС†РёСЏ РІСЂРµРјРµРЅРё РІРїСЂС‹СЃРєР° -->
+          <div class="glass-card metric-tile">
+            <span class="tile-label">РљРѕСЂСЂРµРєС†РёСЏ РІРїСЂС‹СЃРєР°</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valLambdaCorr">1.000</span>
+              <span class="tile-unit">РєРѕСЌС„С„</span>
+            </div>
+          </div>
+
+          <!-- Р—Р°РґР°РЅРЅРѕРµ Р·РЅР°С‡РµРЅРёРµ Р»СЏРјР±РґР° -->
+          <div class="glass-card metric-tile">
+            <span class="tile-label">Р¦РµР»РµРІР°СЏ СЃРјРµСЃСЊ (Р›СЏРјР±РґР°)</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valTargetLambda">1.000</span>
+              <span class="tile-unit">СЃРѕСЃС‚Р°РІ</span>
+            </div>
+          </div>
+
+          <!-- РџСЂРѕРґСѓРІРєР° Р°РґСЃРѕСЂР±РµСЂР° -->
+          <div class="glass-card metric-tile">
+            <span class="tile-label">РџСЂРѕРґСѓРІРєР° Р°РґСЃРѕСЂР±РµСЂР°</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valPurgeRate">0.0</span>
+              <span class="tile-unit">%</span>
+            </div>
+          </div>
+
+          <!-- Р–РµР»Р°РµРјС‹Рµ РѕР±РѕСЂРѕС‚С‹ РҐРҐ -->
+          <div class="glass-card metric-tile">
+            <span class="tile-label">Р–РµР»Р°РµРјС‹Рµ РѕР±РѕСЂРѕС‚С‹ РҐРҐ</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valIdleTarget">0</span>
+              <span class="tile-unit">РѕР±/РјРёРЅ</span>
+            </div>
+          </div>
+
+          <!-- РњРѕС‰РЅРѕСЃС‚СЊ РїРѕ Р”РњР Р’ -->
+          <div class="glass-card metric-tile">
+            <span class="tile-label">РњРѕС‰РЅРѕСЃС‚СЊ (СЂР°СЃС‡С‘С‚)</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valPower">0.0</span>
+              <span class="tile-unit">Р».СЃ.</span>
+            </div>
+          </div>
+
+          <!-- РљСЂСѓС‚СЏС‰РёР№ РјРѕРјРµРЅС‚ РїРѕ Р”РњР Р’ -->
+          <div class="glass-card metric-tile">
+            <span class="tile-label">РњРѕРјРµРЅС‚ (СЂР°СЃС‡С‘С‚)</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valTorque">0.0</span>
+              <span class="tile-unit">РќВ·Рј</span>
+            </div>
+          </div>
+
+          <!-- Р‘Р°СЂРѕРєРѕСЂСЂРµРєС†РёСЏ -->
+          <div class="glass-card metric-tile">
+            <span class="tile-label">Р‘Р°СЂРѕРєРѕСЂСЂРµРєС†РёСЏ (РІС‹СЃРѕС‚Р°)</span>
+            <div class="tile-val-wrap">
+              <span class="tile-num" id="valAltitude">1.000</span>
+              <span class="tile-unit">С„Р°РєС‚РѕСЂ</span>
+            </div>
+          </div>
         </div>
 
         <!-- ФЛАГИ СОСТОЯНИЯ И РЕЖИМОВ -->
@@ -267,6 +374,30 @@
             <div class="glass-chip" id="flagFuelCut">
               <span class="chip-beacon"></span>
               <span>Отсечка топлива</span>
+            <div class="glass-chip" id="flagPump">
+              <span class="chip-beacon"></span>
+              <span>Р‘РµРЅР·РѕРЅР°СЃРѕСЃ</span>
+            </div>
+            <div class="glass-chip" id="flagFan1">
+              <span class="chip-beacon"></span>
+              <span>Р’РµРЅС‚РёР»СЏС‚РѕСЂ 1</span>
+            </div>
+            <div class="glass-chip" id="flagFan2">
+              <span class="chip-beacon"></span>
+              <span>Р’РµРЅС‚РёР»СЏС‚РѕСЂ 2</span>
+            </div>
+            <div class="glass-chip" id="flagMil">
+              <span class="chip-beacon"></span>
+              <span>Check Engine</span>
+            </div>
+            <div class="glass-chip" id="flagO2Ready">
+              <span class="chip-beacon"></span>
+              <span>Р“РѕС‚РѕРІРЅРѕСЃС‚СЊ Р”Рљ1</span>
+            </div>
+            <div class="glass-chip" id="flagAc">
+              <span class="chip-beacon"></span>
+              <span>РљРѕРЅРґРёС†РёРѕРЅРµСЂ</span>
+            </div>
             </div>
           </div>
         </div>

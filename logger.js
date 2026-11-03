@@ -244,47 +244,79 @@ class TripLogger {
 
     if (this.isRecording) {
       const elapsedSec = ((now - this.startTime) / 1000).toFixed(3);
+      const f = params.flags || {};
+      const mis = params.misfires || {};
 
-      // Базовые параметры (Кадр 1 - 21 01)
+      // РџРѕР»РЅС‹Р№ СЌС‚Р°Р»РѕРЅРЅС‹Р№ РЅР°Р±РѕСЂ РїР°СЂР°РјРµС‚СЂРѕРІ OpenDiag Mobile Рё ReadLogs (83 РєР°РЅР°Р»Р°)
       const record = {
-        "Время (сек)": parseFloat(elapsedSec),
-        "Обороты двигателя (об/мин)": params.rpm,
-        "Скорость автомобиля (км/ч)": params.speed,
-        "Угол открытия дроссельной заслонки (%)": params.throttle,
-        "Массовый расход воздуха (кг/ч)": params.maf,
-        "Цикловой расход воздуха (мг/такт)": params.cycleAir,
-        "Длительность впрыска (мс)": params.injTime,
-        "Загрузка форс (%)": params.dutyCycle,
-        "Угол опережения зажигания (°П.К.В)": params.spark,
-        "Величина отскока УОЗ при детонации (°П.К.В)": params.sparkRetard,
-        "Температура охлаждающей жидкости (°C)": params.temp,
-        "Температура впускного воздуха (°C)": (params.intakeTemp !== undefined ? params.intakeTemp : 0),
-        "Напряжение питания (В)": params.voltage,
-        "Позиция шагового двигателя (шаг)": params.iacSteps,
-        "Расход топлива (л/ч)": params.fuelRate,
-        "Сигнал датчика кислорода до нейтрализатора (В)": params.o2Volt,
-        "Текущий коэффициент коррекции впрыска (-)": params.lambdaCorr,
-        "Флаг холостого хода": params.flags.idle ? "Да" : "Нет",
-        "Флаг полной нагрузки": params.throttle > 75 ? "Да" : "Нет",
-        "Контроль детонации активен": params.flags.knock ? "Да" : "Нет",
-        "Отсечка топливоподачи": params.flags.fuelCut ? "Да" : "Нет",
-        "Интервал_опроса (мс)": this.currentMs
+        "Р’СЂРµРјСЏ (СЃРµРє)": parseFloat(elapsedSec),
+        "РћР±РѕСЂРѕС‚С‹ РґРІРёРіР°С‚РµР»СЏ (РѕР±/РјРёРЅ)": params.rpm || 0,
+        "РЎРєРѕСЂРѕСЃС‚СЊ Р°РІС‚РѕРјРѕР±РёР»СЏ (РєРј/С‡)": params.speed || 0,
+        "РЈРіРѕР» РѕС‚РєСЂС‹С‚РёСЏ РґСЂРѕСЃСЃРµР»СЊРЅРѕР№ Р·Р°СЃР»РѕРЅРєРё (%)": params.throttle !== undefined ? params.throttle : 0,
+        "РџР°СЂР°РјРµС‚СЂ РЅР°РіСЂСѓР·РєРё (%)": params.frlLoad !== undefined ? params.frlLoad : 0,
+        "Р Р°СЃС‡С‘С‚РЅР°СЏ РЅР°РіСЂСѓР·РєР° (%)": params.calcLoad !== undefined ? params.calcLoad : 0,
+        "Р¤Р°РєС‚РѕСЂ РІС‹СЃРѕС‚РЅРѕР№ РєРѕСЂСЂРµРєС†РёРё (-)": params.altitudeFactor !== undefined ? params.altitudeFactor : 1.0,
+        "РњР°СЃСЃРѕРІС‹Р№ СЂР°СЃС…РѕРґ РІРѕР·РґСѓС…Р° (РєРі/С‡)": params.maf || 0,
+        "Р¦РёРєР»РѕРІРѕР№ СЂР°СЃС…РѕРґ РІРѕР·РґСѓС…Р° (РјРі/С‚Р°РєС‚)": params.cycleAir || 0,
+        "Р”Р»РёС‚РµР»СЊРЅРѕСЃС‚СЊ РІРїСЂС‹СЃРєР° (РјСЃ)": params.injTime || 0,
+        "Р—Р°РіСЂСѓР·РєР° С„РѕСЂСЃ (%)": params.dutyCycle || 0,
+        "Р Р°СЃС…РѕРґ С‚РѕРїР»РёРІР° (Р»/С‡)": params.fuelRate || 0,
+        "РЈРіРѕР» РѕРїРµСЂРµР¶РµРЅРёСЏ Р·Р°Р¶РёРіР°РЅРёСЏ (В°Рџ.Рљ.Р’)": params.spark !== undefined ? params.spark : 0,
+        "Р’РµР»РёС‡РёРЅР° РѕС‚СЃРєРѕРєР° РЈРћР— РїСЂРё РґРµС‚РѕРЅР°С†РёРё (В°Рџ.Рљ.Р’)": params.sparkRetard !== undefined ? params.sparkRetard : 0,
+        "РЎРёРіРЅР°Р» РґР°С‚С‡РёРєР° РґРµС‚РѕРЅР°С†РёРё (Р’)": params.knockVolt !== undefined ? params.knockVolt : 0,
+        "РўРµРјРїРµСЂР°С‚СѓСЂР° РѕС…Р»Р°Р¶РґР°СЋС‰РµР№ Р¶РёРґРєРѕСЃС‚Рё (В°C)": params.temp !== undefined ? params.temp : 0,
+        "РўРµРјРїРµСЂР°С‚СѓСЂР° РћР– РїСЂРё РїСѓСЃРєРµ (В°C)": params.tempAtStart !== undefined ? params.tempAtStart : 0,
+        "РўРµРјРїРµСЂР°С‚СѓСЂР° РІРїСѓСЃРєРЅРѕРіРѕ РІРѕР·РґСѓС…Р° (В°C)": params.intakeTemp !== undefined ? params.intakeTemp : 0,
+        "РќР°РїСЂСЏР¶РµРЅРёРµ РїРёС‚Р°РЅРёСЏ (Р’)": params.voltage || 0,
+        "Р–РµР»Р°РµРјС‹Рµ РѕР±РѕСЂРѕС‚С‹ С…РѕР»РѕСЃС‚РѕРіРѕ С…РѕРґР° (РѕР±/РјРёРЅ)": params.idleTarget || 0,
+        "РћР±РѕСЂРѕС‚С‹ С…РѕР»РѕСЃС‚РѕРіРѕ С…РѕРґР° (РѕР±/РјРёРЅ)": params.idleRpm || 0,
+        "РџРѕР·РёС†РёСЏ С€Р°РіРѕРІРѕРіРѕ РґРІРёРіР°С‚РµР»СЏ (С€Р°Рі)": params.iacSteps !== undefined ? params.iacSteps : 0,
+        "Р–РµР»Р°РµРјС‹Р№ СЂР°СЃС…РѕРґ РІРѕР·РґСѓС…Р° РЅР° РҐРҐ (РєРі/С‡)": params.airTargetIdle !== undefined ? params.airTargetIdle : 0,
+        "РџР°СЂР°РјРµС‚СЂ Р°РґР°РїС‚Р°С†РёРё СЂРµРіСѓР»РёСЂРѕРІРєРё РҐРҐ (%)": params.idleAdapt !== undefined ? params.idleAdapt : 0,
+        "РњРѕРјРµРЅС‚ РґР»СЏ СЂРµРіСѓР»РёСЂРѕРІР°РЅРёСЏ РҐРҐ: I-С‡Р°СЃС‚СЊ (%)": params.idleTorqueI !== undefined ? params.idleTorqueI : 0,
+        "РњРѕРјРµРЅС‚ РґР»СЏ СЂРµРіСѓР»РёСЂРѕРІР°РЅРёСЏ РҐРҐ: PD-С‡Р°СЃС‚СЊ (%)": params.idleTorquePD !== undefined ? params.idleTorquePD : 0,
+        "РЎРёРіРЅР°Р» РґР°С‚С‡РёРєР° РєРёСЃР»РѕСЂРѕРґР° РґРѕ РЅРµР№С‚СЂР°Р»РёР·Р°С‚РѕСЂР° (Р’)": params.o2Volt !== undefined ? params.o2Volt : 0,
+        "РЎРёРіРЅР°Р» РґР°С‚С‡РёРєР° РєРёСЃР»РѕСЂРѕРґР° РїРѕСЃР»Рµ РЅРµР№С‚СЂР°Р»РёР·Р°С‚РѕСЂР° (Р’)": params.o2Volt2 !== undefined ? params.o2Volt2 : 0,
+        "РўРµРєСѓС‰РёР№ РєРѕСЌС„С„РёС†РёРµРЅС‚ РєРѕСЂСЂРµРєС†РёРё РІРїСЂС‹СЃРєР° (-)": params.lambdaCorr !== undefined ? params.lambdaCorr : 1.0,
+        "Р—Р°РґР°РЅРЅРѕРµ Р·РЅР°С‡РµРЅРёРµ Р»СЏРјР±РґР° (-)": params.targetLambda !== undefined ? params.targetLambda : 1.0,
+        "РњСѓР»СЊС‚РёРїР»РёРєР°С‚РёРІРЅР°СЏ СЃРѕСЃС‚Р°РІР»СЏСЋС‰Р°СЏ РєРѕСЂСЂРµРєС†РёРё (-)": params.multAdapt !== undefined ? params.multAdapt : 1.0,
+        "РђРґРґРёС‚РёРІРЅР°СЏ СЃРѕСЃС‚Р°РІР»СЏСЋС‰Р°СЏ РєРѕСЂСЂРµРєС†РёРё (%)": params.addAdapt !== undefined ? params.addAdapt : 0,
+        "РџРµСЂРёРѕРґ СЃРёРіРЅР°Р»Р° Р”Рљ1 (СЃ)": params.o2Period !== undefined ? params.o2Period : 0,
+        "Р—Р°РґРµСЂР¶РєР° РћРЎ РїРѕ РІС‚РѕСЂРѕРјСѓ РґР°С‚С‡РёРєСѓ (СЃ)": params.o2_2_integralDelay !== undefined ? params.o2_2_integralDelay : 0,
+        "РљРѕСЌС„С„РёС†РёРµРЅС‚ РїСЂРѕРґСѓРІРєРё Р°РґСЃРѕСЂР±РµСЂР° (%)": params.purgeRate !== undefined ? params.purgeRate : 0,
+        "РЎРёРіРЅР°Р» РґР°С‚С‡РёРєР° РЅРµСЂРѕРІРЅРѕР№ РґРѕСЂРѕРіРё (g)": params.roughRoad !== undefined ? params.roughRoad : 0,
+        "РќРµСЂР°РІРЅРѕРјРµСЂРЅРѕСЃС‚СЊ РІСЂР°С‰РµРЅРёСЏ РєРѕР»РµРЅРІР°Р»Р° (РѕР±/СЃ2)": params.unbalanceRpm !== undefined ? params.unbalanceRpm : 0,
+        "РђРґР°РїС‚Р°С†РёСЏ Р·СѓР±СЊРµРІ РІРµРЅС†Р° РґРµРјРїС„РµСЂР° (РѕР±/СЃ2)": params.damperAdapt !== undefined ? params.damperAdapt : 0,
+        "РњРѕС‰РЅРѕСЃС‚СЊ РїРѕ Р”РњР Р’ (Р».СЃ.)": params.enginePower !== undefined ? params.enginePower : 0,
+        "РњРѕРјРµРЅС‚ РїРѕ Р”РњР Р’ (Рќ/Рј)": params.engineTorque !== undefined ? params.engineTorque : 0,
+        "РџСЂРѕРїСѓСЃРєРё С†РёР»РёРЅРґСЂ 1 (-)": mis.cyl1 || 0,
+        "РџСЂРѕРїСѓСЃРєРё С†РёР»РёРЅРґСЂ 2 (-)": mis.cyl2 || 0,
+        "РџСЂРѕРїСѓСЃРєРё С†РёР»РёРЅРґСЂ 3 (-)": mis.cyl3 || 0,
+        "РџСЂРѕРїСѓСЃРєРё С†РёР»РёРЅРґСЂ 4 (-)": mis.cyl4 || 0,
+        "РЎСѓРјРјР°СЂРЅС‹Р№ СЃС‡РµС‚С‡РёРє РїСЂРѕРїСѓСЃРєРѕРІ (-)": mis.total || 0,
+        "РђРєС‚РёРІРЅС‹Рµ РїСЂРѕРїСѓСЃРєРё Р·Р° С†РёРєР» (1000 РѕР±)": mis.cycle !== undefined ? mis.cycle : 0,
+        "Р’СЂРµРјСЏ СЃ РјРѕРјРµРЅС‚Р° СЃР±СЂРѕСЃР° РєРѕРЅС‚СЂРѕР»Р»РµСЂР° (РјРёРЅ)": params.timeSinceReset !== undefined ? params.timeSinceReset : 0,
+        "РљРѕР»РёС‡РµСЃС‚РІРѕ РѕС€РёР±РѕРє DTC (-)": params.dtcCount !== undefined ? params.dtcCount : 0,
+
+        // Р‘РёС‚РѕРІС‹Рµ С„Р»Р°РіРё СЃРѕСЃС‚РѕСЏРЅРёСЏ Р­Р‘РЈ
+        "Р¤Р»Р°Рі С…РѕР»РѕСЃС‚РѕРіРѕ С…РѕРґР°": f.idle ? 'Р”Р°' : 'РќРµС‚',
+        "Р¤Р»Р°Рі РїРѕР»РЅРѕР№ РЅР°РіСЂСѓР·РєРё": f.fullLoad ? 'Р”Р°' : 'РќРµС‚',
+        "РљРѕРЅС‚СЂРѕР»СЊ РґРµС‚РѕРЅР°С†РёРё Р°РєС‚РёРІРµРЅ": f.knock ? 'Р”Р°' : 'РќРµС‚',
+        "РћС‚СЃРµС‡РєР° С‚РѕРїР»РёРІРѕРїРѕРґР°С‡Рё": f.fuelCut ? 'Р”Р°' : 'РќРµС‚',
+        "РћР±СЂР°С‚РЅР°СЏ СЃРІСЏР·СЊ РїРѕ Р”Рљ1": f.lambda ? 'Р”Р°' : 'РќРµС‚',
+        "Р“РѕС‚РѕРІРЅРѕСЃС‚СЊ РґР°С‚С‡РёРєР° Рћ2 РґРѕ РєР°С‚Р°Р»РёР·Р°С‚РѕСЂР°": f.o2Ready ? 'Р”Р°' : 'РќРµС‚',
+        "РћР±СЂР°С‚РЅР°СЏ СЃРІСЏР·СЊ РїРѕ Р”Рљ2": f.o2_2_loop ? 'Р”Р°' : 'РќРµС‚',
+        "Р“РѕС‚РѕРІРЅРѕСЃС‚СЊ РґР°С‚С‡РёРєР° Рћ2 РїРѕСЃР»Рµ РєР°С‚Р°Р»РёР·Р°С‚РѕСЂР°": f.o2_2_ready ? 'Р”Р°' : 'РќРµС‚',
+        "Р РµР»Рµ Р±РµРЅР·РѕРЅР°СЃРѕСЃР°": f.fuelPump ? 'Р”Р°' : 'РќРµС‚',
+        "Р РµР»Рµ РІРµРЅС‚РёР»СЏС‚РѕСЂР° 1": f.fan1 ? 'Р”Р°' : 'РќРµС‚',
+        "Р РµР»Рµ РІРµРЅС‚РёР»СЏС‚РѕСЂР° 2": f.fan2 ? 'Р”Р°' : 'РќРµС‚',
+        "Р›Р°РјРїР° Check Engine": f.mil ? 'Р”Р°' : 'РќРµС‚',
+        "Р—Р°РїСЂРѕСЃ РєРѕРЅРґРёС†РёРѕРЅРµСЂР°": f.acRequest ? 'Р”Р°' : 'РќРµС‚',
+        "Р Р°Р·СЂРµС€РµРЅРёРµ РєРѕРЅРґРёС†РёРѕРЅРµСЂР°": f.acAllowed ? 'Р”Р°' : 'РќРµС‚',
+        "РџСЂРѕРґСѓРІРєР° Р°РґСЃРѕСЂР±РµСЂР° Р°РєС‚РёРІРёСЂРѕРІР°РЅР°": f.purgeActive ? 'Р”Р°' : 'РќРµС‚',
+        "РќРµСЂРѕРІРЅР°СЏ РґРѕСЂРѕРіР° (Р±Р»РѕРєРёСЂРѕРІРєР°)": f.roughRoadFlag ? 'Р”Р°' : 'РќРµС‚',
+        "РРЅС‚РµСЂРІР°Р»_РѕРїСЂРѕСЃР° (РјСЃ)": this.currentMs
       };
-
-      // Адаптации смеси и продувка адсорбера
-      record["Заданное значение лямбда (-)"] = params.targetLambda;
-      record["Коэффициент продувки адсорбера (%)"] = params.purgeRate;
-      record["Мультипликативная составляющая коррекции (-)"] = params.multAdapt;
-      record["Аддитивная составляющая коррекции (%)"] = params.addAdapt;
-      record["Датчик неровной дороги (g)"] = (params.roughRoad !== undefined ? params.roughRoad : 0);
-
-      // Пропуски зажигания
-      record["Пропуски цилиндр 1 (-)"] = params.misfires.cyl1;
-      record["Пропуски цилиндр 2 (-)"] = params.misfires.cyl2;
-      record["Пропуски цилиндр 3 (-)"] = params.misfires.cyl3;
-      record["Пропуски цилиндр 4 (-)"] = params.misfires.cyl4;
-      record["Суммарный счетчик пропусков (-)"] = params.misfires.total;
-      record["Активные пропуски за цикл (1000 об)"] = (params.misfires && params.misfires.cycle !== undefined) ? params.misfires.cycle : 0;
 
       this.records.push(record);
     }
