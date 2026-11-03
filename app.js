@@ -264,7 +264,7 @@ class M73Application {
     this.flagKnock = document.getElementById('flagKnock');
         this.flagFuelCut = document.getElementById('flagFuelCut');
 
-    // Новые метрики ReadLogs / OpenDiag v31
+    // Новые метрики ReadLogs / OpenDiag v32
     this.valFrlLoad = document.getElementById('valFrlLoad');
     this.valCalcLoad = document.getElementById('valCalcLoad');
     this.valKnockVolt = document.getElementById('valKnockVolt');
@@ -323,7 +323,7 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v31\n\n• Полный эталонный набор параметров OpenDiag и ReadLogs (83 канала)\n• Исправлены смещения адаптаций (FR / FRA)\n• Добавлены: нагрузка FRL, расчетная нагрузка, шум датчика детонации, ДК2, целевая лямбда, продувка адсорбера, мощность и момент\n• Расширено логирование в Excel со всеми 63 параметрами\n• Калибровка АЦП по ReadLogs (ДМРВ, ДТОЖ, ДТВ, ДК1/2, ДПДЗ)");
+        alert("Диагностика М73 — Версия v32\n\n• Полный эталонный набор параметров OpenDiag и ReadLogs (83 канала)\n• Исправлены смещения адаптаций (FR / FRA)\n• Добавлены: нагрузка FRL, расчетная нагрузка, шум датчика детонации, ДК2, целевая лямбда, продувка адсорбера, мощность и момент\n• Расширено логирование в Excel со всеми 63 параметрами\n• Калибровка АЦП по ReadLogs (ДМРВ, ДТОЖ, ДТВ, ДК1/2, ДПДЗ)");
       });
     }
 
@@ -811,7 +811,7 @@ class M73Application {
       }
     }
 
-    // Новые параметры v31
+    // Новые параметры v32
     if (this.valFrlLoad && data.frlLoad !== undefined) this.valFrlLoad.textContent = data.frlLoad.toFixed(1);
     if (this.valCalcLoad && data.calcLoad !== undefined) this.valCalcLoad.textContent = data.calcLoad.toFixed(1);
     if (this.valKnockVolt && data.knockVolt !== undefined) {
