@@ -47,20 +47,19 @@ class ItelmaM73Protocol {
     await this.elm.send("AT Z", 1500).catch(() => {});
     await this.delay(100);
 
+    // Последовательность, проверенная по реальному логу OpenDiag Mobile на этом же автомобиле
     await this.elm.send("AT E0");
     await this.elm.send("AT L0");
-    await this.elm.send("AT S0"); // Пробелы выкл (критично для скорости)
-
-    await this.elm.send("AT SP 5");
-    await this.elm.send("AT IB 10");
+    await this.elm.send("AT AL");     // Разрешить длинные ответы (кадр 21 01 = 74 байта)
+    await this.elm.send("AT AT 1");   // Адаптивный тайминг
+    await this.elm.send("AT S0");     // Пробелы выкл
+    await this.elm.send("AT ST 32");  // Таймаут ответа ~200 мс
     await this.elm.send("AT SH 81 10 F1");
+    await this.elm.send("AT IIA 10"); // Адрес ЭБУ для Fast Init
+    await this.elm.send("AT SP 5");
+    await this.elm.send("AT SW 00");
 
-    await this.elm.send("AT AT 0");
-    await this.elm.send("AT ST 19"); // Таймаут ~100мс
-    await this.elm.send("AT SW 96");
-    await this.elm.send("AT WM 81 10 F1 3E");
-
-    this.elm.log('info', 'Открытие диагностической сессии (Fast Init 81)...');
+    this.elm.log('info', 'Открытие диагностической сессии (AT FI)...');
 
     const checkSession = (resp) => {
       const clean = (resp || "").replace(/\s+/g, '').toUpperCase();
@@ -77,16 +76,8 @@ class ItelmaM73Protocol {
 
     let session = { clean: "", ok: false };
     try {
-      session = checkSession(await this.elm.send("81", 2500));
+      session = checkSession(await this.elm.send("AT FI", 3000));
     } catch (e) {}
-
-    // Если «81» не открыл сессию (ошибка, NO DATA или таймаут) — пробуем встроенный Fast Init адаптера
-    if (!session.ok) {
-      this.elm.log('info', 'Пробуем встроенный Fast Init (AT FI)...');
-      try {
-        session = checkSession(await this.elm.send("AT FI", 3000));
-      } catch (e) {}
-    }
 
     if (!session.ok) {
       this.elm.log('err', 'Не удалось открыть сессию с ЭБУ М73: ' + session.clean);
@@ -144,93 +135,102 @@ class ItelmaM73Protocol {
     for (let i = 0; i < payloadHex.length - 1; i += 2) {
       bytes.push(parseInt(payloadHex.substr(i, 2), 16));
     }
-    if (bytes.length < 22 || bytes.some(Number.isNaN)) return null;
+    if (bytes.length < 64 || bytes.some(Number.isNaN)) return null;
 
-    // Флаги состояния (байты 0..3)
-    const b1 = bytes[1] || 0;
-    const b2 = bytes[2] || 0;
+    // Карта байт сверена с OpenDiag Mobile (декомпиляция hk.java) и с реальным логом
+    // автомобиля: 2571 пакет, расхождения с экспортом OpenDiag в пределах округления.
+    // Индексы ниже — позиции в payload после «61 01».
+    const u8 = (i) => bytes[i];
+    const u16 = (i) => (bytes[i] << 8) | bytes[i + 1];
+    const s8 = (i) => (bytes[i] > 127 ? bytes[i] - 256 : bytes[i]);
+    const r1 = (v) => +v.toFixed(1);
 
-    // Байт 4: Температура охлаждающей жидкости (°C)
-    const temp = bytes[4] - 40;
+    // Байт 2: Температура охлаждающей жидкости (°C)
+    const temp = r1(u8(2) * 0.75 - 48);
 
-    // Байт 5: Положение дроссельной заслонки (%)
-    const throttle = +(bytes[5] * 0.5).toFixed(1);
+    // Байт 3: Температура впускного воздуха (°C)
+    const intakeTemp = r1(u8(3) * 0.75 - 48);
 
-    // Байты 6, 7: Обороты коленвала (16 бит, шаг 0.25 об/мин)
-    const rawRpm = ((bytes[6] << 8) | bytes[7]);
-    const rpm = Math.round(rawRpm * 0.25);
+    // Байт 4: Напряжение бортовой сети (В)
+    const voltage = +(u8(4) * 0.073765).toFixed(2);
 
-    // Байт 8: Скорость автомобиля (км/ч)
-    const speed = bytes[8];
+    // Байт 5: Скорость автомобиля (км/ч)
+    const speed = Math.round(u8(5) * 1.25);
 
-    // Байт 9: УОЗ (знаковый, шаг 0.5° ПКВ)
-    const rawSpark = bytes[9] > 127 ? bytes[9] - 256 : bytes[9];
-    const spark = +(rawSpark * 0.5).toFixed(1);
+    // Байт 6: Положение дроссельной заслонки (%)
+    const throttle = r1(u8(6) * 100 / 256);
 
-    // Байты 10, 11: Массовый расход воздуха ДМРВ (16 бит, шаг 0.1 кг/ч)
-    const rawMaf = ((bytes[10] << 8) | bytes[11]);
-    const maf = +(rawMaf * 0.1).toFixed(1);
+    // Байт 7: Обороты коленвала (шаг 40 об/мин)
+    const rpm = u8(7) * 40;
 
-    // Байты 12, 13: Время впрыска форсунок (16 бит, шаг 0.005 мс)
-    const rawInj = ((bytes[12] << 8) | bytes[13]);
-    const injTime = +(rawInj * 0.005).toFixed(2);
+    // Байты 8, 9: Массовый расход воздуха ДМРВ (кг/ч)
+    const maf = r1(u16(8) / 10);
 
-    // Байт 14: Шаги РХХ
-    const iacSteps = bytes[14];
+    // Байт 10: УОЗ (знаковый, шаг 0.75° ПКВ)
+    const spark = +(s8(10) * 0.75).toFixed(2);
 
-    // Байт 15: Коэффициент коррекции времени впрыска по ДК
-    const lambdaCorr = +((bytes[15] || 128) / 128.0).toFixed(3);
+    // Байт 11: Отскок УОЗ по детонации (знаковый, шаг 0.75° ПКВ)
+    const sparkRetard = +(0 - s8(11) * 0.75).toFixed(2);
 
-    // Байт 16: Бортовое напряжение (В)
-    const rawVolt = bytes[16];
-    const voltage = +(rawVolt > 160 ? 5.2 + rawVolt * 0.05 : rawVolt * 0.1).toFixed(1);
+    // Байты 16, 17: Время впрыска форсунок (мс)
+    const injTime = +(u16(16) / 75).toFixed(2);
 
-    // Байт 17: Напряжение датчика кислорода ДК1 (В)
-    const o2Volt = +((bytes[17] * 1.25) / 256.0).toFixed(3);
+    // Байт 18: Желаемые обороты холостого хода (об/мин)
+    const idleTarget = u8(18) * 10;
 
-    // Байт 18: Отскок УОЗ по детонации (°ПКВ)
-    const sparkRetard = bytes[18] > 0 ? +(-bytes[18] * 0.5).toFixed(1) : 0.0;
+    // Байт 19: Позиция шагового двигателя РХХ (шаги)
+    const iacSteps = u8(19);
 
-    // Байт 19: Степень продувки адсорбера (%)
-    const purgeRate = +(bytes[19] * 0.392).toFixed(1);
+    // Байт 24: Напряжение датчика кислорода ДК1 (В)
+    const o2Volt = +(u8(24) / 192 - 0.2).toFixed(3);
 
-    // Байт 20: Мультипликативная коррекция смеси
-    const multAdapt = +((bytes[20] || 128) / 128.0).toFixed(3);
+    // Байты 25, 26: Текущий коэффициент коррекции времени впрыска
+    const lambdaCorr = +(u16(25) / 32768).toFixed(3);
 
-    // Байт 21: Аддитивная коррекция смеси (%)
-    const addAdapt = +(((bytes[21] || 128) - 128) * 0.078).toFixed(2);
+    // Байты 27, 28: Заданное значение лямбда
+    const targetLambda = +(u16(27) / 4096).toFixed(3);
 
-    // Байты 28..31: Счетчики пропусков воспламенения по цилиндрам 1, 2, 3, 4
-    if (bytes.length >= 32) {
-      this.latestData.misfires.cyl1 = bytes[28] || 0;
-      this.latestData.misfires.cyl2 = bytes[29] || 0;
-      this.latestData.misfires.cyl3 = bytes[30] || 0;
-      this.latestData.misfires.cyl4 = bytes[31] || 0;
-      this.latestData.misfires.total = this.latestData.misfires.cyl1 + 
-                                      this.latestData.misfires.cyl2 + 
-                                      this.latestData.misfires.cyl3 + 
-                                      this.latestData.misfires.cyl4;
-    }
+    // Байт 29: Коэффициент продувки адсорбера (%)
+    const purgeRate = r1(u8(29) * 100 / 256);
+
+    // Байты 57, 58: Мультипликативная составляющая коррекции самообучением
+    const multAdapt = bytes.length >= 59 ? +(u16(57) / 32768).toFixed(3) : 1.0;
+    // Аддитивная составляющая в кадре 21 01 пока не определена достоверно — не выводим выдуманное значение
+    const addAdapt = null;
+
+    // Счетчики пропусков воспламенения (16 бит). Порядок в пакете: цилиндры 1, 3, 4, 2
+    this.latestData.misfires.cyl1 = u16(36);
+    this.latestData.misfires.cyl3 = u16(38);
+    this.latestData.misfires.cyl4 = u16(40);
+    this.latestData.misfires.cyl2 = u16(42);
+    this.latestData.misfires.total = this.latestData.misfires.cyl1 +
+                                    this.latestData.misfires.cyl2 +
+                                    this.latestData.misfires.cyl3 +
+                                    this.latestData.misfires.cyl4;
 
     // Расчетные величины (физика двигателя Приоры 21126)
     // Цикловой расход воздуха: (maf * 8333.33) / rpm (мг/такт)
     const cycleAir = (rpm > 100 && maf > 0) ? +((maf * 8333.33) / rpm).toFixed(1) : 0.0;
     // Скважность форсунок (duty cycle): (injTime * rpm) / 1200 (%)
     const dutyCycle = (rpm > 100 && injTime > 0) ? +Math.min(100, Math.max(0, (injTime * rpm) / 1200)).toFixed(1) : 0.0;
-    // Часовой расход топлива: л/ч
-    const fuelRate = (rpm > 100 && injTime > 0) ? +((injTime * rpm * 0.000325)).toFixed(2) : 0.0;
+    // Часовой расход топлива (л/ч): берётся из ЭБУ (байты 50, 51), как в OpenDiag
+    const fuelRate = +(u16(50) * 0.00215).toFixed(2);
 
-    // Флаги состояния
+    // Флаги состояния: битовые маски найдены сопоставлением с логом OpenDiag (0 расхождений на 2571 пакете)
+    const hasFlags = bytes.length >= 64;
     const flags = {
-      idle: (b1 & 0x01) !== 0 || (throttle === 0 && rpm < 1050),
-      lambda: (b1 & 0x08) !== 0,
-      fuelCut: (b1 & 0x02) !== 0 || (injTime === 0 && rpm > 1500),
-      knock: (b2 & 0x04) !== 0 || sparkRetard < 0
+      idle: hasFlags ? (bytes[62] & 0x01) !== 0 : (throttle === 0 && rpm < 1050),
+      lambda: hasFlags ? (bytes[63] & 0x08) !== 0 : false,
+      fuelCut: hasFlags ? (bytes[63] & 0x10) !== 0 : false,
+      knock: hasFlags ? ((bytes[63] & 0x01) !== 0 && sparkRetard < 0) : sparkRetard < 0
     };
 
     // Запись в latestData
     this.latestData.rpm = rpm;
     this.latestData.temp = temp;
+    this.latestData.intakeTemp = intakeTemp;
+    this.latestData.idleTarget = idleTarget;
+    this.latestData.targetLambda = targetLambda;
     this.latestData.throttle = throttle;
     this.latestData.speed = speed;
     this.latestData.spark = spark;
