@@ -128,9 +128,9 @@ class ItelmaM73Protocol {
     await this.elm.send("AT E0");
     await this.elm.send("AT L0");
     await this.elm.send("AT AL");     // Р Р°Р·СЂРµС€РёС‚СЊ РґР»РёРЅРЅС‹Рµ РѕС‚РІРµС‚С‹ (РєР°РґСЂ 21 01 = 74 Р±Р°Р№С‚Р°)
-    await this.elm.send("AT AT 1");   // РђРґР°РїС‚РёРІРЅС‹Р№ С‚Р°Р№РјРёРЅРі
+    await this.elm.send("AT AT 2");   // Агрессивный адаптивный тайминг (разгон)
     await this.elm.send("AT S0");     // РџСЂРѕР±РµР»С‹ РІС‹РєР»
-    await this.elm.send("AT ST 32");  // РўР°Р№РјР°СѓС‚ РѕС‚РІРµС‚Р° ~200 РјСЃ
+    await this.elm.send("AT ST 19");  // Быстрый таймаут шины ~100 мс (вместо 200 мс)
     await this.elm.send("AT SH 81 10 F1");
     await this.elm.send("AT IIA 10"); // РђРґСЂРµСЃ Р­Р‘РЈ РґР»СЏ Fast Init
     await this.elm.send("AT SP 5");
@@ -176,6 +176,36 @@ class ItelmaM73Protocol {
     this.elm.log('info', '>>> РЎР’РЇР—Р¬ РЎ Р­Р‘РЈ РРўР­Р›РњРђ Рњ73 РЈРЎРџР•РЁРќРћ РЈРЎРўРђРќРћР’Р›Р•РќРђ Р РџР РћР’Р•Р Р•РќРђ! <<<');
     return true;
   }
+
+  /**
+   * Динамическое переключение профилей скорости опроса K-Line в реальном времени
+   */
+  async setSpeedProfile(profile) {
+    if (!this.elm || !this.elm.isConnected) return false;
+    try {
+      if (profile === 'extreme') {
+        await this.elm.send("AT AT 2");
+        await this.elm.send("AT ST 10"); // ~64 мс
+        this.currentSpeedProfile = 'extreme';
+        this.elm.log('info', 'Режим скорости: Экстрим (AT AT 2, AT ST 10, ~64мс)');
+      } else if (profile === 'turbo') {
+        await this.elm.send("AT AT 2");
+        await this.elm.send("AT ST 19"); // ~100 мс
+        this.currentSpeedProfile = 'turbo';
+        this.elm.log('info', 'Режим скорости: Турбо (AT AT 2, AT ST 19, ~100мс)');
+      } else {
+        await this.elm.send("AT AT 1");
+        await this.elm.send("AT ST 32"); // ~200 мс
+        this.currentSpeedProfile = 'standard';
+        this.elm.log('info', 'Режим скорости: Стандарт (AT AT 1, AT ST 32, ~200мс)');
+      }
+      return true;
+    } catch (e) {
+      this.elm.log('err', 'Ошибка переключения профиля скорости: ' + e.message);
+      return false;
+    }
+  }
+
 
   /**
    * Р”РРќРђРњРР§Р•РЎРљРР™ РћРџР РћРЎ РљРђР”Р РћР’ (Р РђР—Р”Р•Р›Р¬РќР«Р™ РћРџР РћРЎ РљРђРљ Р’ OPENDIAG)

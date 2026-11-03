@@ -323,11 +323,51 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v33\n\n• Полный эталонный набор параметров OpenDiag и ReadLogs (83 канала)\n• Исправлены подписи адаптаций: Мультипликатив (FR) и Аддитив (FRA)\n• Исправлено отображение плашек флагов и кодировка параметров\n• Добавлены: нагрузка FRL, расчетная нагрузка, шум датчика детонации, ДК2, целевая лямбда, продувка адсорбера, мощность и момент\n• Расширено логирование в Excel со всеми 63 параметрами\n• Калибровка АЦП по ReadLogs");
+        alert("Диагностика М73 — Версия v34\n\n• Разгон частоты K-Line под возможности адаптера\n• Включен режим Турбо по умолчанию (AT AT 2, AT ST 19)\n• Интерактивное переключение скорости прямо по тапу на плашку (Гц / мс):\n  - Турбо (быстрый ~3.8–4.2 Гц)\n  - Экстрим (предел ~4.5 Гц)\n  - Стандарт (~3.0–3.3 Гц)\n• Защита от сбоев и автовосстановление");
       });
     }
 
     // Навигация по вкладкам (iOS TabBar / Liquid Dock)
+    // Интерактивное переключение профилей скорости (Турбо / Экстрим / Стандарт)
+    const cadencePill = document.querySelector('.cadence-pill');
+    if (cadencePill) {
+      cadencePill.style.cursor = 'pointer';
+      cadencePill.title = 'Нажмите для переключения режима скорости';
+      this.currentSpeedProfile = 'turbo';
+
+      cadencePill.addEventListener('click', async () => {
+        if (!this.elm.isConnected) {
+          alert("⚡ Настройка скорости K-Line (v34)\n\n• Турбо (по умолчанию): AT AT 2 + ST 19 (~3.8–4.2 Гц)\n• Экстрим: AT AT 2 + ST 10 (до ~4.5 Гц)\n• Стандарт: AT AT 1 + ST 32 (~3.0–3.3 Гц)\n\nПодключитесь к машине, чтобы переключать профили прямо на ходу!");
+          return;
+        }
+
+        let next = 'extreme';
+        let desc = 'Экстрим (~4.5 Гц)';
+        if (this.currentSpeedProfile === 'turbo') {
+          next = 'extreme';
+          desc = 'Экстрим (~4.5 Гц)';
+        } else if (this.currentSpeedProfile === 'extreme') {
+          next = 'standard';
+          desc = 'Стандарт (~3.2 Гц)';
+        } else {
+          next = 'turbo';
+          desc = 'Турбо (~4.0 Гц)';
+        }
+
+        this.currentSpeedProfile = next;
+        await this.m73.setSpeedProfile(next);
+
+        const prevText = this.connStateText.textContent;
+        this.connStateText.textContent = `Скорость: ${desc}`;
+        setTimeout(() => {
+          if (this.elm.isConnected && this.connStateText.textContent.startsWith('Скорость:')) {
+            this.connStateText.textContent = prevText || "Подключено к ЭБУ";
+          }
+        }, 2500);
+      });
+    }
+
+    
     document.querySelectorAll('.tabbar-item, .dock-item').forEach(btn => {
       btn.addEventListener('click', () => {
         const targetTab = btn.getAttribute('data-tab');
