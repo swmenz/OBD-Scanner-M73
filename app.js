@@ -3,6 +3,180 @@
  * Полная русификация, строгая визуальная иерархия и эргономика интерфейса.
  */
 
+/**
+ * Менеджер удержания экрана активным (Screen Wake Lock API)
+ * Предотвращает засыпание дисплея iPhone при установке в держатель на панели Приоры.
+ */
+class WakeLockManager {
+  constructor() {
+    this.wakeLock = null;
+    this.isEnabled = false;
+  }
+
+  async request() {
+    this.isEnabled = true;
+    if (!('wakeLock' in navigator)) return;
+    try {
+      if (this.wakeLock && !this.wakeLock.released) return;
+      this.wakeLock = await navigator.wakeLock.request('screen');
+      this.wakeLock.addEventListener('release', () => {
+        this.wakeLock = null;
+      });
+    } catch (err) {
+      // Игнорируем ограничения батареи или неактивного экрана
+    }
+  }
+
+  async release() {
+    this.isEnabled = false;
+    if (this.wakeLock) {
+      try {
+        await this.wakeLock.release();
+      } catch (e) {}
+      this.wakeLock = null;
+    }
+  }
+
+  async reapplyIfNeeded() {
+    if (this.isEnabled && (!this.wakeLock || this.wakeLock.released)) {
+      await this.request();
+    }
+  }
+}
+
+/**
+ * Фоновый хранитель активности WebKit на iOS (Silent Audio Loop + Ambient Audio Session)
+ * Позволяет таймерам JS не засыпать при переключении на музыку или навигатор,
+ * при этом НЕ заглушает и НЕ прерывает музыку пользователя (Яндекс Музыка, Apple Music, Spotify).
+ */
+class BackgroundKeeper {
+  constructor() {
+    this.audioElement = null;
+    this.audioCtx = null;
+    this.bufferSource = null;
+    this.isActive = false;
+    this._blobUrl = null;
+  }
+
+  _initAmbientAudioSession() {
+    // Режим 'ambient' сообщает iOS WebKit: микшировать с другими приложениями, не глушить музыку
+    if ('audioSession' in navigator) {
+      try {
+        navigator.audioSession.type = 'ambient';
+      } catch (e) {}
+    }
+  }
+
+  _createSilentAudioBlobUrl() {
+    if (this._blobUrl) return this._blobUrl;
+    // Генерируем валидный 2-секундный PCM WAV файл тишины (8 кГц, 8 бит моно = 16 КБ)
+    const sampleRate = 8000;
+    const durationSec = 2;
+    const numSamples = sampleRate * durationSec;
+    const buffer = new ArrayBuffer(44 + numSamples);
+    const view = new DataView(buffer);
+
+    // RIFF header
+    view.setUint32(0, 0x52494646, false); // "RIFF"
+    view.setUint32(4, 36 + numSamples, true);
+    view.setUint32(8, 0x57415645, false); // "WAVE"
+
+    // fmt subchunk
+    view.setUint32(12, 0x666d7420, false); // "fmt "
+    view.setUint32(16, 16, true);          // Subchunk1Size (16 for PCM)
+    view.setUint16(20, 1, true);           // AudioFormat (1 = PCM)
+    view.setUint16(22, 1, true);           // NumChannels (1 = mono)
+    view.setUint32(24, sampleRate, true);  // SampleRate
+    view.setUint32(28, sampleRate, true);  // ByteRate
+    view.setUint16(32, 1, true);           // BlockAlign
+    view.setUint16(34, 8, true);           // BitsPerSample (8 bit)
+
+    // data subchunk
+    view.setUint32(36, 0x64617461, false); // "data"
+    view.setUint32(40, numSamples, true);
+
+    // 8-bit PCM тишина — уровень 128 (0x80)
+    const pcm = new Uint8Array(buffer, 44, numSamples);
+    pcm.fill(128);
+
+    const blob = new Blob([buffer], { type: 'audio/wav' });
+    this._blobUrl = URL.createObjectURL(blob);
+    return this._blobUrl;
+  }
+
+  start() {
+    if (this.isActive) return;
+    this.isActive = true;
+    this._initAmbientAudioSession();
+
+    // 1. Web Audio API фоновый генератор тишины (нативно микшируется на iOS)
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (AudioContextClass) {
+        if (!this.audioCtx) {
+          this.audioCtx = new AudioContextClass();
+        }
+        if (this.audioCtx.state === 'suspended') {
+          this.audioCtx.resume().catch(() => {});
+        }
+        if (!this.bufferSource) {
+          const silentBuffer = this.audioCtx.createBuffer(1, this.audioCtx.sampleRate * 2, this.audioCtx.sampleRate);
+          this.bufferSource = this.audioCtx.createBufferSource();
+          this.bufferSource.buffer = silentBuffer;
+          this.bufferSource.loop = true;
+          this.bufferSource.connect(this.audioCtx.destination);
+          this.bufferSource.start();
+        }
+      }
+    } catch (e) {}
+
+    // 2. Фоновый HTML5 аудио-луп тишины для удержания процесса при скрытии вкладки
+    try {
+      if (!this.audioElement) {
+        this.audioElement = new Audio();
+        this.audioElement.src = this._createSilentAudioBlobUrl();
+        this.audioElement.loop = true;
+        this.audioElement.volume = 0.01;
+        this.audioElement.setAttribute('playsinline', '');
+        this.audioElement.setAttribute('webkit-playsinline', '');
+      }
+      this.audioElement.play().catch(() => {});
+    } catch (e) {}
+  }
+
+  stop() {
+    this.isActive = false;
+    if (this.audioElement) {
+      try {
+        this.audioElement.pause();
+      } catch (e) {}
+    }
+    if (this.bufferSource) {
+      try {
+        this.bufferSource.stop();
+        this.bufferSource.disconnect();
+      } catch (e) {}
+      this.bufferSource = null;
+    }
+    if (this.audioCtx) {
+      try {
+        this.audioCtx.suspend().catch(() => {});
+      } catch (e) {}
+    }
+  }
+
+  resumeIfNeeded() {
+    if (!this.isActive) return;
+    this._initAmbientAudioSession();
+    if (this.audioCtx && this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume().catch(() => {});
+    }
+    if (this.audioElement && this.audioElement.paused) {
+      this.audioElement.play().catch(() => {});
+    }
+  }
+}
+
 class M73Application {
   constructor() {
     this.elm = new Elm327BLE();
@@ -18,6 +192,14 @@ class M73Application {
     this.pollPromise = null;
     this.termBuffer = [];
     this.TERM_LIMIT = 300;
+
+    // Фоновая устойчивость, WakeLock и авто-реконнект
+    this.wakeLockMgr = new WakeLockManager();
+    this.bgKeeper = new BackgroundKeeper();
+    this.userExplicitDisconnect = false;
+    this.isReconnecting = false;
+    this.shouldBeConnected = false;
+    this.needsReconnectOnVisible = false;
 
     this.initElements();
     this.bindEvents();
@@ -116,7 +298,11 @@ class M73Application {
     });
 
     this.elm.onLog = (type, msg) => this.appendTerminal(type, msg);
-    this.elm.onDisconnect = () => this.handleDisconnectedState();
+    this.elm.onDisconnect = () => this.handleUnexpectedDisconnect();
+
+    // Защита связи при сворачивании и переключении приложений (музыка, навигатор)
+    document.addEventListener('visibilitychange', () => this.handleVisibilityChange());
+    window.addEventListener('focus', () => this.handleWindowFocus());
 
     this.logger.onStatsUpdate = (stats) => {
       this.hzValue.textContent = stats.hz.toFixed(1);
@@ -176,10 +362,12 @@ class M73Application {
     // Если поиск уже идёт — повторное нажатие служит кнопкой быстрой отмены!
     if (this.connecting) {
       this.connecting = false;
+      this.userExplicitDisconnect = true;
+      this.shouldBeConnected = false;
       this.btnConnect.disabled = false;
       this.btnConnectText.textContent = "Подключить";
       this.btnConnect.classList.remove('connected');
-      this.connIndicator.classList.remove('connected');
+      this.connIndicator.className = 'status-pulse';
       this.connStateText.textContent = "Не подключено";
       this.elm.log('info', 'Поиск отменён пользователем');
       try { await this.elm.disconnect(); } catch (e) {}
@@ -187,13 +375,21 @@ class M73Application {
     }
 
     if (this.elm.isConnected) {
+      // Осознанное отключение пользователем
+      this.userExplicitDisconnect = true;
+      this.shouldBeConnected = false;
       await this.stopPolling();
       await this.elm.disconnect();
-      this.handleDisconnectedState();
+      await this.handleDisconnectedState();
       return;
     }
 
+    this.userExplicitDisconnect = false;
     this.connecting = true;
+
+    // Активируем фоновый хранитель сразу по жесту клика пользователя (требование iOS WebKit)
+    this.bgKeeper.start();
+
     // Оставляем кнопку активной с текстом "Отмена", чтобы пользователь мог прервать поиск в любой момент
     this.btnConnect.disabled = false;
     this.btnConnectText.textContent = "Отмена";
@@ -204,9 +400,10 @@ class M73Application {
       this.btnConnectText.textContent = "Связь...";
       await this.m73.initEcu();
 
+      this.shouldBeConnected = true;
       this.btnConnect.classList.add('connected');
       this.btnConnectText.textContent = "Отключить";
-      this.connIndicator.classList.add('connected');
+      this.connIndicator.className = 'status-pulse connected';
       this.connStateText.textContent = "Подключено к ЭБУ";
       this.btnToggleLog.disabled = false;
       this.peakRpm = 0;
@@ -214,6 +411,9 @@ class M73Application {
 
       // Скрываем прошлый баннер о сохранённой поездке
       if (this.tripSavedAlert) this.tripSavedAlert.style.display = 'none';
+
+      // Активируем удержание экрана включенным на приборной панели
+      await this.wakeLockMgr.request();
 
       this.startContinuousPolling();
 
@@ -235,28 +435,147 @@ class M73Application {
 
       // Если Bluetooth уже открыт, а ЭБУ не ответил — закрываем канал
       try { await this.elm.disconnect(); } catch (e) {}
-      this.handleDisconnectedState();
+      await this.handleDisconnectedState();
     } finally {
       this.connecting = false;
       this.btnConnect.disabled = false;
       if (!this.elm.isConnected) {
         this.btnConnectText.textContent = "Подключить";
         this.btnConnect.classList.remove('connected');
-        this.connIndicator.classList.remove('connected');
+        this.connIndicator.className = 'status-pulse';
         this.connStateText.textContent = "Не подключено";
       }
     }
   }
 
+  async handleUnexpectedDisconnect() {
+    if (this.userExplicitDisconnect) {
+      await this.handleDisconnectedState();
+      return;
+    }
+
+    this.elm.log('err', 'Неожиданный разрыв BLE связи');
+
+    if (document.visibilityState === 'hidden') {
+      // Страница свёрнута: не сбрасываем поездку, взводим флаг для тихого восстановления при разворачивании
+      this.needsReconnectOnVisible = true;
+      this.connStateText.textContent = "Связь приостановлена (в фоне)";
+      this.connIndicator.className = 'status-pulse reconnecting';
+    } else {
+      // Страница активна: пробуем тихо восстановить связь
+      await this.performSilentReconnect();
+    }
+  }
+
+  async handleVisibilityChange() {
+    if (document.visibilityState === 'visible') {
+      this.bgKeeper.resumeIfNeeded();
+
+      if (this.shouldBeConnected) {
+        await this.wakeLockMgr.reapplyIfNeeded();
+
+        const bleLost = !this.elm.isConnected || (this.elm.device && !this.elm.device.gatt?.connected);
+        if (bleLost || this.needsReconnectOnVisible) {
+          this.needsReconnectOnVisible = false;
+          await this.performSilentReconnect();
+        } else {
+          // Канал Bluetooth активен — убеждаемся, что цикл опроса крутится
+          if (!this.isPolling) {
+            this.elm.log('info', 'Возобновление опроса после возврата в приложение...');
+            this.startContinuousPolling();
+          }
+        }
+      }
+    }
+  }
+
+  async handleWindowFocus() {
+    if (this.shouldBeConnected) {
+      const bleLost = !this.elm.isConnected || (this.elm.device && !this.elm.device.gatt?.connected);
+      if (bleLost && !this.isReconnecting) {
+        await this.performSilentReconnect();
+      }
+    }
+  }
+
+  /**
+   * Бесшовный тихий авто-реконнект к адаптеру и перезапуск сессии ЭБУ
+   * Сохраняет текущую поездку и продолжающуюся запись логов в один файл без разделения!
+   */
+  async performSilentReconnect(maxRetries = 3) {
+    if (this.isReconnecting) return;
+    if (!this.elm.device) {
+      await this.handleDisconnectedState();
+      return;
+    }
+    if (this.userExplicitDisconnect) return;
+
+    this.isReconnecting = true;
+    this.connStateText.textContent = "Восстановление связи...";
+    this.connIndicator.className = 'status-pulse reconnecting';
+    this.elm.log('info', 'Автоматическое восстановление связи с адаптером...');
+
+    this.isPolling = false;
+
+    let success = false;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        this.elm.log('info', `Попытка авто-реконнекта (${attempt}/${maxRetries})...`);
+
+        // 1. Тихое переподключение BLE к сохраненному адаптеру
+        await this.elm.silentReconnect();
+
+        // 2. Инициализация протокола ЭБУ М73 (Fast Init K-Line)
+        this.connStateText.textContent = "Инициализация ЭБУ...";
+        await this.m73.initEcu();
+
+        success = true;
+        break;
+      } catch (err) {
+        this.elm.log('err', `Сбой попытки ${attempt}: ${err.message || err}`);
+        if (attempt < maxRetries) {
+          await this.delay(600);
+        }
+      }
+    }
+
+    this.isReconnecting = false;
+
+    if (success) {
+      this.shouldBeConnected = true;
+      this.btnConnect.classList.add('connected');
+      this.btnConnectText.textContent = "Отключить";
+      this.connIndicator.className = 'status-pulse connected';
+      this.connStateText.textContent = "Подключено к ЭБУ";
+      this.btnToggleLog.disabled = false;
+      this.elm.log('info', 'Связь с ЭБУ М73 успешно восстановлена! Логирование продолжается.');
+
+      this.startContinuousPolling();
+      await this.wakeLockMgr.request();
+    } else {
+      this.elm.log('err', 'Не удалось восстановить связь автоматически. Пожалуйста, нажмите "Подключить".');
+      this.shouldBeConnected = false;
+      await this.handleDisconnectedState();
+    }
+  }
+
   async handleDisconnectedState() {
     this.isPolling = false;
+    this.shouldBeConnected = false;
+    this.isReconnecting = false;
+    this.needsReconnectOnVisible = false;
+
+    // Освобождаем блокировку экрана и фоновые процессы
+    await this.wakeLockMgr.release();
+    this.bgKeeper.stop();
+
     // Обрыв связи или выключение зажигания: корректно завершаем запись и сохраняем поездку в IndexedDB
     if (this.logger.isRecording) {
       await this.stopLogging();
     }
     this.btnConnect.classList.remove('connected');
     this.btnConnectText.textContent = "Подключить";
-    this.connIndicator.classList.remove('connected');
+    this.connIndicator.className = 'status-pulse';
     this.connStateText.textContent = "Не подключено";
     this.btnToggleLog.disabled = true;
     this.btnExportXlsx.disabled = this.logger.records.length === 0;
@@ -726,6 +1045,7 @@ class M73Application {
       if (ok) {
         // После сброса ЭБУ закрывает диагностическую сессию — опрос продолжать бессмысленно
         sessionEnded = true;
+        this.userExplicitDisconnect = true;
         await this.elm.disconnect();
         this.handleDisconnectedState();
         alert("Сброс с инициализацией выполнен! Выключите зажигание на 10 секунд, затем включите и подключитесь заново.");

@@ -149,16 +149,17 @@ class TripLogger {
     this.wakeLock = null;
 
     this.onStatsUpdate = null; // (stats: { count: number, hz: number, ms: number }) => void
-
-    // iOS снимает блокировку экрана при сворачивании страницы — возвращаем её при возврате в приложение
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && this.isRecording && 'wakeLock' in navigator) {
-        navigator.wakeLock.request('screen').then(wl => { this.wakeLock = wl; }).catch(() => {});
-      }
-    });
   }
 
   _enableBackgroundMode() {
+    if (window.M73App && window.M73App.bgKeeper) {
+      window.M73App.bgKeeper.start();
+      if (window.M73App.wakeLockMgr) {
+        window.M73App.wakeLockMgr.request();
+      }
+      return;
+    }
+
     try {
       if (!this.silentAudio) {
         const silentWav = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
@@ -178,6 +179,17 @@ class TripLogger {
   }
 
   _disableBackgroundMode() {
+    if (window.M73App && window.M73App.bgKeeper) {
+      // Если связь с адаптером всё ещё продолжается, сохраняем фоновый режим и удержание экрана активными для панели
+      if (!window.M73App.elm || !window.M73App.elm.isConnected) {
+        window.M73App.bgKeeper.stop();
+        if (window.M73App.wakeLockMgr) {
+          window.M73App.wakeLockMgr.release();
+        }
+      }
+      return;
+    }
+
     if (this.silentAudio) {
       this.silentAudio.pause();
     }

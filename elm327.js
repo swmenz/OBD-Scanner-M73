@@ -141,6 +141,54 @@ class Elm327BLE {
   }
 
   /**
+   * Тихое переподключение к уже авторизованному адаптеру без показа окна выбора устройства iOS.
+   * Позволяет мгновенно восстанавливать связь после сворачивания браузера (музыка, навигатор).
+   */
+  async silentReconnect() {
+    if (!this.device) {
+      throw new Error("Адаптер ранее не выбирался, тихое подключение невозможно");
+    }
+
+    this.log('info', `Тихое переподключение к "${this.device.name || 'OBD BLE'}"...`);
+
+    // Гасим зависшие таймеры и очищаем очередь
+    if (this.commandTimeoutTimer) {
+      clearTimeout(this.commandTimeoutTimer);
+      this.commandTimeoutTimer = null;
+    }
+    const pendingReject = this.activeRejecter;
+    this.activeResolver = null;
+    this.activeRejecter = null;
+    this.rxBuffer = "";
+    if (pendingReject) {
+      try { pendingReject(new Error("Переподключение")); } catch (e) {}
+    }
+    this._queue = Promise.resolve();
+
+    // Если GATT числился подключенным, производим аккуратный дисконнект перед новым коннектом
+    try {
+      if (this.device.gatt && this.device.gatt.connected) {
+        await this.device.gatt.disconnect();
+      }
+    } catch (e) {}
+
+    // Гарантируем регистрацию обработчика разрыва связи
+    try {
+      this.device.removeEventListener('gattserverdisconnected', this._gattHandler);
+    } catch (e) {}
+    this.device.addEventListener('gattserverdisconnected', this._gattHandler);
+
+    this.log('info', 'Подключение к GATT серверу адаптера...');
+    this.server = await this.device.gatt.connect();
+
+    await this._discoverSerialPort();
+
+    this.isConnected = true;
+    this.log('info', 'Порт BLE успешно переподключен!');
+    return true;
+  }
+
+  /**
    * Перебор профилей BLE для нахождения портов TX/RX
    */
   async _discoverSerialPort() {
