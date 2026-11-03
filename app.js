@@ -203,6 +203,10 @@ class M73Application {
 
     this.initElements();
     this.bindEvents();
+    if (window.DashboardWidgetManager) {
+      this.widgetManager = new DashboardWidgetManager(this);
+      this.widgetManager.init();
+    }
   }
 
   initElements() {
@@ -323,7 +327,7 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v35\n\n• Режим скорости Экстрим установлен стандартным (AT AT 2, AT ST 10)\n• Исправлены каналы АЦП ДПДЗ (~0.74 В) и ДНД (~2.50 В)\n• Устранён артефакт пускового слова ДМРВ 0xFFFE\n• Очищены заголовки колонок Excel лога\n• Убран лишний companion .txt файл при экспорте на iOS\n• Добавлен авто-повтор Fast Init K-Line для безупречного подключения");
+        alert("Диагностика М73 — Версия v36\n\n• Полная кастомизация приборной панели (виджеты iOS)\n• Режим покачивания (Jiggle mode) по удержанию или кнопке «Настроить»\n• Переключение размера виджетов: компактный 1×1 ↔ во всю ширину 2×1\n• Плавный Touch Drag & Drop для перестановки любых блоков на iPhone\n• Живой неоновый осциллограф ДК1 со синусоидой смеси\n• Галерея для добавления любых скрытых датчиков М73 (мощность, момент и др.)");
       });
     }
 
@@ -875,6 +879,11 @@ class M73Application {
       if (this.misCycle && data.misfires.cycle !== undefined) {
         this.misCycle.textContent = data.misfires.cycle;
       }
+    }
+
+    // Обновление модульной системы виджетов и осциллографа ДК1
+    if (this.widgetManager) {
+      this.widgetManager.updateDynamicWidgets(data);
     }
   }
 

@@ -24,7 +24,7 @@
     <!-- ВЕРХНЯЯ СТЕКЛЯННАЯ ПАНЕЛЬ НАВИГАЦИИ -->
     <header class="glass-navbar">
       <div class="navbar-brand">
-        <div class="brand-title-row"><h1 class="brand-name">М73 Диагностика</h1><span class="app-version-badge" id="appVersionBadge">v35</span></div>
+        <div class="brand-title-row"><h1 class="brand-name">М73 Диагностика</h1><span class="app-version-badge" id="appVersionBadge">v36</span></div>
         <div class="brand-status">
           <span class="status-pulse" id="connIndicator"></span>
           <span class="status-text" id="connStateText">Не подключено</span>
@@ -49,401 +49,453 @@
       <!-- ВКЛАДКА 1: ПАНЕЛЬ ДАТЧИКОВ -->
       <section id="tab-dashboard" class="tab-pane active">
         
-        <!-- ГЛАВНЫЙ БЛОК: СКОРОСТЬ И ОБОРОТЫ (LIQUID HERO GAUGES) -->
-        <div class="hero-grid">
-          <!-- Обороты двигателя -->
-          <div class="glass-card hero-card">
-            <div class="card-top-row">
-              <span class="micro-header">Обороты</span>
-              <span class="peak-badge" id="valPeakRpm">Пик: 0</span>
-            </div>
-            <div class="hero-digital-row">
-              <span class="hero-value" id="valRpm">0</span>
-              <span class="hero-unit">об/мин</span>
-            </div>
-            <div class="glass-progress-track">
-              <div class="glass-progress-bar" id="barRpm"></div>
-            </div>
-          </div>
-
-          <!-- Скорость -->
-          <div class="glass-card hero-card">
-            <div class="card-top-row">
-              <span class="micro-header">Скорость</span>
-              <span class="gear-badge" id="valGearAux">КПП: —</span>
-            </div>
-            <div class="hero-digital-row">
-              <span class="hero-value" id="valSpeed">0</span>
-              <span class="hero-unit">км/ч</span>
-            </div>
-            <div class="hero-subtext">
-              <span>Дроссель: <strong id="valThrottleSub">0%</strong></span>
-            </div>
-          </div>
+        <!-- Панель управления виджетами: заголовок и кнопка редактирования -->
+        <div class="dashboard-custom-bar">
+          <span class="dashboard-section-title">Приборная панель</span>
+          <button id="btnCustomizeDash" class="dash-edit-trigger" type="button" title="Настроить виджеты">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            <span>Настроить</span>
+          </button>
         </div>
 
-        <!-- ПРОПУСКИ ЗАЖИГАНИЯ (Кадр 21 01) -->
-        <div class="glass-card">
-          <div class="panel-header">
-            <div>
-              <h2 class="panel-heading">Пропуски зажигания</h2>
-              <p class="panel-sub">Счётчики пропусков воспламенения по цилиндрам</p>
-            </div>
-          </div>
-          <div class="cyl-matrix">
-            <div class="cyl-tile">
-              <span class="cyl-lbl">Цилиндр 1</span>
-              <span class="cyl-val" id="misCyl1">0</span>
-            </div>
-            <div class="cyl-tile">
-              <span class="cyl-lbl">Цилиндр 2</span>
-              <span class="cyl-val" id="misCyl2">0</span>
-            </div>
-            <div class="cyl-tile">
-              <span class="cyl-lbl">Цилиндр 3</span>
-              <span class="cyl-val" id="misCyl3">0</span>
-            </div>
-            <div class="cyl-tile">
-              <span class="cyl-lbl">Цилиндр 4</span>
-              <span class="cyl-val" id="misCyl4">0</span>
-            </div>
-          </div>
-          <div class="misfire-cycle-summary" style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 13px; color: var(--text-secondary);">
-            <span>Активные пропуски за цикл (1000 об):</span>
-            <span class="mono-badge" id="misCycle" style="font-weight: 700; color: var(--text-primary); font-size: 16px; font-variant-numeric: tabular-nums;">0</span>
-          </div>
+        <!-- Плавающая панель режима редактирования (Jiggle Mode) -->
+        <div id="dashboardEditBar" class="dashboard-edit-floating-bar" style="display: none;">
+          <button id="btnAddWidget" class="glass-btn btn-compact btn-primary-glass" type="button">
+            <span>＋ Добавить</span>
+          </button>
+          <button id="btnResetDashboard" class="glass-btn btn-compact btn-glass-secondary" type="button">
+            <span>↺ Сброс</span>
+          </button>
+          <button id="btnDoneDashboard" class="glass-btn btn-compact btn-done" type="button">
+            <span>Готово</span>
+          </button>
         </div>
 
-        <!-- СЕТКА ДАТЧИКОВ ДВИГАТЕЛЯ (FLUID METRIC TILES) -->
-        <div class="metrics-grid">
+        <div id="dashboardGrid" class="dashboard-grid">
           
-          <!-- ДМРВ -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">Расход воздуха (ДМРВ)</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valMaf">0.0</span>
-              <span class="tile-unit">кг/ч</span>
+          <!-- Виджет 1: Главные цифровые приборы -->
+          <div class="dashboard-widget widget-wide" data-widget-id="hero-gauges" data-title="Спидометр и Тахометр">
+            <div class="hero-grid">
+              <!-- Обороты двигателя -->
+              <div class="glass-card hero-card">
+                <div class="card-top-row">
+                  <span class="micro-header">Обороты</span>
+                  <span class="peak-badge" id="valPeakRpm">Пик: 0</span>
+                </div>
+                <div class="hero-digital-row">
+                  <span class="hero-value" id="valRpm">0</span>
+                  <span class="hero-unit">об/мин</span>
+                </div>
+                <div class="glass-progress-track">
+                  <div class="glass-progress-bar" id="barRpm"></div>
+                </div>
+              </div>
+
+              <!-- Скорость -->
+              <div class="glass-card hero-card">
+                <div class="card-top-row">
+                  <span class="micro-header">Скорость</span>
+                  <span class="gear-badge" id="valGearAux">КПП: —</span>
+                </div>
+                <div class="hero-digital-row">
+                  <span class="hero-value" id="valSpeed">0</span>
+                  <span class="hero-unit">км/ч</span>
+                </div>
+                <div class="hero-subtext">
+                  <span>Дроссель: <strong id="valThrottleSub">0%</strong></span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- Цикловой расход -->
-          <div class="glass-card metric-tile tile-featured">
-            <span class="tile-label">Цикловой расход</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valCycleAir">0.0</span>
-              <span class="tile-unit">мг/такт</span>
+          <!-- Виджет 2: Пропуски зажигания -->
+          <div class="dashboard-widget widget-wide" data-widget-id="misfires" data-title="Пропуски зажигания">
+            <div class="glass-card">
+              <div class="panel-header">
+                <div>
+                  <h2 class="panel-heading">Пропуски зажигания</h2>
+                  <p class="panel-sub">Счётчики пропусков воспламенения по цилиндрам</p>
+                </div>
+              </div>
+              <div class="cyl-matrix">
+                <div class="cyl-tile">
+                  <span class="cyl-lbl">Цилиндр 1</span>
+                  <span class="cyl-val" id="misCyl1">0</span>
+                </div>
+                <div class="cyl-tile">
+                  <span class="cyl-lbl">Цилиндр 2</span>
+                  <span class="cyl-val" id="misCyl2">0</span>
+                </div>
+                <div class="cyl-tile">
+                  <span class="cyl-lbl">Цилиндр 3</span>
+                  <span class="cyl-val" id="misCyl3">0</span>
+                </div>
+                <div class="cyl-tile">
+                  <span class="cyl-lbl">Цилиндр 4</span>
+                  <span class="cyl-val" id="misCyl4">0</span>
+                </div>
+              </div>
+              <div class="misfire-cycle-summary" style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 13px; color: var(--text-secondary);">
+                <span>Активные пропуски за цикл (1000 об):</span>
+                <span class="mono-badge" id="misCycle" style="font-weight: 700; color: var(--text-primary); font-size: 16px; font-variant-numeric: tabular-nums;">0</span>
+              </div>
             </div>
           </div>
 
-          <!-- Время впрыска -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">Длительность впрыска</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valInjTime">0.00</span>
-              <span class="tile-unit">мс</span>
+          <!-- Виджет 3: ДМРВ -->
+          <div class="dashboard-widget widget-compact" data-widget-id="maf" data-title="Расход воздуха (ДМРВ)">
+            <div class="glass-card metric-tile">
+              <span class="tile-label">Расход воздуха (ДМРВ)</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valMaf">0.0</span>
+                <span class="tile-unit">кг/ч</span>
+              </div>
             </div>
           </div>
 
-          <!-- Загрузка форсунок -->
-          <div class="glass-card metric-tile tile-featured">
-            <span class="tile-label">Загрузка форсунок</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valDuty">0.0%</span>
-              <span class="tile-unit">нагрузка</span>
+          <!-- Виджет 4: Цикловой расход -->
+          <div class="dashboard-widget widget-compact" data-widget-id="cycle-air" data-title="Цикловой расход">
+            <div class="glass-card metric-tile tile-featured">
+              <span class="tile-label">Цикловой расход</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valCycleAir">0.0</span>
+                <span class="tile-unit">мг/такт</span>
+              </div>
             </div>
           </div>
 
-          <!-- Мультипликатив (FRA) -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">Мультипликатив (FR)</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valMultAdapt">1.000</span>
-              <span class="tile-unit">множитель</span>
+          <!-- Виджет 5: Длительность впрыска -->
+          <div class="dashboard-widget widget-compact" data-widget-id="inj-time" data-title="Длительность впрыска">
+            <div class="glass-card metric-tile">
+              <span class="tile-label">Длительность впрыска</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valInjTime">0.00</span>
+                <span class="tile-unit">мс</span>
+              </div>
             </div>
           </div>
 
-          <!-- Аддитив (RKAT) -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">Аддитив (FRA)</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valAddAdapt">0.00%</span>
-              <span class="tile-unit">смещение ХХ</span>
+          <!-- Виджет 6: Загрузка форсунок -->
+          <div class="dashboard-widget widget-compact" data-widget-id="duty" data-title="Загрузка форсунок">
+            <div class="glass-card metric-tile tile-featured">
+              <span class="tile-label">Загрузка форсунок</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valDuty">0.0%</span>
+                <span class="tile-unit">нагрузка</span>
+              </div>
             </div>
           </div>
 
-          <!-- УОЗ и отскок детонации -->
-          <div class="glass-card metric-tile" id="cardSpark">
-            <span class="tile-label">УОЗ / Отскок</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valSpark">0.0</span>
-              <span class="glass-retard-tag" id="valRetard">0.0°</span>
+          <!-- Виджет 7: Мультипликатив (FR) -->
+          <div class="dashboard-widget widget-compact" data-widget-id="mult-adapt" data-title="Мультипликатив (FR)">
+            <div class="glass-card metric-tile">
+              <span class="tile-label">Мультипликатив (FR)</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valMultAdapt">1.000</span>
+                <span class="tile-unit">множитель</span>
+              </div>
             </div>
           </div>
 
-          <!-- Дроссель -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">Дроссельная заслонка</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valThrottle">0.0</span>
-              <span class="tile-unit">%</span>
+          <!-- Виджет 8: Аддитив (FRA) -->
+          <div class="dashboard-widget widget-compact" data-widget-id="add-adapt" data-title="Аддитив (FRA)">
+            <div class="glass-card metric-tile">
+              <span class="tile-label">Аддитив (FRA)</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valAddAdapt">0.00%</span>
+                <span class="tile-unit">смещение ХХ</span>
+              </div>
             </div>
           </div>
 
-          <!-- Температура двигателя -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">Температура ОЖ</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valTemp">0</span>
-              <span class="tile-unit">°C</span>
-            </div>
-            <div class="mini-glass-track">
-              <div class="mini-glass-bar" id="barTemp"></div>
-            </div>
-          </div>
-
-          <!-- Температура впуска (ДТВ) -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">Температура впуска (ДТВ)</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valIntakeTemp">0.0</span>
-              <span class="tile-unit">°C</span>
+          <!-- Виджет 9: УОЗ / Отскок -->
+          <div class="dashboard-widget widget-compact" data-widget-id="spark" data-title="УОЗ / Отскок">
+            <div class="glass-card metric-tile" id="cardSpark">
+              <span class="tile-label">УОЗ / Отскок</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valSpark">0.0</span>
+                <span class="glass-retard-tag" id="valRetard">0.0°</span>
+              </div>
             </div>
           </div>
 
-          <!-- Бортовое напряжение -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">Бортовая сеть</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valVoltage">0.0</span>
-              <span class="tile-unit">В</span>
+          <!-- Виджет 10: Дроссельная заслонка -->
+          <div class="dashboard-widget widget-compact" data-widget-id="throttle" data-title="Дроссельная заслонка">
+            <div class="glass-card metric-tile">
+              <span class="tile-label">Дроссельная заслонка</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valThrottle">0.0</span>
+                <span class="tile-unit">%</span>
+              </div>
             </div>
           </div>
 
-          <!-- Датчик неровной дороги (ДНД) -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">Неровная дорога (ДНД)</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valRoughRoad">0.00g</span>
-              <span class="tile-unit">ускорение</span>
+          <!-- Виджет 11: Температура ОЖ -->
+          <div class="dashboard-widget widget-compact" data-widget-id="temp" data-title="Температура ОЖ">
+            <div class="glass-card metric-tile">
+              <span class="tile-label">Температура ОЖ</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valTemp">0</span>
+                <span class="tile-unit">°C</span>
+              </div>
+              <div class="mini-glass-track">
+                <div class="mini-glass-bar" id="barTemp"></div>
+              </div>
             </div>
           </div>
 
-          <!-- Расход топлива -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">Текущий расход</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valFuelRate">0.00</span>
-              <span class="tile-unit">л/ч</span>
+          <!-- Виджет 12: Температура впуска (ДТВ) -->
+          <div class="dashboard-widget widget-compact" data-widget-id="intake-temp" data-title="Температура впуска (ДТВ)">
+            <div class="glass-card metric-tile">
+              <span class="tile-label">Температура впуска (ДТВ)</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valIntakeTemp">0.0</span>
+                <span class="tile-unit">°C</span>
+              </div>
             </div>
           </div>
 
-          <!-- Позиция РХХ -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">Позиция РХХ</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valIac">0</span>
-              <span class="tile-unit">шагов</span>
+          <!-- Виджет 13: Бортовая сеть -->
+          <div class="dashboard-widget widget-compact" data-widget-id="voltage" data-title="Бортовая сеть">
+            <div class="glass-card metric-tile">
+              <span class="tile-label">Бортовая сеть</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valVoltage">0.0</span>
+                <span class="tile-unit">В</span>
+              </div>
             </div>
           </div>
 
-          <!-- Параметр нагрузки (FRL) -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">Нагрузка (FRL)</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valFrlLoad">0.0</span>
-              <span class="tile-unit">%</span>
+          <!-- Виджет 14: Неровная дорога (ДНД) -->
+          <div class="dashboard-widget widget-compact" data-widget-id="rough-road" data-title="Неровная дорога (ДНД)">
+            <div class="glass-card metric-tile">
+              <span class="tile-label">Неровная дорога (ДНД)</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valRoughRoad">0.00g</span>
+                <span class="tile-unit">ускорение</span>
+              </div>
             </div>
           </div>
 
-          <!-- Расчётная нагрузка -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">Расчётная нагрузка</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valCalcLoad">0.0</span>
-              <span class="tile-unit">%</span>
+          <!-- Виджет 15: Текущий расход топлива -->
+          <div class="dashboard-widget widget-compact" data-widget-id="fuel-rate" data-title="Текущий расход топлива">
+            <div class="glass-card metric-tile">
+              <span class="tile-label">Текущий расход</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valFuelRate">0.00</span>
+                <span class="tile-unit">л/ч</span>
+              </div>
             </div>
           </div>
 
-          <!-- Датчик детонации (уровень шума) -->
-          <div class="glass-card metric-tile" id="cardKnockVolt">
-            <span class="tile-label">Шум детонации</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valKnockVolt">0.000</span>
-              <span class="tile-unit">В</span>
+          <!-- Виджет 16: Позиция РХХ -->
+          <div class="dashboard-widget widget-compact" data-widget-id="iac" data-title="Позиция РХХ">
+            <div class="glass-card metric-tile">
+              <span class="tile-label">Позиция РХХ</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valIac">0</span>
+                <span class="tile-unit">шагов</span>
+              </div>
             </div>
           </div>
 
-          <!-- Сигнал ДК1 (до ката) -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">ДК1 (до ката)</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valO2Volt">0.000</span>
-              <span class="tile-unit">В</span>
+          <!-- Виджет 17: Нагрузка (FRL) -->
+          <div class="dashboard-widget widget-compact" data-widget-id="frl-load" data-title="Нагрузка (FRL)">
+            <div class="glass-card metric-tile">
+              <span class="tile-label">Нагрузка (FRL)</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valFrlLoad">0.0</span>
+                <span class="tile-unit">%</span>
+              </div>
             </div>
           </div>
 
-          <!-- Сигнал ДК2 (после ката) -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">ДК2 (после ката)</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valO2Volt2">0.000</span>
-              <span class="tile-unit">В</span>
+          <!-- Виджет 18: Расчётная нагрузка -->
+          <div class="dashboard-widget widget-compact" data-widget-id="calc-load" data-title="Расчётная нагрузка">
+            <div class="glass-card metric-tile">
+              <span class="tile-label">Расчётная нагрузка</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valCalcLoad">0.0</span>
+                <span class="tile-unit">%</span>
+              </div>
             </div>
           </div>
 
-          <!-- Текущая коррекция времени впрыска -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">Коррекция смеси</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valLambdaCorr">1.000</span>
-              <span class="tile-unit">коэфф</span>
+          <!-- Виджет 19: Шум датчика детонации -->
+          <div class="dashboard-widget widget-compact" data-widget-id="knock-volt" data-title="Шум детонации">
+            <div class="glass-card metric-tile" id="cardKnockVolt">
+              <span class="tile-label">Шум детонации</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valKnockVolt">0.000</span>
+                <span class="tile-unit">В</span>
+              </div>
             </div>
           </div>
 
-          <!-- Заданное значение лямбда -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">Целевая лямбда</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valTargetLambda">1.000</span>
-              <span class="tile-unit">состав</span>
+          <!-- Виджет 20: ДК1 (до ката) — Осциллограф со синусоидой -->
+          <div class="dashboard-widget widget-compact" data-widget-id="o2-volt" data-title="ДК1 (до ката)">
+            <div class="glass-card metric-tile o2-oscilloscope-tile">
+              <div class="o2-tile-header">
+                <span class="tile-label">ДК1 (до ката)</span>
+                <div class="o2-mini-val-badge">
+                  <span class="tile-num-mini" id="valO2Volt">0.000</span>
+                  <span class="tile-unit-mini">В</span>
+                </div>
+              </div>
+              <div class="o2-canvas-wrap">
+                <canvas id="canvasO2" class="o2-canvas"></canvas>
+              </div>
             </div>
           </div>
 
-          <!-- Продувка адсорбера -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">Продувка адсорбера</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valPurgeRate">0.0</span>
-              <span class="tile-unit">%</span>
+          <!-- Виджет 21: ДК2 (после ката) -->
+          <div class="dashboard-widget widget-compact" data-widget-id="o2-volt2" data-title="ДК2 (после ката)">
+            <div class="glass-card metric-tile">
+              <span class="tile-label">ДК2 (после ката)</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valO2Volt2">0.000</span>
+                <span class="tile-unit">В</span>
+              </div>
             </div>
           </div>
 
-          <!-- Желаемые обороты ХХ -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">Желаемый ХХ</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valIdleTarget">0</span>
-              <span class="tile-unit">об/мин</span>
+          <!-- Виджет 22: Коррекция смеси -->
+          <div class="dashboard-widget widget-compact" data-widget-id="lambda-corr" data-title="Коррекция смеси">
+            <div class="glass-card metric-tile">
+              <span class="tile-label">Коррекция смеси</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valLambdaCorr">1.000</span>
+                <span class="tile-unit">коэфф</span>
+              </div>
             </div>
           </div>
 
-          <!-- Мощность по ДМРВ -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">Мощность</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valPower">0.0</span>
-              <span class="tile-unit">л.с.</span>
+          <!-- Виджет 23: Целевая лямбда -->
+          <div class="dashboard-widget widget-compact" data-widget-id="target-lambda" data-title="Целевая лямбда">
+            <div class="glass-card metric-tile">
+              <span class="tile-label">Целевая лямбда</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valTargetLambda">1.000</span>
+                <span class="tile-unit">состав</span>
+              </div>
             </div>
           </div>
 
-          <!-- Крутящий момент по ДМРВ -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">Крутящий момент</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valTorque">0.0</span>
-              <span class="tile-unit">Н·м</span>
+          <!-- Виджет 24: Продувка адсорбера -->
+          <div class="dashboard-widget widget-compact" data-widget-id="purge-rate" data-title="Продувка адсорбера">
+            <div class="glass-card metric-tile">
+              <span class="tile-label">Продувка адсорбера</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valPurgeRate">0.0</span>
+                <span class="tile-unit">%</span>
+              </div>
             </div>
           </div>
 
-          <!-- Барокоррекция -->
-          <div class="glass-card metric-tile">
-            <span class="tile-label">Барокоррекция</span>
-            <div class="tile-val-wrap">
-              <span class="tile-num" id="valAltitude">1.000</span>
-              <span class="tile-unit">фактор</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- ФЛАГИ СОСТОЯНИЯ И РЕЖИМОВ -->
-        <div class="glass-card flags-container">
-          <span class="micro-header">Режимы и флаги состояния</span>
-          <div class="glass-chips-grid">
-            <div class="glass-chip" id="flagIdle">
-              <span class="chip-beacon"></span>
-              <span>Холостой ход</span>
-            </div>
-            <div class="glass-chip" id="flagLambda">
-              <span class="chip-beacon"></span>
-              <span>Лямбда-петля</span>
-            </div>
-            <div class="glass-chip chip-alert" id="flagKnock">
-              <span class="chip-beacon"></span>
-              <span>Детонация</span>
-            </div>
-            <div class="glass-chip" id="flagFuelCut">
-              <span class="chip-beacon"></span>
-              <span>Отсечка топлива</span>
-            </div>
-            <div class="glass-chip" id="flagPump">
-              <span class="chip-beacon"></span>
-              <span>Бензонасос</span>
-            </div>
-            <div class="glass-chip" id="flagFan1">
-              <span class="chip-beacon"></span>
-              <span>Вентилятор 1</span>
-            </div>
-            <div class="glass-chip" id="flagFan2">
-              <span class="chip-beacon"></span>
-              <span>Вентилятор 2</span>
-            </div>
-            <div class="glass-chip" id="flagMil">
-              <span class="chip-beacon"></span>
-              <span>Check Engine</span>
-            </div>
-            <div class="glass-chip" id="flagO2Ready">
-              <span class="chip-beacon"></span>
-              <span>Готовность ДК1</span>
-            </div>
-            <div class="glass-chip" id="flagAc">
-              <span class="chip-beacon"></span>
-              <span>Кондиционер</span>
-            </div>
-          </div>
-        </div>
-
-
-        
-        <!-- КАРТОЧКА ЛОГГЕРА В EXCEL -->
-        <div class="glass-card control-card">
-          <div class="control-top" style="margin-bottom: 0;">
-            <div class="control-info">
-              <div class="card-title">Запись поездки в Excel</div>
-              <div class="card-subtitle" id="loggerStatsText">Запись не ведётся • 0 точек</div>
-            </div>
-            <div class="control-buttons">
-              <button id="btnToggleLog" class="glass-btn btn-rec" disabled>
-                <span class="rec-beacon" id="loggerStatusDot"></span>
-                <span id="recBtnLabel">Начать запись</span>
-              </button>
-              <button id="btnExportXlsx" class="glass-btn btn-glass-secondary" disabled>
-                Экспорт XLSX
-              </button>
+          <!-- Виджет 25: Барокоррекция -->
+          <div class="dashboard-widget widget-compact" data-widget-id="altitude" data-title="Барокоррекция">
+            <div class="glass-card metric-tile">
+              <span class="tile-label">Барокоррекция</span>
+              <div class="tile-val-wrap">
+                <span class="tile-num" id="valAltitude">1.000</span>
+                <span class="tile-unit">фактор</span>
+              </div>
             </div>
           </div>
 
-          <!-- Строка автозаписи и истории -->
-          <div class="auto-rec-row">
-            <label class="auto-rec-label">
-              <input type="checkbox" id="chkAutoRecord" checked>
-              <span class="switch-slider"></span>
-              <span class="auto-rec-text">Автозапись при подключении</span>
-            </label>
-            <button id="btnOpenHistory" class="history-link-btn" type="button">
-              История (<span id="historyCount">0</span>)
-            </button>
+          <!-- Виджет 26: Флаги и режимы ЭБУ -->
+          <div class="dashboard-widget widget-wide" data-widget-id="ecu-flags" data-title="Флаги и режимы ЭБУ">
+            <div class="glass-card flags-container">
+              <span class="micro-header">Режимы и флаги состояния</span>
+              <div class="glass-chips-grid">
+                <div class="glass-chip" id="flagIdle">
+                  <span class="chip-beacon"></span>
+                  <span>Холостой ход</span>
+                </div>
+                <div class="glass-chip" id="flagLambda">
+                  <span class="chip-beacon"></span>
+                  <span>Лямбда-петля</span>
+                </div>
+                <div class="glass-chip chip-alert" id="flagKnock">
+                  <span class="chip-beacon"></span>
+                  <span>Детонация</span>
+                </div>
+                <div class="glass-chip" id="flagFuelCut">
+                  <span class="chip-beacon"></span>
+                  <span>Отсечка топлива</span>
+                </div>
+                <div class="glass-chip" id="flagPump">
+                  <span class="chip-beacon"></span>
+                  <span>Бензонасос</span>
+                </div>
+                <div class="glass-chip" id="flagFan1">
+                  <span class="chip-beacon"></span>
+                  <span>Вентилятор 1</span>
+                </div>
+                <div class="glass-chip" id="flagFan2">
+                  <span class="chip-beacon"></span>
+                  <span>Вентилятор 2</span>
+                </div>
+                <div class="glass-chip" id="flagMil">
+                  <span class="chip-beacon"></span>
+                  <span>Check Engine</span>
+                </div>
+                <div class="glass-chip" id="flagO2Ready">
+                  <span class="chip-beacon"></span>
+                  <span>Готовность ДК1</span>
+                </div>
+                <div class="glass-chip" id="flagAc">
+                  <span class="chip-beacon"></span>
+                  <span>Кондиционер</span>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <!-- Баннер автосохраненной поездки -->
-          <div id="tripSavedAlert" class="trip-saved-alert" style="display: none;">
-            <div class="alert-icon">✓</div>
-            <div class="alert-content">
-              <strong>Поездка сохранена в память</strong>
-              <span id="tripSavedDetails">0 точек</span>
+          <!-- Виджет 27: Запись поездки в Excel -->
+          <div class="dashboard-widget widget-wide" data-widget-id="logger-card" data-title="Запись в Excel">
+            <div class="glass-card control-card">
+              <div class="control-top" style="margin-bottom: 0;">
+                <div class="control-info">
+                  <div class="card-title">Запись поездки в Excel</div>
+                  <div class="card-subtitle" id="loggerStatsText">Запись не ведётся • 0 точек</div>
+                </div>
+                <div class="control-buttons">
+                  <button id="btnToggleLog" class="glass-btn btn-rec" disabled>
+                    <span class="rec-beacon" id="loggerStatusDot"></span>
+                    <span id="recBtnLabel">Начать запись</span>
+                  </button>
+                  <button id="btnExportXlsx" class="glass-btn btn-glass-secondary" disabled>
+                    Экспорт XLSX
+                  </button>
+                </div>
+              </div>
+
+              <!-- Строка автозаписи и истории -->
+              <div class="auto-rec-row">
+                <label class="auto-rec-label">
+                  <input type="checkbox" id="chkAutoRecord" checked>
+                  <span class="switch-slider"></span>
+                  <span class="auto-rec-text">Автозапись при подключении</span>
+                </label>
+                <button id="btnOpenHistory" class="history-link-btn" type="button">
+                  История (<span id="historyCount">0</span>)
+                </button>
+              </div>
+
+              <!-- Баннер автосохраненной поездки -->
+              <div id="tripSavedAlert" class="trip-saved-alert" style="display: none;">
+                <div class="alert-icon">✓</div>
+                <div class="alert-content">
+                  <strong>Поездка сохранена в память</strong>
+                  <span id="tripSavedDetails">0 точек</span>
+                </div>
+                <button id="btnQuickExport" class="glass-btn btn-primary-glass btn-compact" type="button">Скачать</button>
+              </div>
             </div>
-            <button id="btnQuickExport" class="glass-btn btn-primary-glass btn-compact" type="button">Скачать</button>
           </div>
-        </div>
+
+        </div> <!-- /dashboardGrid -->
 
       </section>
 
@@ -686,9 +738,26 @@
     </div>
   </div>
 
-  <script src="elm327.js?v=30"></script>
+    <!-- МОДАЛЬНОЕ ОКНО: ГАЛЕРЕЯ ВИДЖЕТОВ (iOS STYLE) -->
+  <div id="modalWidgetGallery" class="modal-backdrop" style="display: none;">
+    <div class="glass-modal gallery-modal-sheet">
+      <div class="modal-header">
+        <div class="modal-title">Галерея виджетов</div>
+        <button id="btnCloseGallery" class="modal-close-btn" type="button">&times;</button>
+      </div>
+      <div class="gallery-search-bar">
+        <input type="text" id="gallerySearchInput" class="gallery-search-input" placeholder="Поиск датчика...">
+      </div>
+      <div class="modal-body gallery-modal-body" id="galleryList">
+        <!-- Заполняется динамически из DashboardWidgetManager -->
+      </div>
+    </div>
+  </div>
+
+<script src="elm327.js?v=30"></script>
   <script src="m73.js?v=30"></script>
   <script src="logger.js?v=30"></script>
-  <script src="app.js?v=30"></script>
+    <script src="dashboard-widgets.js?v=36"></script>
+<script src="app.js?v=30"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 // Сервис-воркер для 100% оффлайн работы приложения в машине без интернета
-const CACHE_NAME = 'm73-diag-cache-v35';
+const CACHE_NAME = 'm73-diag-cache-v36';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -8,6 +8,7 @@ const ASSETS_TO_CACHE = [
   './elm327.js',
   './m73.js',
   './logger.js',
+  './dashboard-widgets.js',
   './app.js',
   './manifest.json',
   './xlsx.full.min.js',
