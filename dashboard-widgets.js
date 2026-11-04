@@ -147,34 +147,50 @@ class DashboardWidgetManager {
       gallerySearch.addEventListener('input', (e) => this._filterGallery(e.target.value));
     }
 
-    // Нажатие и удержание (Long Press 500мс) для входа в режим редактирования как в iOS
+    // Нажатие и удержание для входа в режим редактирования как в iOS
     this._bindLongPress();
 
-    // Touch Drag & Drop перетаскивание на iPhone
+    // Touch Drag & Drop перетаскивание на iPhone с задержкой 1.5с
     this._bindTouchDrag();
   }
 
   _bindLongPress() {
     let pressTimer = null;
+    let startX = 0;
+    let startY = 0;
 
     this.container.addEventListener('touchstart', (e) => {
       if (this.isEditMode) return;
       if (e.target.closest('button, input, a, select')) return;
 
+      const touch = e.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+
       pressTimer = setTimeout(() => {
         if (navigator.vibrate) navigator.vibrate(50);
         this.enterEditMode();
-      }, 500);
+      }, 700);
     }, { passive: true });
 
-    this.container.addEventListener('touchmove', () => {
+    this.container.addEventListener('touchmove', (e) => {
+      if (pressTimer) {
+        const touch = e.touches[0];
+        if (Math.hypot(touch.clientX - startX, touch.clientY - startY) > 10) {
+          clearTimeout(pressTimer);
+          pressTimer = null;
+        }
+      }
+    }, { passive: true });
+
+    this.container.addEventListener('touchend', () => {
       if (pressTimer) {
         clearTimeout(pressTimer);
         pressTimer = null;
       }
     }, { passive: true });
 
-    this.container.addEventListener('touchend', () => {
+    this.container.addEventListener('touchcancel', () => {
       if (pressTimer) {
         clearTimeout(pressTimer);
         pressTimer = null;
@@ -187,18 +203,50 @@ class DashboardWidgetManager {
     let initialX = 0;
     let initialY = 0;
     let touchTarget = null;
-    let isMoving = false;
+    let holdTimer = null;
+    let canDrag = false;
+
+    const cleanupDrag = () => {
+      if (holdTimer) {
+        clearTimeout(holdTimer);
+        holdTimer = null;
+      }
+      if (draggedEl) {
+        draggedEl.classList.remove('is-dragging');
+        draggedEl.style.transform = '';
+        draggedEl.style.pointerEvents = '';
+        this._saveLayout();
+        draggedEl = null;
+      }
+      touchTarget = null;
+      canDrag = false;
+    };
 
     this.container.addEventListener('touchstart', (e) => {
       if (!this.isEditMode) return;
       const widget = e.target.closest('.dashboard-widget');
       if (!widget || e.target.closest('.widget-action-btn')) return;
 
+      // Сбрасываем предыдущее состояние
+      cleanupDrag();
+
       touchTarget = widget;
       const touch = e.touches[0];
       initialX = touch.clientX;
       initialY = touch.clientY;
-      isMoving = false;
+      canDrag = false;
+
+      // Задержка удержания 1.5 секунды перед активацией перемещения виджета
+      // Это позволяет пользователю свободно прокручивать страницу вниз в режиме редактирования!
+      holdTimer = setTimeout(() => {
+        if (!touchTarget) return;
+        canDrag = true;
+        draggedEl = touchTarget;
+        draggedEl.classList.add('is-dragging');
+        if (navigator.vibrate) {
+          navigator.vibrate([40, 30, 40]);
+        }
+      }, 1500);
     }, { passive: true });
 
     this.container.addEventListener('touchmove', (e) => {
@@ -207,19 +255,35 @@ class DashboardWidgetManager {
       const touch = e.touches[0];
       const dx = touch.clientX - initialX;
       const dy = touch.clientY - initialY;
+      const dist = Math.hypot(dx, dy);
 
-      if (!isMoving && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) {
-        isMoving = true;
-        draggedEl = touchTarget;
-        draggedEl.classList.add('is-dragging');
-        if (navigator.vibrate) navigator.vibrate(25);
+      // Если 1.5 сек удержания еще не прошло:
+      if (!canDrag) {
+        // Если палец сдвинулся более чем на 10px — пользователь просто скроллит страницу
+        if (dist > 10) {
+          if (holdTimer) {
+            clearTimeout(holdTimer);
+            holdTimer = null;
+          }
+          touchTarget = null;
+        }
+        // Не блокируем нативную прокрутку страницы!
+        return;
       }
 
-      if (isMoving && draggedEl) {
-        e.preventDefault(); // Предотвращаем скролл страницы при перемещении виджета
+      // После 1.5 сек удержания виджет переходит в режим перемещения:
+      if (draggedEl) {
+        e.preventDefault(); // Предотвращаем скролл страницы только во время активного drag
         draggedEl.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(1.05)`;
 
-        // Поиск элемента под пальцем
+        // Автоматическая подкрутка экрана если палец у края экрана
+        if (touch.clientY > window.innerHeight - 80) {
+          window.scrollBy(0, 10);
+        } else if (touch.clientY < 80) {
+          window.scrollBy(0, -10);
+        }
+
+        // Поиск элемента под пальцем для перестановки
         draggedEl.style.pointerEvents = 'none';
         const elemBelow = document.elementFromPoint(touch.clientX, touch.clientY);
         draggedEl.style.pointerEvents = '';
@@ -239,19 +303,8 @@ class DashboardWidgetManager {
       }
     }, { passive: false });
 
-    const endDrag = () => {
-      if (draggedEl) {
-        draggedEl.classList.remove('is-dragging');
-        draggedEl.style.transform = '';
-        this._saveLayout();
-        draggedEl = null;
-      }
-      touchTarget = null;
-      isMoving = false;
-    };
-
-    this.container.addEventListener('touchend', endDrag);
-    this.container.addEventListener('touchcancel', endDrag);
+    this.container.addEventListener('touchend', cleanupDrag);
+    this.container.addEventListener('touchcancel', cleanupDrag);
   }
 
   toggleEditMode() {

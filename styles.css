@@ -1505,7 +1505,7 @@ body {
   animation: iosJiggle 0.28s infinite ease-in-out;
   user-select: none;
   -webkit-user-select: none;
-  touch-action: none;
+  touch-action: pan-y;
 }
 
 .dashboard-grid.edit-mode .dashboard-widget:nth-child(2n) {
@@ -1520,21 +1520,27 @@ body {
 .widget-action-btn {
   display: none;
   position: absolute;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  background: rgba(30, 30, 30, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(30, 30, 30, 0.92);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   color: #fff;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
+  line-height: 1;
   align-items: center;
   justify-content: center;
   z-index: 25;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.widget-action-btn:active {
+  transform: scale(0.9);
 }
 
 .dashboard-grid.edit-mode .widget-action-btn {
@@ -1542,23 +1548,24 @@ body {
 }
 
 .widget-btn-remove {
-  top: -8px;
-  left: -8px;
+  top: -6px;
+  left: 6px;
   background: rgba(255, 69, 58, 0.95);
 }
 
 .widget-btn-resize {
-  top: -8px;
-  right: -8px;
+  top: -6px;
+  right: 6px;
   background: rgba(10, 132, 255, 0.95);
 }
 
 .dashboard-widget.is-dragging {
   animation: none !important;
-  opacity: 0.88;
+  opacity: 0.90;
   transform: scale(1.05) !important;
   z-index: 100 !important;
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.6), 0 0 0 2px var(--apple-blue) !important;
+  touch-action: none !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 0 2px var(--apple-blue) !important;
 }
 
 .widget-leaving {
