@@ -41,7 +41,8 @@ class DashboardWidgetManager {
       { id: 'extra-unbalance-rpm', title: 'Неравномерность коленвала', unit: 'об/с²', field: 'unbalanceRpm', category: 'dynamics', decimals: 2 },
       { id: 'extra-temp-start', title: 'Температура ОЖ при пуске', unit: '°C', field: 'tempAtStart', category: 'ignition', decimals: 1 },
       { id: 'extra-time-reset', title: 'Время с момента сброса', unit: 'мин', field: 'timeSinceReset', category: 'main', decimals: 0 },
-      { id: 'extra-time-reset-hours', title: 'Время сброса ЭБУ (ч)', unit: 'ч', field: 'timeSinceResetHours', category: 'main', decimals: 1 }
+      { id: 'extra-time-reset-hours', title: 'Время сброса ЭБУ (ч)', unit: 'ч', field: 'timeSinceResetHours', category: 'main', decimals: 1 },
+      { id: 'extra-idle-air-offset', title: 'Смещение воздуха ХХ', unit: 'кг/ч', field: 'idleAirOffset', category: 'air', decimals: 1 }
     ];
   }
 
@@ -90,18 +91,7 @@ class DashboardWidgetManager {
   }
 
   _attachWidgetControls(widgetEl) {
-    if (widgetEl.querySelector('.widget-btn-remove')) return;
-
-    // Кнопка удаления (скрытия)
-    const btnRemove = document.createElement('button');
-    btnRemove.className = 'widget-action-btn widget-btn-remove';
-    btnRemove.setAttribute('type', 'button');
-    btnRemove.setAttribute('aria-label', 'Скрыть виджет');
-    btnRemove.innerHTML = '✕';
-    btnRemove.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.removeWidget(widgetEl);
-    });
+    if (widgetEl.querySelector('.widget-btn-resize')) return;
 
     // Кнопка переключения размера (1 колонка ↔ во всю ширину)
     const btnResize = document.createElement('button');
@@ -114,7 +104,26 @@ class DashboardWidgetManager {
       this.toggleWidgetSize(widgetEl);
     });
 
-    widgetEl.appendChild(btnRemove);
+    // Карточка логгера является системной — запрещаем её случайное удаление
+    if (widgetEl.getAttribute('data-widget-id') === 'logger-card') {
+      widgetEl.appendChild(btnResize);
+      return;
+    }
+
+    if (!widgetEl.querySelector('.widget-btn-remove')) {
+      // Кнопка удаления (скрытия)
+      const btnRemove = document.createElement('button');
+      btnRemove.className = 'widget-action-btn widget-btn-remove';
+      btnRemove.setAttribute('type', 'button');
+      btnRemove.setAttribute('aria-label', 'Скрыть виджет');
+      btnRemove.innerHTML = '✕';
+      btnRemove.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.removeWidget(widgetEl);
+      });
+      widgetEl.appendChild(btnRemove);
+    }
+
     widgetEl.appendChild(btnResize);
   }
 
@@ -293,11 +302,14 @@ class DashboardWidgetManager {
         e.preventDefault(); // Предотвращаем скролл страницы только во время активного drag
         draggedEl.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(1.05)`;
 
-        // Автоматическая подкрутка экрана если палец у края экрана
-        if (touch.clientY > window.innerHeight - 80) {
-          window.scrollBy(0, 10);
-        } else if (touch.clientY < 80) {
-          window.scrollBy(0, -10);
+        // Автоматическая подкрутка экрана если палец у края экрана (контейнер .app-scroll-view)
+        const scrollView = this.container.closest('.app-scroll-view') || document.querySelector('.app-scroll-view');
+        if (scrollView) {
+          if (touch.clientY > window.innerHeight - 80) {
+            scrollView.scrollBy({ top: 12, behavior: 'auto' });
+          } else if (touch.clientY < 80) {
+            scrollView.scrollBy({ top: -12, behavior: 'auto' });
+          }
         }
 
         // Поиск элемента под пальцем для перестановки
@@ -431,8 +443,8 @@ class DashboardWidgetManager {
       { id: 'cycle-air', title: 'Цикловой расход', category: 'air', desc: 'Наполнение цилиндра воздухом (мг/такт)' },
       { id: 'inj-time', title: 'Длительность впрыска', category: 'fuel', desc: 'Время открытия форсунок в мс' },
       { id: 'duty', title: 'Загрузка форсунок', category: 'fuel', desc: 'Процент загруженности форсунок (%)' },
-      { id: 'mult-adapt', title: 'Мультипликатив (FR)', category: 'fuel', desc: 'Долговременная коррекция смеси' },
-      { id: 'add-adapt', title: 'Аддитив (FRA)', category: 'fuel', desc: 'Смещение топливоподачи на ХХ (%)' },
+      { id: 'mult-adapt', title: 'Мультипликатив (FRA)', category: 'fuel', desc: 'Долговременная коррекция смеси под нагрузкой' },
+      { id: 'add-adapt', title: 'Аддитив (TRA / ХХ)', category: 'fuel', desc: 'Смещение топливоподачи на ХХ (%)' },
       { id: 'spark', title: 'УОЗ и отскок детонации', category: 'ignition', desc: 'Угол зажигания и величина отката (°П.К.В)' },
       { id: 'throttle', title: 'Дроссельная заслонка', category: 'main', desc: 'Положение педали/заслонки в %' },
       { id: 'temp', title: 'Температура ОЖ', category: 'ignition', desc: 'Температура охлаждающей жидкости со шкалой' },
@@ -469,9 +481,11 @@ class DashboardWidgetManager {
           <div class="gallery-sub">${item.desc || ('Канал ЭБУ: ' + (item.unit || ''))}</div>
         </div>
         <div class="gallery-action">
-          ${isAlreadyAdded 
-            ? '<button class="glass-btn btn-compact btn-gallery-remove" type="button">✕ Удалить</button>' 
-            : '<button class="glass-btn btn-compact btn-gallery-add" type="button">＋ Добавить</button>'}
+          ${item.id === 'logger-card'
+            ? '<span class="badge-system">Системный</span>'
+            : (isAlreadyAdded 
+              ? '<button class="glass-btn btn-compact btn-gallery-remove" type="button">✕ Удалить</button>' 
+              : '<button class="glass-btn btn-compact btn-gallery-add" type="button">＋ Добавить</button>')}
         </div>
       `;
 
@@ -480,6 +494,8 @@ class DashboardWidgetManager {
       const toggleAction = (e) => {
         e.preventDefault();
         e.stopPropagation();
+
+        if (item.id === 'logger-card') return;
 
         const currentlyAdded = row.classList.contains('item-added');
         if (currentlyAdded) {
@@ -518,7 +534,7 @@ class DashboardWidgetManager {
     });
   }
 
-  _createAndAddWidget(item) {
+  _createAndAddWidget(item, skipSave = false) {
     const existing = this.container.querySelector(`[data-widget-id="${item.id}"]`);
     if (existing) return;
 
@@ -555,7 +571,7 @@ class DashboardWidgetManager {
 
     this._attachWidgetControls(widgetEl);
     this.container.appendChild(widgetEl);
-    this._saveLayout();
+    if (!skipSave) this._saveLayout();
 
     // Обновляем контекст canvas если вернули ДК1
     if (item.id === 'o2-volt') {
@@ -564,18 +580,18 @@ class DashboardWidgetManager {
     }
 
     // Повторно инициализируем кэшированные элементы в приложении
-    if (this.app && typeof this.app.initElements === 'function') {
+    if (!skipSave && this.app && typeof this.app.initElements === 'function') {
       this.app.initElements();
     }
 
     // Плавная прокрутка к добавленному виджету только если галерея закрыта
-    if (!this.galleryModal || !this.galleryModal.classList.contains('open')) {
+    if (!skipSave && (!this.galleryModal || !this.galleryModal.classList.contains('open'))) {
       setTimeout(() => {
         widgetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }, 120);
     }
 
-    if (navigator.vibrate) navigator.vibrate(40);
+    if (!skipSave && navigator.vibrate) navigator.vibrate(40);
   }
 
   _getStandardWidgetHtml(id) {
@@ -634,8 +650,8 @@ class DashboardWidgetManager {
       'cycle-air': { title: 'Цикловой расход', valId: 'valCycleAir', unit: 'мг/такт', def: '0.0', featured: true },
       'inj-time': { title: 'Длительность впрыска', valId: 'valInjTime', unit: 'мс', def: '0.00' },
       'duty': { title: 'Загрузка форсунок', valId: 'valDuty', unit: 'нагрузка', def: '0.0%', featured: true },
-      'mult-adapt': { title: 'Мультипликатив (FR)', valId: 'valMultAdapt', unit: 'множитель', def: '1.000' },
-      'add-adapt': { title: 'Аддитив (FRA)', valId: 'valAddAdapt', unit: 'смещение ХХ', def: '+0.00%' },
+      'mult-adapt': { title: 'Мультипликатив (FRA)', valId: 'valMultAdapt', unit: 'множитель', def: '1.000' },
+      'add-adapt': { title: 'Аддитив (TRA / ХХ)', valId: 'valAddAdapt', unit: 'смещение ХХ', def: '+0.00%' },
       'spark': { title: 'УОЗ / Отскок', valId: 'valSpark', unit: '° / <strong id="valRetard" style="font-weight:700;">0.0°</strong>', def: '0.0', cardId: 'cardSpark' },
       'throttle': { title: 'Дроссельная заслонка', valId: 'valThrottle', unit: '%', def: '0.0' },
       'temp': { title: 'Температура ОЖ', valId: 'valTemp', unit: '°C', def: '0', progress: 'barTemp' },
@@ -711,7 +727,7 @@ class DashboardWidgetManager {
         // Проверяем, был ли это сохраненный дополнительный датчик
         const extra = this.extraSensorsCatalog.find(s => s.id === item.id);
         if (extra) {
-          this._createAndAddWidget(extra);
+          this._createAndAddWidget(extra, true);
           const newW = this.container.querySelector(`[data-widget-id="${item.id}"]`);
           if (newW && item.size === 'wide') {
             newW.classList.remove('widget-compact');
@@ -725,6 +741,11 @@ class DashboardWidgetManager {
     existingMap.forEach(widget => {
       widget.remove();
     });
+
+    // Однократная инициализация элементов после полной сборки сохраненной раскладки
+    if (this.app && typeof this.app.initElements === 'function') {
+      this.app.initElements();
+    }
   }
 
   resetLayout() {

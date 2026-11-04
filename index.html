@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" href="icon-192.png">
   <title>Диагностика М73 — Лада Приора</title>
   
-  <link rel="stylesheet" href="styles.css?v=40">
+  <link rel="stylesheet" href="styles.css?v=41">
   <script src="xlsx.full.min.js"></script>
   <link rel="manifest" href="manifest.json">
 </head>
@@ -24,7 +24,7 @@
     <!-- ВЕРХНЯЯ СТЕКЛЯННАЯ ПАНЕЛЬ НАВИГАЦИИ -->
     <header class="glass-navbar">
       <div class="navbar-brand">
-        <div class="brand-title-row"><h1 class="brand-name">М73 Диагностика</h1><span class="app-version-badge" id="appVersionBadge">v40</span></div>
+        <div class="brand-title-row"><h1 class="brand-name">М73 Диагностика</h1><span class="app-version-badge" id="appVersionBadge">v41</span></div>
         <div class="brand-status">
           <span class="status-pulse" id="connIndicator"></span>
           <span class="status-text" id="connStateText">Не подключено</span>
@@ -186,10 +186,10 @@
             </div>
           </div>
 
-          <!-- Виджет 7: Мультипликатив (FR) -->
-          <div class="dashboard-widget widget-compact" data-widget-id="mult-adapt" data-title="Мультипликатив (FR)">
+          <!-- Виджет 7: Мультипликатив (FRA) -->
+          <div class="dashboard-widget widget-compact" data-widget-id="mult-adapt" data-title="Мультипликатив (FRA)">
             <div class="glass-card metric-tile">
-              <span class="tile-label">Мультипликатив (FR)</span>
+              <span class="tile-label">Мультипликатив (FRA)</span>
               <div class="tile-val-wrap">
                 <span class="tile-num" id="valMultAdapt">1.000</span>
                 <span class="tile-unit">множитель</span>
@@ -197,10 +197,10 @@
             </div>
           </div>
 
-          <!-- Виджет 8: Аддитив (FRA) -->
-          <div class="dashboard-widget widget-compact" data-widget-id="add-adapt" data-title="Аддитив (FRA)">
+          <!-- Виджет 8: Аддитив (TRA / ХХ) -->
+          <div class="dashboard-widget widget-compact" data-widget-id="add-adapt" data-title="Аддитив (TRA / ХХ)">
             <div class="glass-card metric-tile">
-              <span class="tile-label">Аддитив (FRA)</span>
+              <span class="tile-label">Аддитив (TRA / ХХ)</span>
               <div class="tile-val-wrap">
                 <span class="tile-num" id="valAddAdapt">0.00%</span>
                 <span class="tile-unit">смещение ХХ</span>
@@ -754,10 +754,10 @@
     </div>
   </div>
 
-<script src="elm327.js?v=40"></script>
-  <script src="m73.js?v=40"></script>
-  <script src="logger.js?v=40"></script>
-    <script src="dashboard-widgets.js?v=40"></script>
-<script src="app.js?v=40"></script>
+<script src="elm327.js?v=41"></script>
+  <script src="m73.js?v=41"></script>
+  <script src="logger.js?v=41"></script>
+    <script src="dashboard-widgets.js?v=41"></script>
+<script src="app.js?v=41"></script>
 </body>
 </html>

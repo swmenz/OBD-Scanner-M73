@@ -1797,6 +1797,20 @@ body {
   gap: 4px;
 }
 
+.badge-system {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--apple-blue);
+  padding: 4px 8px;
+  border-radius: 10px;
+  background: rgba(10, 132, 255, 0.12);
+  white-space: nowrap;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 /* Адаптации содержимого виджетов под компактный (1 колонка) и широкий (2 колонки) размеры */
 .widget-compact .hero-grid {
   grid-template-columns: 1fr;

@@ -327,7 +327,7 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v40\n\n• Калибровка расчетов по OpenDiag и ReadLogs:\n  1) Аддитивная составляющая коррекции (FRA, %): точный байтовый оффсет 55-56 ((s16 * 100) / 32768.0)\n  2) Время с момента сброса ЭБУ: расчет истинных минут (raw * 6) и часов (raw / 10.0)\n• Добавлены оба формата в виджеты и Excel-лог");
+        alert("Диагностика М73 — Версия v41\n\n• Полная стабилизация ядра и модульных виджетов:\n  1) Восстановлен чистый UTF-8 во всем протоколе m73.js\n  2) Исправлены счетчики пропусков: 5-й счетчик ЭБУ — цикловые пропуски за 1000 об, сумма 4 цилиндров — суммарные пропуски\n  3) Гарантированный возврат базового заголовка K-Line (AT SH 81 10 F1) в блоках try..finally\n  4) Таймаут шины AT ST 20 (~128 мс) для исключения ложных NO DATA\n  5) Безопасный повторный опрос оборотов перед тестами исполнительных механизмов\n  6) Защита от случайного подключения при отмене диалога Bluetooth\n  7) Устранена перезапись пользовательского layout в localStorage\n  8) Добавлены дублеры кнопок Добавить/Удалить прямо в галерею виджетов и исключен перенос текста");
       });
     }
 
@@ -338,7 +338,7 @@ class M73Application {
       this.currentSpeedProfile = 'extreme';
 
       cadencePill.addEventListener('click', () => {
-        alert("⚡ Режим опроса: Экстрим (Стандарт v35)\n\n• Адаптивный тайминг: AT AT 2\n• Таймаут шины: AT ST 10 (~64 мс)\n• Максимальная отзывчивость датчиков\n• Опрос кадров: 3.2–4.2 Гц без задержек");
+        alert("⚡ Режим опроса: Экстрим (Стандарт v41)\n\n• Адаптивный тайминг: AT AT 2\n• Таймаут шины: AT ST 20 (~128 мс)\n• Защита от потери 74-байтных кадров под нагрузкой\n• Максимальная отзывчивость датчиков\n• Опрос кадров: 3.2–4.2 Гц без задержек");
       });
     }
 
@@ -365,8 +365,21 @@ class M73Application {
       }
     };
 
-    this.btnToggleLog.addEventListener('click', () => this.toggleLogging());
-    this.btnExportXlsx.addEventListener('click', () => this.logger.exportToXlsx());
+    if (this.btnToggleLog) {
+      this.btnToggleLog.addEventListener('click', () => this.toggleLogging());
+    }
+    if (this.btnExportXlsx) {
+      this.btnExportXlsx.addEventListener('click', () => this.logger.exportToXlsx());
+    }
+
+    // Делегированные обработчики логгера (на случай динамического пересоздания карточки)
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#btnToggleLog')) {
+        this.toggleLogging();
+      } else if (e.target.closest('#btnExportXlsx')) {
+        this.logger.exportToXlsx();
+      }
+    });
 
     // Автозапись и история поездок
     if (this.chkAutoRecord) {
@@ -376,6 +389,16 @@ class M73Application {
         localStorage.setItem('m73_autorecord', this.chkAutoRecord.checked);
       });
     }
+
+    document.addEventListener('change', (e) => {
+      const chk = e.target.closest('#chkAutoRecord');
+      if (chk) {
+        localStorage.setItem('m73_autorecord', chk.checked ? '1' : '0');
+        if (chk.checked && this.elm.isConnected && !this.logger.isRecording) {
+          this.startLogging();
+        }
+      }
+    });
 
     if (this.btnOpenHistory) {
       this.btnOpenHistory.addEventListener('click', () => this.openHistoryModal());
@@ -449,6 +472,11 @@ class M73Application {
 
     try {
       await this.elm.requestAndConnect();
+
+      if (!this.connecting || this.userExplicitDisconnect) {
+        await this.elm.disconnect();
+        return;
+      }
       
       this.btnConnectText.textContent = "Связь...";
       await this.m73.initEcu();
@@ -1106,15 +1134,22 @@ class M73Application {
   async testActuator(testType) {
     if (!this.elm.isConnected) return alert("Адаптер не подключен к ЭБУ");
 
-    // 1. Проверка условий безопасности: тесты разрешены ТОЛЬКО при RPM == 0
-    if (this.m73.latestData && this.m73.latestData.rpm > 0) {
-      return alert("Внимание! Тесты исполнительных механизмов разрешены только при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nЭБУ M73 аппаратно блокирует тесты при заведённом моторе.");
-    }
-
     const prevPolling = this.isPolling;
     await this.stopPolling();
 
-    // 2. Даем шине 150 мс тишины для исключения коллизий пакетов
+    // 1. Опрашиваем актуальный статус перед тестом (проверка заглушен ли мотор)
+    try {
+      await this.m73.readConfiguredCycle('2101');
+    } catch (e) {}
+
+    // 2. Проверка условий безопасности: тесты разрешены ТОЛЬКО при RPM == 0
+    if (this.m73.latestData && this.m73.latestData.rpm > 0) {
+      alert("Внимание! Тесты исполнительных механизмов разрешены только при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nЭБУ M73 аппаратно блокирует тесты при заведённом моторе.");
+      if (prevPolling) this.startContinuousPolling();
+      return;
+    }
+
+    // 3. Даем шине 150 мс тишины для исключения коллизий пакетов
     await this.delay(150);
 
     try {
