@@ -365,14 +365,7 @@ class M73Application {
       }
     };
 
-    if (this.btnToggleLog) {
-      this.btnToggleLog.addEventListener('click', () => this.toggleLogging());
-    }
-    if (this.btnExportXlsx) {
-      this.btnExportXlsx.addEventListener('click', () => this.logger.exportToXlsx());
-    }
-
-    // Делегированные обработчики логгера (на случай динамического пересоздания карточки)
+    // Делегированные обработчики логгера (работают всегда, без задвоения вызовов)
     document.addEventListener('click', (e) => {
       if (e.target.closest('#btnToggleLog')) {
         this.toggleLogging();
@@ -384,16 +377,13 @@ class M73Application {
     // Автозапись и история поездок
     if (this.chkAutoRecord) {
       const savedAutoRec = localStorage.getItem('m73_autorecord');
-      this.chkAutoRecord.checked = savedAutoRec !== 'false';
-      this.chkAutoRecord.addEventListener('change', () => {
-        localStorage.setItem('m73_autorecord', this.chkAutoRecord.checked);
-      });
+      this.chkAutoRecord.checked = savedAutoRec !== 'false' && savedAutoRec !== '0';
     }
 
     document.addEventListener('change', (e) => {
       const chk = e.target.closest('#chkAutoRecord');
       if (chk) {
-        localStorage.setItem('m73_autorecord', chk.checked ? '1' : '0');
+        localStorage.setItem('m73_autorecord', String(chk.checked));
         if (chk.checked && this.elm.isConnected && !this.logger.isRecording) {
           this.startLogging();
         }
