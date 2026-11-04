@@ -372,10 +372,14 @@ class DashboardWidgetManager {
   }
 
   removeWidget(widgetEl) {
+    widgetEl.removeAttribute('data-widget-id');
     widgetEl.classList.add('widget-leaving');
     setTimeout(() => {
       widgetEl.remove();
       this._saveLayout();
+      if (this.app && typeof this.app.initElements === 'function') {
+        this.app.initElements();
+      }
     }, 200);
     if (navigator.vibrate) navigator.vibrate(30);
   }
@@ -465,26 +469,36 @@ class DashboardWidgetManager {
         </div>
         <div class="gallery-action">
           ${isAlreadyAdded 
-            ? '<span class="badge-added">✓ Добавлен</span>' 
-            : '<button class="glass-btn btn-compact btn-primary-glass btn-add-sensor" type="button">＋ Добавить</button>'}
+            ? '<button class="glass-btn btn-compact btn-gallery-remove" type="button">✕ Удалить</button>' 
+            : '<button class="glass-btn btn-compact btn-gallery-add" type="button">＋ Добавить</button>'}
         </div>
       `;
 
-      if (!isAlreadyAdded) {
-        const handleAdd = (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          this._createAndAddWidget(item);
-          this.closeGallery();
-        };
+      const actionWrap = row.querySelector('.gallery-action');
 
-        const btnAdd = row.querySelector('.btn-add-sensor');
-        if (btnAdd) {
-          btnAdd.addEventListener('click', handleAdd);
+      const toggleAction = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const currentlyAdded = row.classList.contains('item-added');
+        if (currentlyAdded) {
+          // Удалить датчик с панели прямо из галереи
+          const widgetEl = this.container.querySelector(`[data-widget-id="${item.id}"]`);
+          if (widgetEl) {
+            this.removeWidget(widgetEl);
+          }
+          row.classList.remove('item-added');
+          actionWrap.innerHTML = '<button class="glass-btn btn-compact btn-gallery-add" type="button">＋ Добавить</button>';
+        } else {
+          // Добавить датчик на панель прямо из галереи
+          this._createAndAddWidget(item);
+          row.classList.add('item-added');
+          actionWrap.innerHTML = '<button class="glass-btn btn-compact btn-gallery-remove" type="button">✕ Удалить</button>';
         }
-        row.style.cursor = 'pointer';
-        row.addEventListener('click', handleAdd);
-      }
+      };
+
+      row.style.cursor = 'pointer';
+      row.addEventListener('click', toggleAction);
 
       listContainer.appendChild(row);
     });
@@ -553,10 +567,12 @@ class DashboardWidgetManager {
       this.app.initElements();
     }
 
-    // Плавная прокрутка к добавленному виджету
-    setTimeout(() => {
-      widgetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }, 120);
+    // Плавная прокрутка к добавленному виджету только если галерея закрыта
+    if (!this.galleryModal || !this.galleryModal.classList.contains('open')) {
+      setTimeout(() => {
+        widgetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 120);
+    }
 
     if (navigator.vibrate) navigator.vibrate(40);
   }
