@@ -55,6 +55,22 @@ class DashboardWidgetManager {
 
     if (!this.container) return;
 
+    // Сохраняем заводские шаблоны всех стандартных виджетов прямо из DOM перед любыми изменениями
+    this.standardTemplates = new Map();
+    Array.from(this.container.querySelectorAll('.dashboard-widget')).forEach(w => {
+      const id = w.getAttribute('data-widget-id');
+      if (id) {
+        const clone = w.cloneNode(true);
+        clone.querySelectorAll('.widget-action-btn').forEach(b => b.remove());
+        clone.classList.remove('is-dragging', 'widget-entering', 'widget-leaving');
+        this.standardTemplates.set(id, {
+          html: clone.innerHTML,
+          defaultSize: w.classList.contains('widget-wide') ? 'wide' : 'compact',
+          title: w.getAttribute('data-title') || id
+        });
+      }
+    });
+
     // Инициализация виджетов и добавление кнопок управления
     this._setupWidgets();
 
@@ -365,14 +381,32 @@ class DashboardWidgetManager {
   }
 
   openGallery() {
+    if (!this.galleryModal) {
+      this.galleryModal = document.getElementById('modalWidgetGallery');
+    }
     if (!this.galleryModal) return;
+
+    const searchInput = document.getElementById('gallerySearchInput');
+    if (searchInput) searchInput.value = '';
+
     this._populateGallery();
     this.galleryModal.style.display = 'flex';
+    void this.galleryModal.offsetWidth; // Принудительный reflow для активации CSS-перехода
+    this.galleryModal.classList.add('open');
   }
 
   closeGallery() {
+    if (!this.galleryModal) {
+      this.galleryModal = document.getElementById('modalWidgetGallery');
+    }
     if (!this.galleryModal) return;
-    this.galleryModal.style.display = 'none';
+
+    this.galleryModal.classList.remove('open');
+    setTimeout(() => {
+      if (this.galleryModal && !this.galleryModal.classList.contains('open')) {
+        this.galleryModal.style.display = 'none';
+      }
+    }, 250);
   }
 
   _populateGallery() {
@@ -432,16 +466,24 @@ class DashboardWidgetManager {
         <div class="gallery-action">
           ${isAlreadyAdded 
             ? '<span class="badge-added">✓ Добавлен</span>' 
-            : '<button class="glass-btn btn-compact btn-primary-glass btn-add-sensor">＋ Добавить</button>'}
+            : '<button class="glass-btn btn-compact btn-primary-glass btn-add-sensor" type="button">＋ Добавить</button>'}
         </div>
       `;
 
       if (!isAlreadyAdded) {
-        const btnAdd = row.querySelector('.btn-add-sensor');
-        btnAdd.addEventListener('click', () => {
+        const handleAdd = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
           this._createAndAddWidget(item);
           this.closeGallery();
-        });
+        };
+
+        const btnAdd = row.querySelector('.btn-add-sensor');
+        if (btnAdd) {
+          btnAdd.addEventListener('click', handleAdd);
+        }
+        row.style.cursor = 'pointer';
+        row.addEventListener('click', handleAdd);
       }
 
       listContainer.appendChild(row);
@@ -462,15 +504,15 @@ class DashboardWidgetManager {
   }
 
   _createAndAddWidget(item) {
-    const isStandard = this.container.querySelector(`[data-widget-id="${item.id}"]`);
-    if (isStandard) return;
+    const existing = this.container.querySelector(`[data-widget-id="${item.id}"]`);
+    if (existing) return;
 
     let widgetEl = document.createElement('div');
     widgetEl.className = 'dashboard-widget widget-compact widget-entering';
     widgetEl.setAttribute('data-widget-id', item.id);
     widgetEl.setAttribute('data-title', item.title);
 
-    // Если это дополнительный датчик из протокола М73
+    // Если это дополнительный датчик из каталога М73
     const isExtra = this.extraSensorsCatalog.find(s => s.id === item.id);
     if (isExtra) {
       widgetEl.innerHTML = `
@@ -483,13 +525,38 @@ class DashboardWidgetManager {
         </div>
       `;
     } else {
-      // Восстановление стандартного виджета
-      widgetEl.innerHTML = this._getStandardWidgetHtml(item.id);
+      // Восстановление стандартного виджета из сохраненного шаблона или генератора
+      const tpl = this.standardTemplates && this.standardTemplates.get(item.id);
+      if (tpl) {
+        widgetEl.innerHTML = tpl.html;
+        if (tpl.defaultSize === 'wide') {
+          widgetEl.classList.remove('widget-compact');
+          widgetEl.classList.add('widget-wide');
+        }
+      } else {
+        widgetEl.innerHTML = this._getStandardWidgetHtml(item.id);
+      }
     }
 
     this._attachWidgetControls(widgetEl);
     this.container.appendChild(widgetEl);
     this._saveLayout();
+
+    // Обновляем контекст canvas если вернули ДК1
+    if (item.id === 'o2-volt') {
+      this.o2Canvas = document.getElementById('canvasO2');
+      if (this.o2Canvas) this.o2Ctx = this.o2Canvas.getContext('2d');
+    }
+
+    // Повторно инициализируем кэшированные элементы в приложении
+    if (this.app && typeof this.app.initElements === 'function') {
+      this.app.initElements();
+    }
+
+    // Плавная прокрутка к добавленному виджету
+    setTimeout(() => {
+      widgetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 120);
 
     if (navigator.vibrate) navigator.vibrate(40);
   }
@@ -545,6 +612,43 @@ class DashboardWidgetManager {
         </div>
       `;
     }
+    const standardDefMap = {
+      'maf': { title: 'Расход воздуха (ДМРВ)', valId: 'valMaf', unit: 'кг/ч', def: '0.0' },
+      'cycle-air': { title: 'Цикловой расход', valId: 'valCycleAir', unit: 'мг/такт', def: '0.0', featured: true },
+      'inj-time': { title: 'Длительность впрыска', valId: 'valInjTime', unit: 'мс', def: '0.00' },
+      'duty': { title: 'Загрузка форсунок', valId: 'valDuty', unit: 'нагрузка', def: '0.0%', featured: true },
+      'mult-adapt': { title: 'Мультипликатив (FR)', valId: 'valMultAdapt', unit: 'множитель', def: '1.000' },
+      'add-adapt': { title: 'Аддитив (FRA)', valId: 'valAddAdapt', unit: 'смещение ХХ', def: '+0.00%' },
+      'spark': { title: 'УОЗ / Отскок', valId: 'valSpark', unit: '° / <strong id="valRetard" style="font-weight:700;">0.0°</strong>', def: '0.0', cardId: 'cardSpark' },
+      'throttle': { title: 'Дроссельная заслонка', valId: 'valThrottle', unit: '%', def: '0.0' },
+      'temp': { title: 'Температура ОЖ', valId: 'valTemp', unit: '°C', def: '0', progress: 'barTemp' },
+      'intake-temp': { title: 'Температура впуска (ДТВ)', valId: 'valIntakeTemp', unit: '°C', def: '0.0' },
+      'voltage': { title: 'Бортовая сеть', valId: 'valVoltage', unit: 'В', def: '0.0' },
+      'rough-road': { title: 'Неровная дорога (ДНД)', valId: 'valRoughRoad', unit: 'g', def: '0.00' },
+      'fuel-rate': { title: 'Текущий расход', valId: 'valFuelRate', unit: 'л/ч', def: '0.00' },
+      'iac': { title: 'Позиция РХХ', valId: 'valIac', unit: 'шагов', def: '0' },
+      'frl-load': { title: 'Нагрузка (FRL)', valId: 'valFrlLoad', unit: '%', def: '0.0' },
+      'calc-load': { title: 'Расчётная нагрузка', valId: 'valCalcLoad', unit: '%', def: '0.0' },
+      'knock-volt': { title: 'Шум датчика детонации', valId: 'valKnockVolt', unit: 'В', def: '0.00' },
+      'o2-volt2': { title: 'ДК2 (после ката)', valId: 'valO2Volt2', unit: 'В', def: '0.000' },
+      'lambda-corr': { title: 'Коррекция смеси', valId: 'valLambdaCorr', unit: 'множитель', def: '1.000' },
+      'target-lambda': { title: 'Целевая лямбда', valId: 'valTargetLambda', unit: 'λ', def: '1.000' },
+      'purge-rate': { title: 'Продувка адсорбера', valId: 'valPurgeRate', unit: '%', def: '0.0' },
+      'altitude': { title: 'Барокоррекция', valId: 'valAltitude', unit: 'фактор', def: '1.000' }
+    };
+    const def = standardDefMap[id];
+    if (def) {
+      return `
+        <div class="glass-card metric-tile ${def.featured ? 'tile-featured' : ''}" ${def.cardId ? `id="${def.cardId}"` : ''}>
+          <span class="tile-label">${def.title}</span>
+          <div class="tile-val-wrap">
+            <span class="tile-num" id="${def.valId}">${def.def}</span>
+            <span class="tile-unit">${def.unit}</span>
+          </div>
+          ${def.progress ? `<div class="glass-progress-track"><div class="glass-progress-bar" id="${def.progress}"></div></div>` : ''}
+        </div>
+      `;
+    }
     return `
       <div class="glass-card metric-tile">
         <span class="tile-label">Датчик ${id}</span>
@@ -591,6 +695,11 @@ class DashboardWidgetManager {
         const extra = this.extraSensorsCatalog.find(s => s.id === item.id);
         if (extra) {
           this._createAndAddWidget(extra);
+          const newW = this.container.querySelector(`[data-widget-id="${item.id}"]`);
+          if (newW && item.size === 'wide') {
+            newW.classList.remove('widget-compact');
+            newW.classList.add('widget-wide');
+          }
         }
       }
     });

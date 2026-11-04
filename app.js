@@ -327,7 +327,7 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v37\n\n• Задержка удержания 1.5 сек перед перемещением виджетов (свободный скролл до самого низа в режиме редактирования)\n• Исключено пересечение кнопок удаления (✕) и изменения размера (⤢) между соседними виджетами\n• Полная кастомизация приборной панели (виджеты iOS)\n• Режим покачивания (Jiggle mode)\n• Переключение размера виджетов: 1 колонка ↔ во всю ширину\n• Живой неоновый осциллограф ДК1 со синусоидой смеси\n• Галерея скрытых датчиков М73");
+        alert("Диагностика М73 — Версия v38\n\n• Исправлено открытие галереи датчиков (кнопка «＋ Добавить» теперь открывается мгновенно)\n• Добавление и восстановление любых стандартных и дополнительных датчиков М73\n• Задержка удержания 1.5 сек перед перемещением виджетов (свободный скролл в режиме редактирования)\n• Исключено пересечение кнопок удаления (✕) и изменения размера (⤢)\n• Живой неоновый осциллограф ДК1 со синусоидой смеси\n• Галерея скрытых датчиков М73");
       });
     }
 
@@ -729,26 +729,28 @@ class M73Application {
    */
   updateDashboardUI(data) {
     // Обороты (Аппаратное ускорение через transform: scaleX для 120 FPS)
-    this.valRpm.textContent = data.rpm;
-    if (data.rpm > this.peakRpm) {
+    if (this.valRpm) this.valRpm.textContent = data.rpm;
+    if (this.valPeakRpm && data.rpm > this.peakRpm) {
       this.peakRpm = data.rpm;
       this.valPeakRpm.textContent = `Пик: ${this.peakRpm}`;
     }
-    const rpmRatio = Math.min(1, Math.max(0, data.rpm / 6800));
-    this.barRpm.style.transform = `scaleX(${rpmRatio})`;
+    if (this.barRpm) {
+      const rpmRatio = Math.min(1, Math.max(0, data.rpm / 6800));
+      this.barRpm.style.transform = `scaleX(${rpmRatio})`;
+    }
 
     // Скорость и передача
-    this.valSpeed.textContent = data.speed;
-    this.valThrottleSub.textContent = `${data.throttle}%`;
+    if (this.valSpeed) this.valSpeed.textContent = data.speed;
+    if (this.valThrottleSub) this.valThrottleSub.textContent = `${data.throttle}%`;
     const gear = this.estimateGear(data.rpm, data.speed);
-    this.valGearAux.textContent = `КПП: ${gear}`;
+    if (this.valGearAux) this.valGearAux.textContent = `КПП: ${gear}`;
 
     // ДМРВ и цикловой расход
-    this.valMaf.textContent = data.maf.toFixed(1);
+    if (this.valMaf) this.valMaf.textContent = data.maf.toFixed(1);
     if (this.valCycleAir) this.valCycleAir.textContent = data.cycleAir.toFixed(1);
 
     // УОЗ и отскок детонации (Интеллектуальная тревожная подсветка)
-    this.valSpark.textContent = data.spark.toFixed(1);
+    if (this.valSpark) this.valSpark.textContent = data.spark.toFixed(1);
     if (this.valRetard) {
       this.valRetard.textContent = data.sparkRetard !== 0 ? `${data.sparkRetard}°` : `0.0°`;
       if (data.sparkRetard < 0) {
@@ -766,7 +768,7 @@ class M73Application {
     }
 
     // Впрыск и форсунки
-    this.valInjTime.textContent = data.injTime.toFixed(2);
+    if (this.valInjTime) this.valInjTime.textContent = data.injTime.toFixed(2);
     if (this.valDuty) this.valDuty.textContent = `${data.dutyCycle.toFixed(1)}%`;
     if (this.valFuelRate) this.valFuelRate.textContent = data.fuelRate.toFixed(2);
     if (this.valIac) this.valIac.textContent = data.iacSteps;
@@ -796,18 +798,20 @@ class M73Application {
     }
 
     // Дроссель и температура ОЖ (Аппаратное ускорение + градация нормы/перегрева)
-    this.valThrottle.textContent = data.throttle.toFixed(1);
-    this.valTemp.textContent = data.temp;
-    const tempRatio = Math.max(0, Math.min(1, (data.temp - 40) / 75));
-    this.barTemp.style.transform = `scaleX(${tempRatio})`;
-    if (data.temp >= 103) {
-      this.barTemp.style.background = 'var(--apple-rose)';
-    } else if (data.temp >= 96) {
-      this.barTemp.style.background = 'var(--apple-amber)';
-    } else {
-      this.barTemp.style.background = 'linear-gradient(90deg, var(--apple-blue), var(--apple-green))';
+    if (this.valThrottle) this.valThrottle.textContent = data.throttle.toFixed(1);
+    if (this.valTemp) this.valTemp.textContent = data.temp;
+    if (this.barTemp) {
+      const tempRatio = Math.max(0, Math.min(1, (data.temp - 40) / 75));
+      this.barTemp.style.transform = `scaleX(${tempRatio})`;
+      if (data.temp >= 103) {
+        this.barTemp.style.background = 'var(--apple-rose)';
+      } else if (data.temp >= 96) {
+        this.barTemp.style.background = 'var(--apple-amber)';
+      } else {
+        this.barTemp.style.background = 'linear-gradient(90deg, var(--apple-blue), var(--apple-green))';
+      }
     }
-    this.valVoltage.textContent = data.voltage.toFixed(1);
+    if (this.valVoltage) this.valVoltage.textContent = data.voltage.toFixed(1);
 
     // ДТВ (Температура впускного воздуха)
     if (this.valIntakeTemp && data.intakeTemp !== undefined && data.intakeTemp !== null) {
