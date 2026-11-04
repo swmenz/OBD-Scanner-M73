@@ -545,7 +545,12 @@ body {
 }
 
 .control-buttons .glass-btn {
-  flex: 1;
+  flex: 1.2;
+}
+
+.control-buttons #btnExportXlsx {
+  flex: 0 0 68px;
+  min-width: 60px;
 }
 
 .btn-rec {
@@ -1707,6 +1712,12 @@ body {
 .trip-saved-alert .alert-content span {
   font-size: 0.7rem;
   color: var(--text-secondary);
+}
+
+.trip-saved-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
 }
 
 .btn-compact {

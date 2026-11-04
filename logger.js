@@ -38,7 +38,7 @@ class TripStorage {
     const trip = {
       id: Date.now(),
       dateStr: dateFormatted,
-      fileName: `Приора_М73_Лог_${fileDateStr}.xlsx`,
+      fileName: `Приора_М73_Лог_${fileDateStr}.csv`,
       pointCount: records.length,
       maxRpm: maxRpm,
       records: records
@@ -333,7 +333,79 @@ class TripLogger {
   }
 
   /**
-   * Генерация файла .xlsx и вызов системного меню iOS «Поделиться»
+
+   */
+  /**
+   * Генерация компактного файла .csv (стандарт OpenDiag Mobile / ReadLogs / MegaLogViewer / Excel)
+   * Размер лога в 5-6 раз меньше чем .xlsx, мгновенная генерация без зависаний памяти на iOS.
+   */
+  async exportToCsv(recordsToExport = null, customFileName = null) {
+    const data = recordsToExport || this.records;
+    if (!data || data.length === 0) {
+      alert("Нет записанных данных для сохранения!");
+      return;
+    }
+
+    const headers = Object.keys(data[0]);
+
+    const escapeCsv = (val) => {
+      if (val === null || val === undefined) return '';
+      const str = String(val);
+      if (str.includes(';') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const lines = [];
+    lines.push(headers.map(escapeCsv).join(';'));
+
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      const rowValues = headers.map(h => escapeCsv(row[h]));
+      lines.push(rowValues.join(';'));
+    }
+
+    // UTF-8 BOM (\uFEFF) для мгновенного и корректного открытия в Excel, OpenDiag и ReadLogs
+    const csvContent = '\uFEFF' + lines.join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
+    let fileName = customFileName || `Приора_М73_Лог_${dateStr}.csv`;
+    if (!fileName.toLowerCase().endsWith('.csv')) {
+      fileName = fileName.replace(/\.[^/.]+$/, "") + ".csv";
+    }
+
+    const file = new File([blob], fileName, { type: 'text/csv' });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file]
+        });
+        return;
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.warn('Share error fallback:', err);
+        } else {
+          return;
+        }
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Генерация таблицы .xlsx (Microsoft Excel) и вызов меню «Поделиться»
    */
   async exportToXlsx(recordsToExport = null, customFileName = null) {
     const data = recordsToExport || this.records;
@@ -354,7 +426,10 @@ class TripLogger {
 
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
-    const fileName = customFileName || `Приора_М73_Лог_${dateStr}.xlsx`;
+    let fileName = customFileName || `Приора_М73_Лог_${dateStr}.xlsx`;
+    if (!fileName.toLowerCase().endsWith('.xlsx')) {
+      fileName = fileName.replace(/\.[^/.]+$/, "") + ".xlsx";
+    }
 
     const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });

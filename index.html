@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" href="icon-192.png">
   <title>Диагностика М73 — Лада Приора</title>
   
-  <link rel="stylesheet" href="styles.css?v=46">
+  <link rel="stylesheet" href="styles.css?v=47">
   <script src="xlsx.full.min.js"></script>
   <link rel="manifest" href="manifest.json">
 </head>
@@ -25,7 +25,7 @@
     <header class="glass-navbar">
       <div class="navbar-brand">
         <span class="status-pulse" id="connIndicator"></span>
-        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v46</span></div>
+        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v47</span></div>
         <span class="status-text" id="connStateText">Не подключено</span>
       </div>
 
@@ -468,7 +468,7 @@
             <div class="glass-card control-card">
               <div class="control-top" style="margin-bottom: 0;">
                 <div class="control-info">
-                  <div class="card-title">Запись поездки в Excel</div>
+                  <div class="card-title">Запись поездки (Логгер)</div>
                   <div class="card-subtitle" id="loggerStatsText">Запись не ведётся • 0 точек</div>
                 </div>
                 <div class="control-buttons">
@@ -476,8 +476,11 @@
                     <span class="rec-beacon" id="loggerStatusDot"></span>
                     <span id="recBtnLabel">Начать запись</span>
                   </button>
-                  <button id="btnExportXlsx" class="glass-btn btn-glass-secondary" disabled>
-                    Экспорт XLSX
+                  <button id="btnExportCsv" class="glass-btn btn-primary-glass" disabled title="Компактный экспорт CSV (OpenDiag / ReadLogs / MegaLogViewer / Excel)">
+                    Экспорт CSV
+                  </button>
+                  <button id="btnExportXlsx" class="glass-btn btn-glass-secondary" disabled title="Экспорт в таблицу Microsoft Excel (.xlsx)">
+                    XLSX
                   </button>
                 </div>
               </div>
@@ -501,7 +504,10 @@
                   <strong>Поездка сохранена в память</strong>
                   <span id="tripSavedDetails">0 точек</span>
                 </div>
-                <button id="btnQuickExport" class="glass-btn btn-primary-glass btn-compact" type="button">Скачать</button>
+                <div class="trip-saved-actions">
+                  <button id="btnQuickExport" class="glass-btn btn-primary-glass btn-compact" type="button" title="Скачать CSV (OpenDiag / ReadLogs / Excel)">CSV</button>
+                  <button id="btnQuickExportXlsx" class="glass-btn btn-glass-secondary btn-compact" type="button" title="Скачать таблицу Excel (.xlsx)">XLSX</button>
+                </div>
               </div>
             </div>
           </div>
@@ -1207,10 +1213,10 @@
     </div>
   </div>
 
-<script src="elm327.js?v=46"></script>
-  <script src="m73.js?v=46"></script>
-  <script src="logger.js?v=46"></script>
-  <script src="dashboard-widgets.js?v=46"></script>
-  <script src="app.js?v=46"></script>
+<script src="elm327.js?v=47"></script>
+  <script src="m73.js?v=47"></script>
+  <script src="logger.js?v=47"></script>
+  <script src="dashboard-widgets.js?v=47"></script>
+  <script src="app.js?v=47"></script>
 </body>
 </html>
