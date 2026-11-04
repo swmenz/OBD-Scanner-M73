@@ -327,7 +327,7 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v41\n\n• Полная стабилизация ядра и модульных виджетов:\n  1) Восстановлен чистый UTF-8 во всем протоколе m73.js\n  2) Исправлены счетчики пропусков: 5-й счетчик ЭБУ — цикловые пропуски за 1000 об, сумма 4 цилиндров — суммарные пропуски\n  3) Гарантированный возврат базового заголовка K-Line (AT SH 81 10 F1) в блоках try..finally\n  4) Таймаут шины AT ST 20 (~128 мс) для исключения ложных NO DATA\n  5) Безопасный повторный опрос оборотов перед тестами исполнительных механизмов\n  6) Защита от случайного подключения при отмене диалога Bluetooth\n  7) Устранена перезапись пользовательского layout в localStorage\n  8) Добавлены дублеры кнопок Добавить/Удалить прямо в галерею виджетов и исключен перенос текста");
+        alert("Диагностика М73 — Версия v42\n\n• Ультра-компактная стеклянная шапка (Single-line iOS Bar):\n  1) Шапка переведена в одну компактную строку (высота 40-44 px вместо 75 px)\n  2) Кнопка настройки виджетов перенесена в шапку рядом с кнопкой подключения\n  3) Полностью удалена промежуточная полоса «Приборная панель», виджеты подняты максимально вверх\n  4) Компактная кнопка подключения и капсула частоты в стиле iOS");
       });
     }
 
@@ -1206,6 +1206,15 @@ class M73Application {
     const targetNav = document.querySelector(`[data-tab="${tabId}"]`);
     if (targetContent) targetContent.classList.add('active');
     if (targetNav) targetNav.classList.add('active');
+
+    // Кнопка настройки виджетов в шапке доступна только на приборной панели
+    const btnCustomize = document.getElementById('btnCustomizeDash');
+    if (btnCustomize) {
+      btnCustomize.style.display = tabId === 'tab-dashboard' ? 'inline-flex' : 'none';
+    }
+    if (tabId !== 'tab-dashboard' && this.widgetManager && this.widgetManager.isEditMode) {
+      this.widgetManager.exitEditMode();
+    }
 
     if (tabId === 'tab-terminal') this.renderTerminal();
   }
