@@ -371,7 +371,7 @@ class DashboardWidgetManager {
     // Нажатие и удержание для входа в режим редактирования как в iOS
     this._bindLongPress();
 
-    // Touch Drag & Drop перетаскивание на iPhone с задержкой 1.5с
+    // Touch Drag & Drop перетаскивание на iPhone с задержкой 0.5с и прямым обменом
     this._bindTouchDrag();
   }
 
@@ -426,29 +426,74 @@ class DashboardWidgetManager {
     let touchTarget = null;
     let holdTimer = null;
     let canDrag = false;
+    let currentDropTarget = null;
 
     const cleanupDrag = () => {
       if (holdTimer) {
         clearTimeout(holdTimer);
         holdTimer = null;
       }
+      if (currentDropTarget) {
+        currentDropTarget.classList.remove('is-drop-target');
+        currentDropTarget = null;
+      }
       if (draggedEl) {
         draggedEl.classList.remove('is-dragging');
         draggedEl.style.transform = '';
+        draggedEl.style.zIndex = '';
         draggedEl.style.pointerEvents = '';
-        this._saveLayout();
         draggedEl = null;
       }
       touchTarget = null;
       canDrag = false;
     };
 
+    const handleDragEnd = () => {
+      if (holdTimer) {
+        clearTimeout(holdTimer);
+        holdTimer = null;
+      }
+
+      if (canDrag && draggedEl) {
+        if (currentDropTarget && currentDropTarget !== draggedEl && currentDropTarget.parentNode === this.container) {
+          // Прямой обмен местами (Swap) двух блоков без промежуточных скачков!
+          const parent = this.container;
+          const nextDragged = draggedEl.nextSibling;
+          const nextTarget = currentDropTarget.nextSibling;
+
+          if (nextDragged === currentDropTarget) {
+            parent.insertBefore(currentDropTarget, draggedEl);
+          } else if (nextTarget === draggedEl) {
+            parent.insertBefore(draggedEl, currentDropTarget);
+          } else {
+            parent.insertBefore(draggedEl, nextTarget);
+            parent.insertBefore(currentDropTarget, nextDragged);
+          }
+
+          // Анимация фиксации на новой позиции
+          const d = draggedEl;
+          const t = currentDropTarget;
+          d.classList.add('widget-entering');
+          t.classList.add('widget-entering');
+          setTimeout(() => {
+            d.classList.remove('widget-entering');
+            t.classList.remove('widget-entering');
+          }, 280);
+
+          if (navigator.vibrate) navigator.vibrate(40);
+          this._saveLayout();
+        }
+      }
+
+      cleanupDrag();
+    };
+
+    // ================== TOUCH GESTURES (iOS) ==================
     this.container.addEventListener('touchstart', (e) => {
       if (!this.isEditMode) return;
       const widget = e.target.closest('.dashboard-widget');
       if (!widget || e.target.closest('.widget-action-btn')) return;
 
-      // Сбрасываем предыдущее состояние
       cleanupDrag();
 
       touchTarget = widget;
@@ -457,17 +502,17 @@ class DashboardWidgetManager {
       initialY = touch.clientY;
       canDrag = false;
 
-      // Задержка удержания 1.5 секунды перед активацией перемещения виджета
-      // Это позволяет пользователю свободно прокручивать страницу вниз в режиме редактирования!
+      // 0.5 секунды удержания пальца для захвата блока
       holdTimer = setTimeout(() => {
         if (!touchTarget) return;
         canDrag = true;
         draggedEl = touchTarget;
         draggedEl.classList.add('is-dragging');
+        draggedEl.style.transform = 'translate3d(0, 0, 0) scale(1.06)';
         if (navigator.vibrate) {
           navigator.vibrate([40, 30, 40]);
         }
-      }, 1500);
+      }, 500);
     }, { passive: true });
 
     this.container.addEventListener('touchmove', (e) => {
@@ -478,57 +523,132 @@ class DashboardWidgetManager {
       const dy = touch.clientY - initialY;
       const dist = Math.hypot(dx, dy);
 
-      // Если 1.5 сек удержания еще не прошло:
+      // Если 0.5 сек еще не прошло:
       if (!canDrag) {
-        // Если палец сдвинулся более чем на 10px — пользователь просто скроллит страницу
-        if (dist > 10) {
+        if (dist > 12) {
           if (holdTimer) {
             clearTimeout(holdTimer);
             holdTimer = null;
           }
           touchTarget = null;
         }
-        // Не блокируем нативную прокрутку страницы!
         return;
       }
 
-      // После 1.5 сек удержания виджет переходит в режим перемещения:
+      // Виджет активен и следует за пальцем (примагничен к нему):
       if (draggedEl) {
-        e.preventDefault(); // Предотвращаем скролл страницы только во время активного drag
-        draggedEl.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(1.05)`;
+        e.preventDefault();
+        draggedEl.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(1.06)`;
 
-        // Автоматическая подкрутка экрана если палец у края экрана (контейнер .app-scroll-view)
+        // Автоматическая подкрутка экрана у краев
         const scrollView = this.container.closest('.app-scroll-view') || document.querySelector('.app-scroll-view');
         if (scrollView) {
           if (touch.clientY > window.innerHeight - 80) {
-            scrollView.scrollBy({ top: 12, behavior: 'auto' });
+            scrollView.scrollBy({ top: 10, behavior: 'auto' });
           } else if (touch.clientY < 80) {
-            scrollView.scrollBy({ top: -12, behavior: 'auto' });
+            scrollView.scrollBy({ top: -10, behavior: 'auto' });
           }
         }
 
-        // Поиск элемента под пальцем для перестановки
-        draggedEl.style.pointerEvents = 'none';
+        // Поиск целевого виджета под пальцем
         const elemBelow = document.elementFromPoint(touch.clientX, touch.clientY);
-        draggedEl.style.pointerEvents = '';
-
-        if (!elemBelow) return;
-        const targetWidget = elemBelow.closest('.dashboard-widget');
+        const targetWidget = elemBelow ? elemBelow.closest('.dashboard-widget') : null;
 
         if (targetWidget && targetWidget !== draggedEl && targetWidget.parentNode === this.container) {
-          const rect = targetWidget.getBoundingClientRect();
-          const isAfter = touch.clientY > rect.top + rect.height / 2;
-          if (isAfter) {
-            this.container.insertBefore(draggedEl, targetWidget.nextSibling);
-          } else {
-            this.container.insertBefore(draggedEl, targetWidget);
+          if (currentDropTarget !== targetWidget) {
+            if (currentDropTarget) currentDropTarget.classList.remove('is-drop-target');
+            currentDropTarget = targetWidget;
+            currentDropTarget.classList.add('is-drop-target');
+            if (navigator.vibrate) navigator.vibrate(12);
+          }
+        } else {
+          if (currentDropTarget) {
+            currentDropTarget.classList.remove('is-drop-target');
+            currentDropTarget = null;
           }
         }
       }
     }, { passive: false });
 
-    this.container.addEventListener('touchend', cleanupDrag);
+    this.container.addEventListener('touchend', handleDragEnd);
     this.container.addEventListener('touchcancel', cleanupDrag);
+
+    // ================== MOUSE DRAG (DESKTOP) ==================
+    let mouseTarget = null;
+    let mouseHoldTimer = null;
+    let isMouseDragging = false;
+    let mouseInitialX = 0;
+    let mouseInitialY = 0;
+
+    this.container.addEventListener('mousedown', (e) => {
+      if (!this.isEditMode || e.button !== 0) return;
+      const widget = e.target.closest('.dashboard-widget');
+      if (!widget || e.target.closest('.widget-action-btn')) return;
+
+      mouseTarget = widget;
+      mouseInitialX = e.clientX;
+      mouseInitialY = e.clientY;
+      isMouseDragging = false;
+
+      mouseHoldTimer = setTimeout(() => {
+        if (!mouseTarget) return;
+        isMouseDragging = true;
+        canDrag = true;
+        draggedEl = mouseTarget;
+        draggedEl.classList.add('is-dragging');
+        draggedEl.style.transform = 'translate3d(0, 0, 0) scale(1.06)';
+      }, 350);
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!this.isEditMode || !mouseTarget) return;
+      const dx = e.clientX - mouseInitialX;
+      const dy = e.clientY - mouseInitialY;
+
+      if (!isMouseDragging) {
+        if (Math.hypot(dx, dy) > 8) {
+          clearTimeout(mouseHoldTimer);
+          mouseHoldTimer = null;
+          mouseTarget = null;
+        }
+        return;
+      }
+
+      if (draggedEl) {
+        e.preventDefault();
+        draggedEl.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(1.06)`;
+
+        const elemBelow = document.elementFromPoint(e.clientX, e.clientY);
+        const targetWidget = elemBelow ? elemBelow.closest('.dashboard-widget') : null;
+
+        if (targetWidget && targetWidget !== draggedEl && targetWidget.parentNode === this.container) {
+          if (currentDropTarget !== targetWidget) {
+            if (currentDropTarget) currentDropTarget.classList.remove('is-drop-target');
+            currentDropTarget = targetWidget;
+            currentDropTarget.classList.add('is-drop-target');
+          }
+        } else {
+          if (currentDropTarget) {
+            currentDropTarget.classList.remove('is-drop-target');
+            currentDropTarget = null;
+          }
+        }
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (mouseHoldTimer) {
+        clearTimeout(mouseHoldTimer);
+        mouseHoldTimer = null;
+      }
+      if (isMouseDragging) {
+        handleDragEnd();
+      } else {
+        cleanupDrag();
+      }
+      mouseTarget = null;
+      isMouseDragging = false;
+    });
   }
 
   toggleEditMode() {
