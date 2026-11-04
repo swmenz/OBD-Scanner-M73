@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" href="icon-192.png">
   <title>Диагностика М73 — Лада Приора</title>
   
-  <link rel="stylesheet" href="styles.css?v=42">
+  <link rel="stylesheet" href="styles.css?v=44">
   <script src="xlsx.full.min.js"></script>
   <link rel="manifest" href="manifest.json">
 </head>
@@ -25,7 +25,7 @@
     <header class="glass-navbar">
       <div class="navbar-brand">
         <span class="status-pulse" id="connIndicator"></span>
-        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v42</span></div>
+        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v44</span></div>
         <span class="status-text" id="connStateText">Не подключено</span>
       </div>
 
@@ -324,14 +324,33 @@
             </div>
           </div>
 
-          <!-- Виджет 20: ДК1 (до ката) — Осциллограф со синусоидой -->
-          <div class="dashboard-widget widget-compact" data-widget-id="o2-volt" data-title="ДК1 (до ката)">
+          <!-- Виджет 20: Универсальный живой осциллограф -->
+          <div class="dashboard-widget widget-compact" data-widget-id="o2-volt" data-title="Осциллограф">
             <div class="glass-card metric-tile o2-oscilloscope-tile">
               <div class="o2-tile-header">
-                <span class="tile-label">ДК1 (до ката)</span>
+                <div class="osc-tile-title-group">
+                  <select id="oscWidgetChannelSelect" class="osc-tile-channel-select" title="Выбрать датчик для осциллографа">
+                    <option value="o2Volt">ДК1 (до ката)</option>
+                    <option value="o2Volt2">ДК2 (после ката)</option>
+                    <option value="maf">ДМРВ (Расход)</option>
+                    <option value="mafAdc">ДМРВ (АЦП)</option>
+                    <option value="rpm">Обороты (RPM)</option>
+                    <option value="spark">УОЗ</option>
+                    <option value="injTime">Время впрыска</option>
+                    <option value="tps">Дроссель</option>
+                    <option value="volt">Бортсеть</option>
+                    <option value="speed">Скорость</option>
+                    <option value="cycleAir">Цикловой расход</option>
+                    <option value="duty">Загрузка %</option>
+                    <option value="knockVolt">Детонация</option>
+                  </select>
+                  <button id="btnOpenOscModalFromTile" class="osc-tile-expand-btn" type="button" title="Развернуть осциллограф на весь экран">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                  </button>
+                </div>
                 <div class="o2-mini-val-badge">
                   <span class="tile-num-mini" id="valO2Volt">0.000</span>
-                  <span class="tile-unit-mini">В</span>
+                  <span class="tile-unit-mini" id="unitOscTile">В</span>
                 </div>
               </div>
               <div class="o2-canvas-wrap">
@@ -512,64 +531,146 @@
 
       <!-- ВКЛАДКА 3: КАНАЛЫ АЦП ДАТЧИКОВ -->
       <section id="tab-adc" class="tab-pane">
-        <!-- Каналы АЦП -->
-        <div class="glass-card">
-          <div class="panel-header">
-            <div>
-              <h2 class="panel-heading">Каналы АЦП датчиков</h2>
-              <p class="panel-sub">Прямые электрические напряжения (Кадр 21 03)</p>
+        <!-- Диагностическая сводка здоровья цепей датчиков -->
+        <div class="glass-card adc-overview-card">
+          <div class="adc-summary-header">
+            <div class="adc-summary-lead">
+              <div class="adc-status-orb status-orb-neutral" id="adcSummaryOrb"></div>
+              <div>
+                <h2 class="panel-heading" style="margin-bottom: 2px;">Каналы АЦП датчиков</h2>
+                <div class="adc-summary-subtitle" id="adcSummaryText">Ожидание данных опроса (Кадр 21 03)</div>
+              </div>
             </div>
+            <button class="glass-btn btn-glass-secondary btn-compact" id="btnOpenAdcRefModal" type="button" title="Таблица заводских допусков">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              <span>Справка</span>
+            </button>
           </div>
+
+          <!-- Счетчик статусов здоровья датчиков -->
+          <div class="adc-health-counters" id="adcHealthCounters">
+            <div class="adc-counter-chip counter-ok"><span class="counter-dot"></span><span id="adcCountOk">0</span> в норме</div>
+            <div class="adc-counter-chip counter-warn"><span class="counter-dot"></span><span id="adcCountWarn">0</span> внимание</div>
+            <div class="adc-counter-chip counter-danger"><span class="counter-dot"></span><span id="adcCountDanger">0</span> отказ</div>
+          </div>
+        </div>
+
+        <!-- Стек каналов АЦП -->
+        <div class="glass-card" style="margin-top: 10px;">
           <div class="adc-stack">
-            <div class="adc-row-glass highlight-row">
+            
+            <!-- 1. ДМРВ -->
+            <div class="adc-row-glass highlight-row" id="rowAdcMaf">
               <div class="adc-info">
-                <strong>ДМРВ (Датчик массового расхода воздуха)</strong>
-                <span>Эталон покоя: 0.996 ... 1.020 В</span>
+                <div class="adc-title-line">
+                  <strong>ДМРВ (Датчик массового расхода воздуха)</strong>
+                  <span class="badge-health badge-health-neutral" id="healthAdcMaf">Ожидание</span>
+                </div>
+                <span class="adc-subtext" id="descAdcMaf">Эталон покоя: 0.996 ... 1.020 В</span>
               </div>
-              <span class="adc-number" id="adcMaf">0.000 В</span>
+              <div class="adc-val-wrap">
+                <span class="adc-number" id="adcMaf">0.000 В</span>
+              </div>
             </div>
-            <div class="adc-row-glass">
+
+            <!-- 2. ДПДЗ -->
+            <div class="adc-row-glass" id="rowAdcThrottle">
               <div class="adc-info">
-                <strong>ДПДЗ (Положение дроссельной заслонки)</strong>
-                <span>Напряжение потенциометра заслонки</span>
+                <div class="adc-title-line">
+                  <strong>ДПДЗ (Положение дроссельной заслонки)</strong>
+                  <span class="badge-health badge-health-neutral" id="healthAdcThrottle">Ожидание</span>
+                </div>
+                <span class="adc-subtext" id="descAdcThrottle">Потенциометр заслонки (покой: 0.45 ... 0.65 В)</span>
               </div>
-              <span class="adc-number" id="adcThrottle">0.00 В</span>
+              <div class="adc-val-wrap">
+                <span class="adc-number" id="adcThrottle">0.000 В</span>
+              </div>
             </div>
-            <div class="adc-row-glass">
+
+            <!-- 3. Бортовая сеть -->
+            <div class="adc-row-glass" id="rowAdcVolt">
               <div class="adc-info">
-                <strong>ДТОЖ (Температура охлаждающей жидкости)</strong>
-                <span>Сигнал с терморезистора</span>
+                <div class="adc-title-line">
+                  <strong>Бортовая сеть (Канал АЦП ЭБУ)</strong>
+                  <span class="badge-health badge-health-neutral" id="healthAdcVolt">Ожидание</span>
+                </div>
+                <span class="adc-subtext" id="descAdcVolt">АКБ: 12.4-12.8В | Генератор: 13.8-14.4В</span>
               </div>
-              <span class="adc-number" id="adcTemp">0.00 В</span>
+              <div class="adc-val-wrap">
+                <span class="adc-number" id="adcVolt">0.00 В</span>
+              </div>
             </div>
-            <div class="adc-row-glass">
+
+            <!-- 4. ДТОЖ -->
+            <div class="adc-row-glass" id="rowAdcTemp">
               <div class="adc-info">
-                <strong>ДТВ (Температура впускного воздуха)</strong>
-                <span>Сигнал датчика температуры воздуха</span>
+                <div class="adc-title-line">
+                  <strong>ДТОЖ (Температура охлаждающей жидкости)</strong>
+                  <span class="badge-health badge-health-neutral" id="healthAdcTemp">Ожидание</span>
+                </div>
+                <span class="adc-subtext" id="descAdcTemp">Сигнал терморезистора (0.2 ... 4.8 В)</span>
               </div>
-              <span class="adc-number" id="adcAirTemp">0.000 В</span>
+              <div class="adc-val-wrap">
+                <span class="adc-number" id="adcTemp">0.000 В</span>
+              </div>
             </div>
-            <div class="adc-row-glass">
+
+            <!-- 5. ДТВ -->
+            <div class="adc-row-glass" id="rowAdcAirTemp">
               <div class="adc-info">
-                <strong>ДНД (Датчик неровной дороги)</strong>
-                <span>Опорное напряжение акселерометра (покой ~2.5В)</span>
+                <div class="adc-title-line">
+                  <strong>ДТВ (Температура впускного воздуха)</strong>
+                  <span class="badge-health badge-health-neutral" id="healthAdcAirTemp">Ожидание</span>
+                </div>
+                <span class="adc-subtext" id="descAdcAirTemp">Сигнал терморезистора воздуха (0.2 ... 4.8 В)</span>
               </div>
-              <span class="adc-number" id="adcRoughRoad">0.000 В</span>
+              <div class="adc-val-wrap">
+                <span class="adc-number" id="adcAirTemp">0.000 В</span>
+              </div>
             </div>
-            <div class="adc-row-glass">
+
+            <!-- 6. ДК1 -->
+            <div class="adc-row-glass" id="rowAdcO2">
               <div class="adc-info">
-                <strong>Датчик кислорода 1 (Управляющий лямбда-зонд)</strong>
-                <span>Колебания сигнала смеси</span>
+                <div class="adc-title-line">
+                  <strong>ДК1 (Управляющий лямбда-зонд до ката)</strong>
+                  <span class="badge-health badge-health-neutral" id="healthAdcO2">Ожидание</span>
+                </div>
+                <span class="adc-subtext" id="descAdcO2">Опорное: 0.45В | Регулирование: 0.1-0.9В</span>
               </div>
-              <span class="adc-number" id="adcO2">0.000 В</span>
+              <div class="adc-val-wrap">
+                <span class="adc-number" id="adcO2">0.000 В</span>
+              </div>
             </div>
-            <div class="adc-row-glass">
+
+            <!-- 7. ДК2 -->
+            <div class="adc-row-glass" id="rowAdcO2_2">
               <div class="adc-info">
-                <strong>Бортовая сеть (Канал АЦП)</strong>
-                <span>Напряжение на клеммах контроллера</span>
+                <div class="adc-title-line">
+                  <strong>ДК2 (Диагностический зонд после ката)</strong>
+                  <span class="badge-health badge-health-neutral" id="healthAdcO2_2">Ожидание</span>
+                </div>
+                <span class="adc-subtext" id="descAdcO2_2">Контроль катализатора (0.55 ... 0.75 В)</span>
               </div>
-              <span class="adc-number" id="adcVolt">0.0 В</span>
+              <div class="adc-val-wrap">
+                <span class="adc-number" id="adcO2_2">0.000 В</span>
+              </div>
             </div>
+
+            <!-- 8. ДНД -->
+            <div class="adc-row-glass" id="rowAdcRoughRoad">
+              <div class="adc-info">
+                <div class="adc-title-line">
+                  <strong>ДНД (Датчик неровной дороги)</strong>
+                  <span class="badge-health badge-health-neutral" id="healthAdcRoughRoad">Ожидание</span>
+                </div>
+                <span class="adc-subtext" id="descAdcRoughRoad">Опорный акселерометр: ~2.50 В в покое</span>
+              </div>
+              <div class="adc-val-wrap">
+                <span class="adc-number" id="adcRoughRoad">0.000 В</span>
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -746,10 +847,192 @@
     </div>
   </div>
 
-<script src="elm327.js?v=42"></script>
-  <script src="m73.js?v=42"></script>
-  <script src="logger.js?v=42"></script>
-    <script src="dashboard-widgets.js?v=42"></script>
-<script src="app.js?v=42"></script>
+  <!-- МОДАЛЬНОЕ ОКНО: СПРАВОЧНИК ЭТАЛОНОВ И ДОПУСКОВ АЦП (BOSCH / ИТЭЛМА М73) -->
+  <div id="modalAdcReference" class="modal-backdrop" style="display: none;">
+    <div class="glass-modal adc-ref-sheet">
+      <div class="modal-header">
+        <div class="modal-title">Справочник допусков АЦП</div>
+        <button id="btnCloseAdcRef" class="modal-close-btn" type="button">&times;</button>
+      </div>
+      <div class="modal-body adc-ref-body">
+        
+        <div class="adc-ref-section">
+          <div class="adc-ref-title">ДМРВ (Bosch HFM5 0 280 218 116)</div>
+          <div class="adc-ref-hint">Замеряется при включенном зажигании на <b>заглушенном двигателе</b>:</div>
+          <div class="adc-ref-table">
+            <div class="adc-ref-row">
+              <span class="badge-health badge-health-ok">0.996 ... 1.020 В</span>
+              <span><b>Идеал:</b> Новый исправный датчик</span>
+            </div>
+            <div class="adc-ref-row">
+              <span class="badge-health badge-health-ok">1.021 ... 1.035 В</span>
+              <span><b>Норма:</b> Рабочий датчик с небольшим налетом</span>
+            </div>
+            <div class="adc-ref-row">
+              <span class="badge-health badge-health-warn">1.036 ... 1.050 В</span>
+              <span><b>Износ:</b> Дрейф нуля. Обогащение смеси, повышенный расход</span>
+            </div>
+            <div class="adc-ref-row">
+              <span class="badge-health badge-health-danger">&gt; 1.050 В</span>
+              <span><b>Неисправен:</b> Критический износ кристалла. Требуется замена</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="adc-ref-section">
+          <div class="adc-ref-title">ДПДЗ (Датчик положения дросселя)</div>
+          <div class="adc-ref-hint">Потенциометр с питанием 5.0 В:</div>
+          <div class="adc-ref-table">
+            <div class="adc-ref-row">
+              <span class="badge-health badge-health-ok">0.45 ... 0.65 В</span>
+              <span><b>Закрыт (0%):</b> Заводская калибровка упора заслонки</span>
+            </div>
+            <div class="adc-ref-row">
+              <span class="badge-health badge-health-warn">0.66 ... 0.75 В</span>
+              <span><b>Внимание:</b> Перетянут трос газа или нагар в дроссельном узле</span>
+            </div>
+            <div class="adc-ref-row">
+              <span class="badge-health badge-health-info">до 4.50 В</span>
+              <span><b>100% газ:</b> Полное открытие дроссельной заслонки</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="adc-ref-section">
+          <div class="adc-ref-title">Бортовая сеть и генератор</div>
+          <div class="adc-ref-table">
+            <div class="adc-ref-row">
+              <span class="badge-health badge-health-ok">12.4 ... 12.8 В</span>
+              <span><b>Покой (АКБ):</b> Нормальный заряд батареи</span>
+            </div>
+            <div class="adc-ref-row">
+              <span class="badge-health badge-health-ok">13.8 ... 14.5 В</span>
+              <span><b>Работа (Генератор):</b> Нормальный цикл зарядки под нагрузкой</span>
+            </div>
+            <div class="adc-ref-row">
+              <span class="badge-health badge-health-danger">&lt; 13.2 В</span>
+              <span><b>Недозаряд:</b> Износ щеток генератора, диодного моста или ремня</span>
+            </div>
+            <div class="adc-ref-row">
+              <span class="badge-health badge-health-danger">&gt; 14.8 В</span>
+              <span><b>Перезаряд:</b> Пробит регулятор напряжения генератора</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="adc-ref-section">
+          <div class="adc-ref-title">ДТОЖ и ДТВ (Терморезисторы)</div>
+          <div class="adc-ref-hint">Цепи подтяжки 5.0 В через сопротивление ЭБУ:</div>
+          <div class="adc-ref-table">
+            <div class="adc-ref-row">
+              <span class="badge-health badge-health-ok">0.20 ... 4.80 В</span>
+              <span><b>Норма:</b> Рабочий диапазон от -40°C до +130°C</span>
+            </div>
+            <div class="adc-ref-row">
+              <span class="badge-health badge-health-danger">&gt; 4.85 В</span>
+              <span><b>Обрыв цепи:</b> Опорные 5.0 В (обрыв провода датчика)</span>
+            </div>
+            <div class="adc-ref-row">
+              <span class="badge-health badge-health-danger">&lt; 0.15 В</span>
+              <span><b>КЗ на массу:</b> Замыкание сигнального провода на корпус</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО: УНИВЕРСАЛЬНЫЙ ЖИВОЙ ОСЦИЛЛОГРАФ (PRO) -->
+  <div id="modalOscilloscope" class="modal-backdrop" style="display: none;">
+    <div class="glass-modal oscilloscope-modal-sheet">
+      <div class="modal-header osc-modal-header">
+        <div class="osc-header-left">
+          <div class="modal-title">Осциллограф ЭБУ</div>
+          <div class="osc-active-channel-name" id="oscModalActiveTitle">ДК1 (до ката)</div>
+        </div>
+        <div class="osc-header-actions">
+          <button id="btnCloseOscModal" class="modal-close-btn" type="button">&times;</button>
+        </div>
+      </div>
+
+      <!-- Селектор канала датчика -->
+      <div class="osc-channel-bar">
+        <label class="osc-channel-label" for="oscChannelSelect">Канал:</label>
+        <select id="oscChannelSelect" class="osc-select-input">
+          <option value="o2Volt">ДК1 (до ката) — Напряжение (В)</option>
+          <option value="o2Volt2">ДК2 (после ката) — Напряжение (В)</option>
+          <option value="maf">ДМРВ — Массовый расход (кг/ч)</option>
+          <option value="mafAdc">ДМРВ (АЦП) — Напряжение (В)</option>
+          <option value="rpm">Обороты двигателя — (об/мин)</option>
+          <option value="spark">УОЗ — Угол зажигания (°)</option>
+          <option value="injTime">Время впрыска — (мс)</option>
+          <option value="tps">Дроссель ДПДЗ — (%)</option>
+          <option value="volt">Бортовая сеть — (В)</option>
+          <option value="speed">Скорость авто — (км/ч)</option>
+          <option value="cycleAir">Цикловой расход — (мг/такт)</option>
+          <option value="duty">Загрузка форсунок — (%)</option>
+          <option value="knockVolt">Датчик детонации — (В)</option>
+        </select>
+      </div>
+
+      <!-- Панель телеметрии (HUD): Тек / Мин / Макс / Размах -->
+      <div class="osc-hud-grid">
+        <div class="osc-hud-tile hud-curr">
+          <span class="hud-label">Текущее</span>
+          <span class="hud-value" id="oscHudCurr">0.000</span>
+          <span class="hud-unit" id="oscHudUnit">В</span>
+        </div>
+        <div class="osc-hud-tile">
+          <span class="hud-label">Минимум</span>
+          <span class="hud-value" id="oscHudMin">0.000</span>
+        </div>
+        <div class="osc-hud-tile">
+          <span class="hud-label">Максимум</span>
+          <span class="hud-value" id="oscHudMax">0.000</span>
+        </div>
+        <div class="osc-hud-tile">
+          <span class="hud-label">Размах Δ</span>
+          <span class="hud-value" id="oscHudDelta">0.000</span>
+        </div>
+      </div>
+
+      <!-- Холст осциллографа -->
+      <div class="osc-modal-canvas-wrap">
+        <canvas id="canvasOscModal" class="osc-modal-canvas"></canvas>
+      </div>
+
+      <!-- Панель управления осциллографом: Пауза, Очистка, Буфер, Автомасштаб -->
+      <div class="osc-controls-bar">
+        <div class="osc-ctrl-group">
+          <button id="btnOscPause" class="glass-btn osc-btn osc-btn-pause" type="button">
+            <span id="btnOscPauseIcon">⏸️</span>
+            <span id="btnOscPauseText">Пауза</span>
+          </button>
+          <button id="btnOscClear" class="glass-btn osc-btn" type="button" title="Очистить буфер">
+            <span>🔄</span>
+            <span>Сброс</span>
+          </button>
+        </div>
+
+        <div class="osc-ctrl-group">
+          <div class="osc-segmented-pill" id="oscBufferPill">
+            <button class="seg-btn" data-pts="45">45т</button>
+            <button class="seg-btn active" data-pts="90">90т</button>
+            <button class="seg-btn" data-pts="180">180т</button>
+          </div>
+          <button id="btnOscAutoScale" class="glass-btn osc-btn osc-btn-scale active" type="button" title="Переключить масштаб">
+            <span>↕️ Авто</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script src="elm327.js?v=44"></script>
+  <script src="m73.js?v=44"></script>
+  <script src="logger.js?v=44"></script>
+  <script src="dashboard-widgets.js?v=44"></script>
+  <script src="app.js?v=44"></script>
 </body>
 </html>

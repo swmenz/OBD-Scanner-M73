@@ -1013,6 +1013,183 @@ body {
   letter-spacing: -0.01em;
 }
 
+/* Диагностическая сводка здоровья цепей АЦП */
+.adc-overview-card {
+  padding: 14px 16px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--glass-border);
+}
+
+.adc-summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.adc-summary-lead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.adc-status-orb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.adc-status-orb.status-orb-ok {
+  background: var(--apple-green);
+  box-shadow: 0 0 12px rgba(48, 209, 88, 0.8), 0 0 4px #30D158;
+}
+
+.adc-status-orb.status-orb-warn {
+  background: var(--apple-amber);
+  box-shadow: 0 0 12px rgba(255, 159, 10, 0.8), 0 0 4px #FF9F0A;
+}
+
+.adc-status-orb.status-orb-danger {
+  background: var(--apple-rose);
+  box-shadow: 0 0 14px rgba(255, 69, 58, 0.9), 0 0 4px #FF453A;
+  animation: orbDangerPulse 1.2s infinite alternate;
+}
+
+.adc-status-orb.status-orb-neutral {
+  background: rgba(255, 255, 255, 0.3);
+  box-shadow: none;
+}
+
+@keyframes orbDangerPulse {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  100% { transform: scale(1.15); opacity: 1; }
+}
+
+.adc-summary-subtitle {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  line-height: 1.3;
+}
+
+.adc-health-counters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.adc-counter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 0.70rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.adc-counter-chip .counter-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.adc-counter-chip.counter-ok {
+  background: rgba(48, 209, 88, 0.12);
+  border-color: rgba(48, 209, 88, 0.3);
+  color: #30D158;
+}
+.adc-counter-chip.counter-ok .counter-dot { background: #30D158; box-shadow: 0 0 6px rgba(48, 209, 88, 0.8); }
+
+.adc-counter-chip.counter-warn {
+  background: rgba(255, 159, 10, 0.12);
+  border-color: rgba(255, 159, 10, 0.3);
+  color: #FF9F0A;
+}
+.adc-counter-chip.counter-warn .counter-dot { background: #FF9F0A; }
+
+.adc-counter-chip.counter-danger {
+  background: rgba(255, 69, 58, 0.14);
+  border-color: rgba(255, 69, 58, 0.35);
+  color: #FF453A;
+}
+.adc-counter-chip.counter-danger .counter-dot { background: #FF453A; }
+
+/* Элементы строки АЦП */
+.adc-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.adc-title-line strong {
+  margin: 0;
+  display: inline;
+}
+
+.adc-subtext {
+  font-size: 0.69rem !important;
+  color: var(--text-tertiary) !important;
+  margin-top: 3px !important;
+  display: block;
+  line-height: 1.35;
+}
+
+.badge-health {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 8px;
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+  border: 1px solid transparent;
+  transition: all 0.25s ease;
+}
+
+.badge-health-ok {
+  background: rgba(48, 209, 88, 0.15);
+  border-color: rgba(48, 209, 88, 0.35);
+  color: #30D158;
+}
+
+.badge-health-warn {
+  background: rgba(255, 159, 10, 0.16);
+  border-color: rgba(255, 159, 10, 0.4);
+  color: #FF9F0A;
+}
+
+.badge-health-danger {
+  background: rgba(255, 69, 58, 0.18);
+  border-color: rgba(255, 69, 58, 0.45);
+  color: #FF453A;
+  box-shadow: 0 0 8px rgba(255, 69, 58, 0.25);
+}
+
+.badge-health-info {
+  background: rgba(10, 132, 255, 0.15);
+  border-color: rgba(10, 132, 255, 0.35);
+  color: #0A84FF;
+}
+
+.badge-health-neutral {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: var(--text-tertiary);
+}
+
+.adc-val-wrap {
+  text-align: right;
+  flex-shrink: 0;
+}
+
 /* Тесты исполнительных механизмов */
 .actuator-list {
   display: flex;
@@ -1947,4 +2124,314 @@ body {
 
 .widget-compact .control-buttons button {
   width: 100%;
+}
+
+/* ========================================================
+   СПРАВОЧНИК ДОПУСКОВ АЦП (MODAL SHEET)
+   ======================================================== */
+.adc-ref-sheet {
+  max-width: 520px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.adc-ref-body {
+  padding: 16px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.adc-ref-section {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.adc-ref-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 4px;
+}
+
+.adc-ref-hint {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  line-height: 1.35;
+}
+
+.adc-ref-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.adc-ref-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+  font-size: 0.73rem;
+  color: var(--text-secondary);
+}
+
+.adc-ref-row span:last-child {
+  flex: 1;
+  text-align: left;
+}
+
+/* ========================================================
+   УНИВЕРСАЛЬНЫЙ ЖИВОЙ ОСЦИЛЛОГРАФ (ВИДЖЕТ + PRO-МОДАЛКА)
+   ======================================================== */
+.osc-tile-title-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.osc-tile-channel-select {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 4px;
+  cursor: pointer;
+  outline: none;
+  font-family: inherit;
+  transition: all 0.2s ease;
+  max-width: 110px;
+}
+
+.osc-tile-channel-select:focus {
+  border-color: var(--apple-blue);
+  background: rgba(10, 132, 255, 0.15);
+}
+
+.osc-tile-channel-select option {
+  background: #1c1c1e;
+  color: #fff;
+}
+
+.osc-tile-expand-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.osc-tile-expand-btn:hover, .osc-tile-expand-btn:active {
+  background: rgba(10, 132, 255, 0.25);
+  color: #fff;
+  border-color: var(--apple-blue);
+}
+
+/* Про-модальное окно осциллографа */
+.oscilloscope-modal-sheet {
+  max-width: 580px;
+  width: 95vw;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 18px 20px 18px;
+}
+
+.osc-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.osc-header-left {
+  display: flex;
+  flex-direction: column;
+}
+
+.osc-active-channel-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--apple-blue);
+  margin-top: 1px;
+}
+
+.osc-channel-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.osc-channel-label {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+.osc-select-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  color: #fff;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  outline: none;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.osc-select-input:focus {
+  border-color: var(--apple-blue);
+  background: rgba(10, 132, 255, 0.12);
+}
+
+.osc-select-input option {
+  background: #1c1c1e;
+  color: #fff;
+}
+
+/* Сетка HUD в модалке */
+.osc-hud-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.osc-hud-tile {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 6px 8px;
+  text-align: center;
+}
+
+.osc-hud-tile .hud-label {
+  display: block;
+  font-size: 0.62rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin-bottom: 2px;
+}
+
+.osc-hud-tile .hud-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.osc-hud-tile .hud-unit {
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  margin-left: 2px;
+}
+
+.osc-hud-tile.hud-curr .hud-value {
+  color: var(--apple-green);
+}
+
+/* Холст осциллографа в модалке */
+.osc-modal-canvas-wrap {
+  width: 100%;
+  height: 230px;
+  background: rgba(8, 10, 16, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.6);
+}
+
+.osc-modal-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Панель управления осциллографом */
+.osc-controls-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.osc-ctrl-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.osc-btn {
+  padding: 6px 12px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 8px;
+}
+
+.osc-btn-pause.is-paused {
+  background: rgba(255, 69, 58, 0.2);
+  border-color: rgba(255, 69, 58, 0.5);
+  color: #FF453A;
+}
+
+.osc-segmented-pill {
+  display: inline-flex;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.osc-segmented-pill .seg-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.70rem;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.osc-segmented-pill .seg-btn.active {
+  background: var(--apple-blue);
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.osc-btn-scale.active {
+  color: var(--apple-blue);
+  border-color: rgba(10, 132, 255, 0.45);
 }

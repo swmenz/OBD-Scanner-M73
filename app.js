@@ -294,14 +294,44 @@ class M73Application {
     this.btnReadDtc = document.getElementById('btnReadDtc');
     this.btnClearDtc = document.getElementById('btnClearDtc');
 
-    // АЦП и пропуски
+    // АЦП и здоровье датчиков
     this.adcMaf = document.getElementById('adcMaf');
     this.adcThrottle = document.getElementById('adcThrottle');
     this.adcTemp = document.getElementById('adcTemp');
     this.adcAirTemp = document.getElementById('adcAirTemp');
     this.adcRoughRoad = document.getElementById('adcRoughRoad');
     this.adcO2 = document.getElementById('adcO2');
+    this.adcO2_2 = document.getElementById('adcO2_2');
     this.adcVolt = document.getElementById('adcVolt');
+
+    this.healthAdcMaf = document.getElementById('healthAdcMaf');
+    this.healthAdcThrottle = document.getElementById('healthAdcThrottle');
+    this.healthAdcTemp = document.getElementById('healthAdcTemp');
+    this.healthAdcAirTemp = document.getElementById('healthAdcAirTemp');
+    this.healthAdcRoughRoad = document.getElementById('healthAdcRoughRoad');
+    this.healthAdcO2 = document.getElementById('healthAdcO2');
+    this.healthAdcO2_2 = document.getElementById('healthAdcO2_2');
+    this.healthAdcVolt = document.getElementById('healthAdcVolt');
+
+    this.descAdcMaf = document.getElementById('descAdcMaf');
+    this.descAdcThrottle = document.getElementById('descAdcThrottle');
+    this.descAdcTemp = document.getElementById('descAdcTemp');
+    this.descAdcAirTemp = document.getElementById('descAdcAirTemp');
+    this.descAdcRoughRoad = document.getElementById('descAdcRoughRoad');
+    this.descAdcO2 = document.getElementById('descAdcO2');
+    this.descAdcO2_2 = document.getElementById('descAdcO2_2');
+    this.descAdcVolt = document.getElementById('descAdcVolt');
+
+    this.adcSummaryOrb = document.getElementById('adcSummaryOrb');
+    this.adcSummaryText = document.getElementById('adcSummaryText');
+    this.adcCountOk = document.getElementById('adcCountOk');
+    this.adcCountWarn = document.getElementById('adcCountWarn');
+    this.adcCountDanger = document.getElementById('adcCountDanger');
+
+    this.modalAdcReference = document.getElementById('modalAdcReference');
+    this.btnOpenAdcRefModal = document.getElementById('btnOpenAdcRefModal');
+    this.btnCloseAdcRef = document.getElementById('btnCloseAdcRef');
+
     this.misCyl1 = document.getElementById('misCyl1');
     this.misCyl2 = document.getElementById('misCyl2');
     this.misCyl3 = document.getElementById('misCyl3');
@@ -327,7 +357,7 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v42\n\n• Ультра-компактная стеклянная шапка (Single-line iOS Bar):\n  1) Шапка переведена в одну компактную строку (высота 40-44 px вместо 75 px)\n  2) Кнопка настройки виджетов перенесена в шапку рядом с кнопкой подключения\n  3) Полностью удалена промежуточная полоса «Приборная панель», виджеты подняты максимально вверх\n  4) Компактная кнопка подключения и капсула частоты в стиле iOS");
+        alert("Диагностика М73 — Версия v44\n\n• Светофор здоровья датчиков на вкладке АЦП:\n  1) ДМРВ (Bosch HFM5): автоанализ покоя (0.996-1.020В = Идеал, 1.021-1.035В = Норма, 1.036-1.050В = Износ, >1.050В = Замена) и динамики\n  2) ДПДЗ, АКБ/генератор, цепи ДТОЖ/ДТВ, ДК1, ДК2 и ДНД\n  3) Сводная карточка состояния и интерактивный справочник заводских допусков\n\n• Универсальный живой осциллограф (Canvas Pro):\n  1) Вывод в реальном времени любого из 13 параметров ЭБУ (ДК1, ДК2, ДМРВ, RPM, УОЗ, Впрыск, Дроссель, Бортсеть и др.)\n  2) Полноэкранный режим с измерительной шкалой, калиброванными эталонами и HUD телеметрией (Мин/Макс/Тек/Размах)\n  3) Пауза/заморозка кадра, очистка буфера и переключение авто/фикс масштаба");
       });
     }
 
@@ -406,6 +436,32 @@ class M73Application {
         if (confirm("Удалить всю историю сохранённых поездок?")) {
           await this.logger.storage.clearAll();
           await this.refreshHistory();
+        }
+      });
+    }
+
+    // Справочник допусков АЦП
+    if (this.btnOpenAdcRefModal) {
+      this.btnOpenAdcRefModal.addEventListener('click', () => {
+        if (this.modalAdcReference) {
+          this.modalAdcReference.style.display = 'flex';
+          this.modalAdcReference.classList.add('open');
+        }
+      });
+    }
+    if (this.btnCloseAdcRef) {
+      this.btnCloseAdcRef.addEventListener('click', () => {
+        if (this.modalAdcReference) {
+          this.modalAdcReference.classList.remove('open');
+          this.modalAdcReference.style.display = 'none';
+        }
+      });
+    }
+    if (this.modalAdcReference) {
+      this.modalAdcReference.addEventListener('click', (e) => {
+        if (e.target === this.modalAdcReference) {
+          this.modalAdcReference.classList.remove('open');
+          this.modalAdcReference.style.display = 'none';
         }
       });
     }
@@ -705,10 +761,20 @@ class M73Application {
             throw new Error("Пустой кадр 21 01");
           }
         } else if (this.currentTab === 'tab-adc') {
-          // Вкладка АЦП: опрашиваем ИСКЛЮЧИТЕЛЬНО Кадр 3 (21 03) для оценки напряжений покоя датчиков
+          // Вкладка АЦП: опрашиваем Кадр 3 (21 03) для оценки напряжений датчиков
+          // Каждые 4 цикла также быстро считываем 21 01, чтобы обновить RPM для точного детектора покой/запущен
+          this.adcCycleCounter = (this.adcCycleCounter || 0) + 1;
+          if (this.adcCycleCounter % 4 === 0) {
+            try {
+              await this.m73.readConfiguredCycle('2101');
+            } catch(e) {}
+          }
           const dataAdc = await this.m73.readConfiguredCycle('2103');
           if (dataAdc) {
             this.updateAdcUI(dataAdc);
+            if (this.widgetManager) {
+              this.widgetManager.updateDynamicWidgets(dataAdc);
+            }
             if (!this.logger.isRecording) {
               this.logger.addPoint(dataAdc);
             }
@@ -910,32 +976,195 @@ class M73Application {
   }
 
   /**
-   * Отрисовка напряжений каналов АЦП (Кадр 21 03)
+   * Отрисовка напряжений каналов АЦП (Кадр 21 03) и оценка здоровья датчиков
    */
   updateAdcUI(data) {
-    if (data && data.adc && this.adcMaf) {
-      const mafV = Number(data.adc.maf);
-      this.adcMaf.textContent = `${mafV.toFixed(3)} В`;
+    if (!data || !data.adc) return;
+    const adc = data.adc;
 
-      // Цветовая подсветка состояния ДМРВ по эталону покоя (0.996 ... 1.020 В)
+    const mafV = Number(adc.maf);
+    const tpsV = Number(adc.tps);
+    const tempV = Number(adc.temp);
+    const airV = adc.airTemp !== undefined ? Number(adc.airTemp) : null;
+    const roughV = adc.roughRoad !== undefined ? Number(adc.roughRoad) : null;
+    const o2V = Number(adc.o2);
+    const o2_2V = adc.o2_2 !== undefined ? Number(adc.o2_2) : null;
+    const voltV = Number(adc.volt);
+
+    if (this.adcMaf) this.adcMaf.textContent = `${mafV.toFixed(3)} В`;
+    if (this.adcThrottle) this.adcThrottle.textContent = `${tpsV.toFixed(3)} В`;
+    if (this.adcTemp) this.adcTemp.textContent = `${tempV.toFixed(3)} В`;
+    if (this.adcAirTemp && airV !== null) this.adcAirTemp.textContent = `${airV.toFixed(3)} В`;
+    if (this.adcRoughRoad && roughV !== null) this.adcRoughRoad.textContent = `${roughV.toFixed(3)} В`;
+    if (this.adcO2) this.adcO2.textContent = `${o2V.toFixed(3)} В`;
+    if (this.adcO2_2 && o2_2V !== null) this.adcO2_2.textContent = `${o2_2V.toFixed(3)} В`;
+    if (this.adcVolt) this.adcVolt.textContent = `${voltV.toFixed(2)} В`;
+
+    // Вычисляем здоровье каждого датчика и обновляем бейджи со сводкой
+    this.evaluateAdcHealth(data);
+  }
+
+  evaluateAdcHealth(data) {
+    if (!data || !data.adc) return;
+    const adc = data.adc;
+    const rpm = (this.m73.latestData && this.m73.latestData.rpm) || 0;
+    const volt = Number(adc.volt) || 0;
+    const isRunning = rpm > 350 || volt >= 13.2;
+
+    let countOk = 0;
+    let countWarn = 0;
+    let countDanger = 0;
+
+    const setBadge = (badgeEl, descEl, status, badgeText, descText) => {
+      if (!badgeEl) return;
+      badgeEl.className = `badge-health badge-health-${status}`;
+      badgeEl.textContent = badgeText;
+      if (descEl && descText) descEl.textContent = descText;
+      if (status === 'ok') countOk++;
+      else if (status === 'warn') countWarn++;
+      else if (status === 'danger') countDanger++;
+    };
+
+    // 1. ДМРВ (Bosch HFM5 0 280 218 116)
+    const mafV = Number(adc.maf);
+    if (!isRunning) {
       if (mafV >= 0.996 && mafV <= 1.020) {
-        this.adcMaf.style.color = 'var(--apple-green)';
-      } else if (mafV >= 0.980 && mafV <= 1.035) {
-        this.adcMaf.style.color = 'var(--apple-amber)';
+        setBadge(this.healthAdcMaf, this.descAdcMaf, 'ok', '🟢 Идеал', 'Покой: Новый датчик (0.996 ... 1.020 В)');
+        if (this.adcMaf) this.adcMaf.style.color = 'var(--apple-green)';
+      } else if (mafV >= 1.021 && mafV <= 1.035) {
+        setBadge(this.healthAdcMaf, this.descAdcMaf, 'ok', '🟢 Норма', 'Покой: Рабочий датчик (1.021 ... 1.035 В)');
+        if (this.adcMaf) this.adcMaf.style.color = 'var(--apple-green)';
+      } else if (mafV >= 1.036 && mafV <= 1.050) {
+        setBadge(this.healthAdcMaf, this.descAdcMaf, 'warn', '🟡 Износ', 'Покой: Износ кристалла. Повышенный расход топлива');
+        if (this.adcMaf) this.adcMaf.style.color = 'var(--apple-amber)';
+      } else if (mafV > 1.050) {
+        setBadge(this.healthAdcMaf, this.descAdcMaf, 'danger', '🔴 Неисправен', 'Покой: Критический дрейф нуля (>1.050В). Требуется замена');
+        if (this.adcMaf) this.adcMaf.style.color = 'var(--apple-rose)';
       } else {
-        this.adcMaf.style.color = 'var(--apple-rose)';
+        setBadge(this.healthAdcMaf, this.descAdcMaf, 'danger', '🔴 Ошибка нуля', 'Покой: Напряжение ниже нормы (<0.996В). Проверьте массы');
+        if (this.adcMaf) this.adcMaf.style.color = 'var(--apple-rose)';
       }
+    } else {
+      if (mafV >= 1.05 && mafV <= 4.80) {
+        setBadge(this.healthAdcMaf, this.descAdcMaf, 'ok', '🟢 Активен', 'Двигатель запущен: динамический отклик расхода воздуха');
+        if (this.adcMaf) this.adcMaf.style.color = 'var(--apple-green)';
+      } else {
+        setBadge(this.healthAdcMaf, this.descAdcMaf, 'danger', '🔴 Выход за пределы', 'Напряжение вне рабочего диапазона');
+        if (this.adcMaf) this.adcMaf.style.color = 'var(--apple-rose)';
+      }
+    }
 
-      this.adcThrottle.textContent = `${Number(data.adc.tps).toFixed(3)} В`;
-      this.adcTemp.textContent = `${Number(data.adc.temp).toFixed(3)} В`;
-      if (this.adcAirTemp && data.adc.airTemp !== undefined) {
-        this.adcAirTemp.textContent = `${Number(data.adc.airTemp).toFixed(3)} В`;
+    // 2. ДПДЗ (Датчик положения дроссельной заслонки)
+    const tpsV = Number(adc.tps);
+    if (tpsV >= 0.45 && tpsV <= 0.65) {
+      setBadge(this.healthAdcThrottle, this.descAdcThrottle, 'ok', '🟢 Закрыта (0%)', 'Калибровка нуля заслонки в норме (0.45 ... 0.65 В)');
+    } else if (tpsV > 0.65 && tpsV <= 0.75) {
+      setBadge(this.healthAdcThrottle, this.descAdcThrottle, 'warn', '🟡 Смещение нуля', 'Возможен перетяг троса газа или нагар на упоре дросселя');
+    } else if (tpsV > 0.75 && tpsV <= 4.60) {
+      const openPct = Math.min(100, Math.max(0, ((tpsV - 0.5) / 4.0) * 100)).toFixed(0);
+      setBadge(this.healthAdcThrottle, this.descAdcThrottle, 'info', `🔵 Открыта (~${openPct}%)`, 'Дроссельная заслонка открыта, сигнал изменяется плавно');
+    } else if (tpsV < 0.35) {
+      setBadge(this.healthAdcThrottle, this.descAdcThrottle, 'danger', '🔴 КЗ на массу', 'Напряжение < 0.35 В. Замыкание сигнального провода на корпус');
+    } else {
+      setBadge(this.healthAdcThrottle, this.descAdcThrottle, 'danger', '🔴 Обрыв цепи', 'Напряжение > 4.70 В. Обрыв сигнального провода или массы');
+    }
+
+    // 3. Бортовая сеть (АКБ / Генератор)
+    const voltV = Number(adc.volt);
+    if (!isRunning) {
+      if (voltV >= 12.4) {
+        setBadge(this.healthAdcVolt, this.descAdcVolt, 'ok', '🟢 АКБ заряжен', 'Покой: Напряжение батареи в норме (80-100% заряда)');
+      } else if (voltV >= 12.0) {
+        setBadge(this.healthAdcVolt, this.descAdcVolt, 'warn', '🟡 Разряжен АКБ', 'Покой: Низкое напряжение батареи (требуется подзарядка)');
+      } else {
+        setBadge(this.healthAdcVolt, this.descAdcVolt, 'danger', '🔴 Глубокий разряд', 'Покой: Напряжение АКБ < 12.0 В. Риск отказа запуска');
       }
-      if (this.adcRoughRoad && data.adc.roughRoad !== undefined) {
-        this.adcRoughRoad.textContent = `${Number(data.adc.roughRoad).toFixed(3)} В`;
+    } else {
+      if (voltV >= 13.8 && voltV <= 14.6) {
+        setBadge(this.healthAdcVolt, this.descAdcVolt, 'ok', '🟢 Зарядка ОК', 'Работа: Генератор выдает стабильные 13.8 ... 14.6 В');
+      } else if (voltV >= 13.2 && voltV < 13.8) {
+        setBadge(this.healthAdcVolt, this.descAdcVolt, 'warn', '🟡 Под нагрузкой', 'Работа: Небольшая просадка напряжения генератора');
+      } else if (voltV < 13.2) {
+        setBadge(this.healthAdcVolt, this.descAdcVolt, 'danger', '🔴 Недозаряд', 'Работа: Генератор не справляется (<13.2В). Проверьте ремень/щетки');
+      } else {
+        setBadge(this.healthAdcVolt, this.descAdcVolt, 'danger', '🔴 Перезаряд', 'Работа: Опасное перенапряжение (>14.7В). Пробит реле-регулятор');
       }
-      this.adcO2.textContent = `${Number(data.adc.o2).toFixed(3)} В`;
-      this.adcVolt.textContent = `${Number(data.adc.volt).toFixed(2)} В`;
+    }
+
+    // 4. ДТОЖ (Охлаждающая жидкость)
+    const tempV = Number(adc.temp);
+    if (tempV >= 0.20 && tempV <= 4.80) {
+      setBadge(this.healthAdcTemp, this.descAdcTemp, 'ok', '🟢 Цепь исправна', 'Терморезистор ДТОЖ в пределах рабочего диапазона');
+    } else if (tempV > 4.80) {
+      setBadge(this.healthAdcTemp, this.descAdcTemp, 'danger', '🔴 Обрыв цепи (5В)', 'Опорное напряжение 5.0 В. Обрыв провода датчика');
+    } else {
+      setBadge(this.healthAdcTemp, this.descAdcTemp, 'danger', '🔴 КЗ на массу (0В)', 'Замыкание сигнальной цепи ДТОЖ на массу автомобиля');
+    }
+
+    // 5. ДТВ (Температура впускного воздуха)
+    const airV = adc.airTemp !== undefined ? Number(adc.airTemp) : 3.5;
+    if (airV >= 0.20 && airV <= 4.80) {
+      setBadge(this.healthAdcAirTemp, this.descAdcAirTemp, 'ok', '🟢 Цепь исправна', 'Терморезистор воздуха в рабочем диапазоне');
+    } else if (airV > 4.80) {
+      setBadge(this.healthAdcAirTemp, this.descAdcAirTemp, 'danger', '🔴 Обрыв цепи (5В)', 'Опорные 5.0 В. Обрыв проводки ДТВ');
+    } else {
+      setBadge(this.healthAdcAirTemp, this.descAdcAirTemp, 'danger', '🔴 КЗ на массу (0В)', 'Замыкание цепи датчика температуры воздуха на массу');
+    }
+
+    // 6. ДК1 (Управляющий лямбда-зонд)
+    const o2V = Number(adc.o2);
+    if (o2V >= 0.42 && o2V <= 0.48) {
+      setBadge(this.healthAdcO2, this.descAdcO2, 'warn', '🟡 Прогрев / Опорное', 'Опорные ~0.45 В. Зонд прогревается или смесь разомкнута');
+    } else if (o2V >= 0.05 && o2V < 0.42) {
+      setBadge(this.healthAdcO2, this.descAdcO2, 'ok', '🟢 Бедная смесь', 'Сигнал ДК1 в диапазоне бедной смеси (0.1 ... 0.4 В)');
+    } else if (o2V > 0.48 && o2V <= 0.95) {
+      setBadge(this.healthAdcO2, this.descAdcO2, 'ok', '🟢 Богатая смесь', 'Сигнал ДК1 в диапазоне богатой смеси (0.5 ... 0.9 В)');
+    } else {
+      setBadge(this.healthAdcO2, this.descAdcO2, 'danger', '🔴 Залипание сигнала', 'Выход сигнала за пределы рабочего диапазона 0.05-0.95В');
+    }
+
+    // 7. ДК2 (Диагностический лямбда-зонд)
+    const o2_2V = adc.o2_2 !== undefined ? Number(adc.o2_2) : 0.65;
+    if (o2_2V >= 0.55 && o2_2V <= 0.78) {
+      setBadge(this.healthAdcO2_2, this.descAdcO2_2, 'ok', '🟢 Катализатор ОК', 'Стабильный уровень напряжения после исправного нейтрализатора');
+    } else if (o2_2V >= 0.42 && o2_2V <= 0.48) {
+      setBadge(this.healthAdcO2_2, this.descAdcO2_2, 'warn', '🟡 Прогрев / Опорное', 'Опорное напряжение ненагретого зонда');
+    } else if (o2_2V >= 0.05 && o2_2V < 0.55) {
+      setBadge(this.healthAdcO2_2, this.descAdcO2_2, 'warn', '🟡 Бедный отклик', 'Напряжение ниже нормы для нейтрализатора');
+    } else if (o2_2V > 0.78 && o2_2V <= 0.95) {
+      setBadge(this.healthAdcO2_2, this.descAdcO2_2, 'warn', '🟡 Богатый отклик', 'Повышенный уровень напряжения ДК2');
+    } else {
+      setBadge(this.healthAdcO2_2, this.descAdcO2_2, 'danger', '🔴 Ошибка сигнала', 'Выход за допустимые пределы');
+    }
+
+    // 8. ДНД (Датчик неровной дороги)
+    const roughV = adc.roughRoad !== undefined ? Number(adc.roughRoad) : 2.5;
+    if (roughV >= 2.20 && roughV <= 2.80) {
+      setBadge(this.healthAdcRoughRoad, this.descAdcRoughRoad, 'ok', '🟢 Покой (~2.5 В)', 'Опорное напряжение акселерометра в норме (2.5 В)');
+    } else if (roughV >= 0.50 && roughV <= 4.50) {
+      setBadge(this.healthAdcRoughRoad, this.descAdcRoughRoad, 'info', '🔵 Динамика дороги', 'Акселерометр фиксирует ускорения и вибрации подвески');
+    } else {
+      setBadge(this.healthAdcRoughRoad, this.descAdcRoughRoad, 'danger', '🔴 Ошибка ДНД', 'Выход опорного напряжения за физический предел датчика');
+    }
+
+    // Обновление счетчиков
+    if (this.adcCountOk) this.adcCountOk.textContent = countOk;
+    if (this.adcCountWarn) this.adcCountWarn.textContent = countWarn;
+    if (this.adcCountDanger) this.adcCountDanger.textContent = countDanger;
+
+    // Обновление верхнего статусного орба и подзаголовка
+    if (this.adcSummaryOrb && this.adcSummaryText) {
+      this.adcSummaryOrb.className = 'adc-status-orb';
+      if (countDanger > 0) {
+        this.adcSummaryOrb.classList.add('status-orb-danger');
+        this.adcSummaryText.textContent = `Обнаружены неисправности цепей: ${countDanger} датч.`;
+      } else if (countWarn > 0) {
+        this.adcSummaryOrb.classList.add('status-orb-warn');
+        this.adcSummaryText.textContent = `Есть предупреждения по датчикам: ${countWarn} откл.`;
+      } else {
+        this.adcSummaryOrb.classList.add('status-orb-ok');
+        this.adcSummaryText.textContent = 'Все электрические цепи датчиков соответствуют норме М73';
+      }
     }
   }
 

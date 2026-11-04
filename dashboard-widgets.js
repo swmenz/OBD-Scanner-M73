@@ -5,9 +5,188 @@
  *  - Переключение размеров карточек (1 колонка ↔ во всю ширину на 2 колонки)
  *  - Плавный Touch Drag & Drop для изменения порядка блоков на iPhone
  *  - Удаление / добавление любых датчиков ЭБУ М73 через галерею виджетов
- *  - Живой неоновый осциллограф ДК1 (лямбда-зонд) на Canvas
+ *  - Универсальный живой осциллограф (Canvas) с переключением любого датчика ЭБУ
  *  - Сохранение пользовательской раскладки в LocalStorage и сброс по умолчанию
  */
+
+function hexToRgba(hex, alpha = 1) {
+  let c = hex.replace('#', '');
+  if (c.length === 3) c = c.split('').map(x => x + x).join('');
+  const num = parseInt(c, 16);
+  return `rgba(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}, ${alpha})`;
+}
+
+const OSC_CHANNELS = {
+  'o2Volt': {
+    id: 'o2Volt',
+    title: 'ДК1 (до ката)',
+    shortTitle: 'ДК1',
+    unit: 'В',
+    decimals: 3,
+    color: '#00F5A0',
+    min: 0,
+    max: 1.0,
+    refLine: 0.45,
+    refLabel: '0.45В (λ=1.0)',
+    extract: (d) => d.o2Volt !== undefined ? d.o2Volt : (d.adc ? d.adc.o2 : null)
+  },
+  'o2Volt2': {
+    id: 'o2Volt2',
+    title: 'ДК2 (после ката)',
+    shortTitle: 'ДК2',
+    unit: 'В',
+    decimals: 3,
+    color: '#00D2FF',
+    min: 0,
+    max: 1.0,
+    refLine: 0.60,
+    refLabel: '0.60В',
+    extract: (d) => d.o2Volt2 !== undefined ? d.o2Volt2 : (d.adc ? d.adc.o2_2 : null)
+  },
+  'maf': {
+    id: 'maf',
+    title: 'ДМРВ (Расход)',
+    shortTitle: 'ДМРВ',
+    unit: 'кг/ч',
+    decimals: 1,
+    color: '#FFD60A',
+    min: 0,
+    max: 45,
+    refLine: 9.5,
+    refLabel: 'ХХ 9.5 кг/ч',
+    extract: (d) => d.maf
+  },
+  'mafAdc': {
+    id: 'mafAdc',
+    title: 'ДМРВ (АЦП покой/дин)',
+    shortTitle: 'ДМРВ АЦП',
+    unit: 'В',
+    decimals: 3,
+    color: '#FF9F0A',
+    min: 0.9,
+    max: 2.2,
+    refLine: 1.01,
+    refLabel: 'Покой 1.00В',
+    extract: (d) => (d.adc && d.adc.maf !== undefined) ? d.adc.maf : (d.mafVolt || null)
+  },
+  'rpm': {
+    id: 'rpm',
+    title: 'Обороты двигателя (RPM)',
+    shortTitle: 'RPM',
+    unit: 'об/мин',
+    decimals: 0,
+    color: '#0A84FF',
+    min: 500,
+    max: 4000,
+    refLine: 840,
+    refLabel: 'ХХ 840',
+    extract: (d) => d.rpm
+  },
+  'spark': {
+    id: 'spark',
+    title: 'УОЗ (Зажигание)',
+    shortTitle: 'УОЗ',
+    unit: '°',
+    decimals: 1,
+    color: '#BF5AF2',
+    min: -5,
+    max: 45,
+    refLine: 10,
+    refLabel: '10°',
+    extract: (d) => d.spark
+  },
+  'injTime': {
+    id: 'injTime',
+    title: 'Время впрыска форсунок',
+    shortTitle: 'Впрыск',
+    unit: 'мс',
+    decimals: 2,
+    color: '#FF453A',
+    min: 1.0,
+    max: 16.0,
+    refLine: 3.8,
+    refLabel: 'ХХ 3.8 мс',
+    extract: (d) => d.injTime
+  },
+  'tps': {
+    id: 'tps',
+    title: 'Положение дросселя (ДПДЗ)',
+    shortTitle: 'Дроссель',
+    unit: '%',
+    decimals: 1,
+    color: '#30D158',
+    min: 0,
+    max: 100,
+    refLine: 0,
+    refLabel: '0%',
+    extract: (d) => d.throttle !== undefined ? d.throttle : d.tps
+  },
+  'volt': {
+    id: 'volt',
+    title: 'Бортовая сеть',
+    shortTitle: 'Бортсеть',
+    unit: 'В',
+    decimals: 2,
+    color: '#64D2FF',
+    min: 11.5,
+    max: 15.0,
+    refLine: 14.0,
+    refLabel: '14.0 В',
+    extract: (d) => d.volt !== undefined ? d.volt : (d.adc ? d.adc.volt : null)
+  },
+  'speed': {
+    id: 'speed',
+    title: 'Скорость автомобиля',
+    shortTitle: 'Скорость',
+    unit: 'км/ч',
+    decimals: 0,
+    color: '#5E5CE6',
+    min: 0,
+    max: 160,
+    refLine: 60,
+    refLabel: '60 км/ч',
+    extract: (d) => d.speed
+  },
+  'cycleAir': {
+    id: 'cycleAir',
+    title: 'Цикловой расход воздуха',
+    shortTitle: 'Цикл. расх.',
+    unit: 'мг/т',
+    decimals: 1,
+    color: '#FF9F0A',
+    min: 50,
+    max: 450,
+    refLine: 95,
+    refLabel: 'ХХ 95 мг',
+    extract: (d) => d.cycleAir
+  },
+  'duty': {
+    id: 'duty',
+    title: 'Загрузка форсунок',
+    shortTitle: 'Duty %',
+    unit: '%',
+    decimals: 1,
+    color: '#FF375F',
+    min: 0,
+    max: 80,
+    refLine: 15,
+    refLabel: '15%',
+    extract: (d) => d.duty
+  },
+  'knockVolt': {
+    id: 'knockVolt',
+    title: 'Сигнал датчика детонации',
+    shortTitle: 'Детонация',
+    unit: 'В',
+    decimals: 3,
+    color: '#FF6482',
+    min: 0,
+    max: 3.5,
+    refLine: 1.0,
+    refLabel: '1.0 В',
+    extract: (d) => d.knockVolt
+  }
+};
 
 class DashboardWidgetManager {
   constructor(app) {
@@ -18,12 +197,22 @@ class DashboardWidgetManager {
     this.isEditMode = false;
     this.storageKey = 'priora_m73_dashboard_layout_v2';
     
-    // Буфер истории ДК1 для графика-осциллографа
-    this.o2History = [];
-    this.maxO2Points = 45;
+    // Универсальный осциллограф
+    this.oscChannels = OSC_CHANNELS;
+    this.oscChannel = localStorage.getItem('priora_osc_channel') || 'o2Volt';
+    this.maxOscPoints = parseInt(localStorage.getItem('priora_osc_points') || '90', 10);
+    this.isOscPaused = false;
+    this.isOscAutoScale = localStorage.getItem('priora_osc_autoscale') !== 'false';
+    this.oscHistory = [];
+    
+    // Совместимость с предыдущим O2
+    this.o2History = this.oscHistory;
+    this.maxO2Points = this.maxOscPoints;
     this.o2Canvas = null;
     this.o2Ctx = null;
-    this.lastO2Render = 0;
+    this.modalCanvas = null;
+    this.modalCtx = null;
+    this.lastOscRender = 0;
 
     // Каталог скрытых датчиков, доступных для добавления
     this.extraSensorsCatalog = [
@@ -81,12 +270,18 @@ class DashboardWidgetManager {
 
     // Привязка событий взаимодействия
     this._bindEvents();
+
+    // Инициализация универсального осциллографа
+    this._initOscilloscope();
   }
 
   _setupWidgets() {
     const widgets = Array.from(this.container.querySelectorAll('.dashboard-widget'));
     widgets.forEach(w => {
       this._attachWidgetControls(w);
+      if (w.getAttribute('data-widget-id') === 'o2-volt') {
+        this._bindOscWidgetEvents(w);
+      }
     });
   }
 
@@ -378,9 +573,9 @@ class DashboardWidgetManager {
     if (navigator.vibrate) navigator.vibrate(20);
     this._saveLayout();
 
-    // Если это виджет ДК1 — перерисовываем график под новую ширину
+    // Если это виджет осциллографа — перерисовываем график под новую ширину
     if (widgetEl.getAttribute('data-widget-id') === 'o2-volt') {
-      setTimeout(() => this.drawO2Oscilloscope(), 50);
+      setTimeout(() => this.drawOscilloscope(), 50);
     }
   }
 
@@ -573,10 +768,12 @@ class DashboardWidgetManager {
     this.container.appendChild(widgetEl);
     if (!skipSave) this._saveLayout();
 
-    // Обновляем контекст canvas если вернули ДК1
+    // Обновляем контекст canvas если вернули виджет осциллографа
     if (item.id === 'o2-volt') {
       this.o2Canvas = document.getElementById('canvasO2');
       if (this.o2Canvas) this.o2Ctx = this.o2Canvas.getContext('2d');
+      this._bindOscWidgetEvents(widgetEl);
+      setTimeout(() => this.drawOscilloscope(), 50);
     }
 
     // Повторно инициализируем кэшированные элементы в приложении
@@ -633,14 +830,33 @@ class DashboardWidgetManager {
       return `
         <div class="glass-card metric-tile o2-oscilloscope-tile">
           <div class="o2-tile-header">
-            <span class="tile-label">ДК1 (до ката)</span>
+            <div class="osc-tile-title-group">
+              <select id="oscWidgetChannelSelect" class="osc-tile-channel-select" title="Выбрать датчик для осциллографа">
+                <option value="o2Volt">ДК1 (до ката)</option>
+                <option value="o2Volt2">ДК2 (после ката)</option>
+                <option value="maf">ДМРВ (Расход)</option>
+                <option value="mafAdc">ДМРВ (АЦП)</option>
+                <option value="rpm">Обороты (RPM)</option>
+                <option value="spark">УОЗ</option>
+                <option value="injTime">Время впрыска</option>
+                <option value="tps">Дроссель</option>
+                <option value="volt">Бортсеть</option>
+                <option value="speed">Скорость</option>
+                <option value="cycleAir">Цикловой расход</option>
+                <option value="duty">Загрузка %</option>
+                <option value="knockVolt">Детонация</option>
+              </select>
+              <button id="btnOpenOscModalFromTile" class="osc-tile-expand-btn" type="button" title="Развернуть осциллограф на весь экран">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              </button>
+            </div>
             <div class="o2-mini-val-badge">
               <span class="tile-num-mini" id="valO2Volt">0.000</span>
-              <span class="tile-unit-mini">В</span>
+              <span class="tile-unit-mini" id="unitOscTile">В</span>
             </div>
           </div>
           <div class="o2-canvas-wrap">
-            <canvas id="canvasO2" width="280" height="48"></canvas>
+            <canvas id="canvasO2" class="o2-canvas"></canvas>
           </div>
         </div>
       `;
@@ -756,31 +972,280 @@ class DashboardWidgetManager {
   }
 
   /**
-   * Обновление осциллографа ДК1 (синусоида лямбда-зонда)
+   * =========================================================================
+   * УНИВЕРСАЛЬНЫЙ ЖИВОЙ ОСЦИЛЛОГРАФ (CANVAS WAVEFORM PRO)
+   * =========================================================================
+   */
+
+  _initOscilloscope() {
+    this.modalOsc = document.getElementById('modalOscilloscope');
+    this.modalCanvas = document.getElementById('canvasOscModal');
+    if (this.modalCanvas) {
+      this.modalCtx = this.modalCanvas.getContext('2d');
+    }
+
+    // Привязка селектора канала на плитке виджета
+    this._bindOscWidgetEvents(document);
+
+    // Привязка селектора в модальном окне
+    const modalSelect = document.getElementById('oscChannelSelect');
+    if (modalSelect) {
+      modalSelect.value = this.oscChannel;
+      modalSelect.addEventListener('change', (e) => {
+        this.setOscChannel(e.target.value);
+      });
+    }
+
+    // Закрытие модального окна
+    const btnClose = document.getElementById('btnCloseOscModal');
+    if (btnClose) {
+      btnClose.addEventListener('click', () => this.closeOscModal());
+    }
+
+    if (this.modalOsc) {
+      this.modalOsc.addEventListener('click', (e) => {
+        if (e.target === this.modalOsc) this.closeOscModal();
+      });
+    }
+
+    // Кнопка Пауза / Запуск
+    const btnPause = document.getElementById('btnOscPause');
+    if (btnPause) {
+      btnPause.addEventListener('click', () => this.toggleOscPause());
+    }
+
+    // Кнопка Сброс
+    const btnClear = document.getElementById('btnOscClear');
+    if (btnClear) {
+      btnClear.addEventListener('click', () => this.clearOscHistory());
+    }
+
+    // Кнопка Автомасштаб
+    const btnScale = document.getElementById('btnOscAutoScale');
+    if (btnScale) {
+      btnScale.addEventListener('click', () => this.toggleOscAutoScale());
+      btnScale.classList.toggle('active', this.isOscAutoScale);
+      btnScale.innerHTML = this.isOscAutoScale ? '<span>↕️ Авто</span>' : '<span>🔒 Фикс</span>';
+    }
+
+    // Кнопки буфера точек (45 / 90 / 180)
+    const pill = document.getElementById('oscBufferPill');
+    if (pill) {
+      pill.querySelectorAll('.seg-btn').forEach(btn => {
+        const pts = parseInt(btn.getAttribute('data-pts'), 10);
+        btn.classList.toggle('active', pts === this.maxOscPoints);
+        btn.addEventListener('click', () => {
+          pill.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          this.maxOscPoints = pts;
+          this.maxO2Points = pts;
+          try { localStorage.setItem('priora_osc_points', pts); } catch (e) {}
+          while (this.oscHistory.length > this.maxOscPoints) this.oscHistory.shift();
+          this.drawOscilloscope();
+        });
+      });
+    }
+
+    this._updateOscUIElements();
+  }
+
+  _bindOscWidgetEvents(scopeEl = document) {
+    const tileSelect = scopeEl.querySelector('#oscWidgetChannelSelect');
+    if (tileSelect) {
+      tileSelect.value = this.oscChannel;
+      tileSelect.onchange = (e) => {
+        this.setOscChannel(e.target.value);
+      };
+    }
+
+    const btnExpand = scopeEl.querySelector('#btnOpenOscModalFromTile');
+    if (btnExpand) {
+      btnExpand.onclick = (e) => {
+        e.stopPropagation();
+        this.openOscModal();
+      };
+    }
+
+    const canvas = scopeEl.querySelector('#canvasO2');
+    if (canvas) {
+      canvas.onclick = () => this.openOscModal();
+    }
+  }
+
+  setOscChannel(chId) {
+    if (!this.oscChannels[chId]) return;
+    this.oscChannel = chId;
+    try { localStorage.setItem('priora_osc_channel', chId); } catch (e) {}
+
+    this.oscHistory = [];
+    this.o2History = this.oscHistory;
+
+    const tileSelect = document.getElementById('oscWidgetChannelSelect');
+    if (tileSelect) tileSelect.value = chId;
+
+    const modalSelect = document.getElementById('oscChannelSelect');
+    if (modalSelect) modalSelect.value = chId;
+
+    this._updateOscUIElements();
+    this.drawOscilloscope();
+  }
+
+  _updateOscUIElements() {
+    const ch = this.oscChannels[this.oscChannel] || this.oscChannels['o2Volt'];
+    const unitEl = document.getElementById('unitOscTile');
+    if (unitEl) unitEl.textContent = ch.unit;
+
+    const modalTitle = document.getElementById('oscModalActiveTitle');
+    if (modalTitle) modalTitle.textContent = `${ch.title} (${ch.unit})`;
+
+    const hudUnit = document.getElementById('oscHudUnit');
+    if (hudUnit) hudUnit.textContent = ch.unit;
+  }
+
+  openOscModal(channelId) {
+    if (channelId && this.oscChannels[channelId]) {
+      this.setOscChannel(channelId);
+    }
+    if (this.modalOsc) {
+      this.modalOsc.style.display = 'flex';
+      this.modalOsc.classList.add('open');
+      this.modalCanvas = document.getElementById('canvasOscModal');
+      if (this.modalCanvas) this.modalCtx = this.modalCanvas.getContext('2d');
+      this._updateOscUIElements();
+      setTimeout(() => this.drawOscilloscope(), 40);
+    }
+  }
+
+  closeOscModal() {
+    if (this.modalOsc) {
+      this.modalOsc.classList.remove('open');
+      this.modalOsc.style.display = 'none';
+    }
+  }
+
+  toggleOscPause() {
+    this.isOscPaused = !this.isOscPaused;
+    const btn = document.getElementById('btnOscPause');
+    const txt = document.getElementById('btnOscPauseText');
+    const icon = document.getElementById('btnOscPauseIcon');
+    if (btn) btn.classList.toggle('is-paused', this.isOscPaused);
+    if (txt) txt.textContent = this.isOscPaused ? 'Запуск' : 'Пауза';
+    if (icon) icon.textContent = this.isOscPaused ? '▶️' : '⏸️';
+    this.drawOscilloscope();
+  }
+
+  clearOscHistory() {
+    this.oscHistory = [];
+    this.o2History = this.oscHistory;
+    const currEl = document.getElementById('oscHudCurr');
+    const minEl = document.getElementById('oscHudMin');
+    const maxEl = document.getElementById('oscHudMax');
+    const deltaEl = document.getElementById('oscHudDelta');
+    if (currEl) currEl.textContent = '0.000';
+    if (minEl) minEl.textContent = '0.000';
+    if (maxEl) maxEl.textContent = '0.000';
+    if (deltaEl) deltaEl.textContent = '0.000';
+    this.drawOscilloscope();
+  }
+
+  toggleOscAutoScale() {
+    this.isOscAutoScale = !this.isOscAutoScale;
+    try { localStorage.setItem('priora_osc_autoscale', this.isOscAutoScale); } catch (e) {}
+    const btn = document.getElementById('btnOscAutoScale');
+    if (btn) {
+      btn.classList.toggle('active', this.isOscAutoScale);
+      btn.innerHTML = this.isOscAutoScale ? '<span>↕️ Авто</span>' : '<span>🔒 Фикс</span>';
+    }
+    this.drawOscilloscope();
+  }
+
+  /**
+   * Совместимость со старым API ДК1
    */
   updateO2(volt) {
     if (typeof volt !== 'number' || isNaN(volt)) return;
-    this.o2History.push(volt);
-    if (this.o2History.length > this.maxO2Points) {
-      this.o2History.shift();
+    if (this.oscChannel === 'o2Volt') {
+      if (!this.isOscPaused) {
+        this.oscHistory.push(volt);
+        if (this.oscHistory.length > this.maxOscPoints) this.oscHistory.shift();
+      }
+      this.drawOscilloscope();
     }
-    this.drawO2Oscilloscope();
   }
 
-  drawO2Oscilloscope() {
+  feedOscilloscope(data) {
+    if (!data) return;
+    const ch = this.oscChannels[this.oscChannel] || this.oscChannels['o2Volt'];
+    const val = ch.extract(data);
+
+    if (val !== undefined && val !== null && !isNaN(val)) {
+      const num = Number(val);
+
+      // Обновляем мини-значение на плитке виджета
+      const valEl = document.getElementById('valO2Volt');
+      if (valEl) {
+        valEl.textContent = num.toFixed(ch.decimals);
+      }
+
+      // Добавляем точку в буфер
+      if (!this.isOscPaused) {
+        this.oscHistory.push(num);
+        if (this.oscHistory.length > this.maxOscPoints) {
+          this.oscHistory.shift();
+        }
+      }
+
+      // Обновляем телеметрию HUD
+      if (this.oscHistory.length > 0) {
+        const curVal = this.oscHistory[this.oscHistory.length - 1];
+        const minVal = Math.min(...this.oscHistory);
+        const maxVal = Math.max(...this.oscHistory);
+        const delta = maxVal - minVal;
+
+        const hudCurr = document.getElementById('oscHudCurr');
+        const hudMin = document.getElementById('oscHudMin');
+        const hudMax = document.getElementById('oscHudMax');
+        const hudDelta = document.getElementById('oscHudDelta');
+
+        if (hudCurr) hudCurr.textContent = curVal.toFixed(ch.decimals);
+        if (hudMin) hudMin.textContent = minVal.toFixed(ch.decimals);
+        if (hudMax) hudMax.textContent = maxVal.toFixed(ch.decimals);
+        if (hudDelta) hudDelta.textContent = delta.toFixed(ch.decimals);
+      }
+
+      this.drawOscilloscope();
+    }
+  }
+
+  drawOscilloscope() {
+    // 1. Отрисовка на плитке дашборда
     if (!this.o2Canvas) {
       this.o2Canvas = document.getElementById('canvasO2');
       if (this.o2Canvas) this.o2Ctx = this.o2Canvas.getContext('2d');
     }
-    if (!this.o2Canvas || !this.o2Ctx) return;
+    if (this.o2Canvas && this.o2Ctx) {
+      this._drawCanvasWave(this.o2Canvas, this.o2Ctx, false);
+    }
 
-    const canvas = this.o2Canvas;
-    const ctx = this.o2Ctx;
+    // 2. Отрисовка в модальном окне (если открыто)
+    if (this.modalOsc && (this.modalOsc.classList.contains('open') || this.modalOsc.style.display === 'flex')) {
+      if (!this.modalCanvas) {
+        this.modalCanvas = document.getElementById('canvasOscModal');
+        if (this.modalCanvas) this.modalCtx = this.modalCanvas.getContext('2d');
+      }
+      if (this.modalCanvas && this.modalCtx) {
+        this._drawCanvasWave(this.modalCanvas, this.modalCtx, true);
+      }
+    }
+  }
+
+  _drawCanvasWave(canvas, ctx, isModal = false) {
+    if (!canvas || !ctx) return;
     const parent = canvas.parentElement;
     if (!parent) return;
 
-    const w = parent.clientWidth || 260;
-    const h = parent.clientHeight || 46;
+    const w = parent.clientWidth || (isModal ? 340 : 260);
+    const h = parent.clientHeight || (isModal ? 220 : 46);
     const dpr = window.devicePixelRatio || 2;
 
     if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
@@ -792,36 +1257,110 @@ class DashboardWidgetManager {
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, w, h);
 
-    // 1. Опорная пунктирная линия стехиометрии 0.45 В (λ = 1.0)
-    const yRef = h * (1.0 - 0.45 / 1.0);
-    ctx.beginPath();
-    ctx.setLineDash([3, 4]);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
-    ctx.lineWidth = 1;
-    ctx.moveTo(0, yRef);
-    ctx.lineTo(w, yRef);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    const ch = this.oscChannels[this.oscChannel] || this.oscChannels['o2Volt'];
+    const padTop = isModal ? 16 : 4;
+    const padBottom = isModal ? 18 : 4;
+    const padLeft = isModal ? 38 : 0;
+    const padRight = isModal ? 10 : 0;
+    const drawW = Math.max(10, w - padLeft - padRight);
+    const drawH = Math.max(10, h - padTop - padBottom);
 
-    if (this.o2History.length < 2) {
+    // Расчет пределов шкалы Y
+    let yMin = ch.min;
+    let yMax = ch.max;
+
+    if (this.isOscAutoScale && this.oscHistory.length >= 2) {
+      const histMin = Math.min(...this.oscHistory);
+      const histMax = Math.max(...this.oscHistory);
+      const delta = histMax - histMin;
+      const margin = delta > 0.0001 ? delta * 0.16 : (Math.abs(histMin) * 0.1 || 1.0);
+      yMin = histMin - margin;
+      yMax = histMax + margin;
+    }
+    if (yMax <= yMin) yMax = yMin + 1.0;
+
+    // Сетка и масштабные деления в модальном окне
+    if (isModal) {
+      const gridRows = 4;
+      ctx.lineWidth = 1;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.font = '10px -apple-system, BlinkMacSystemFont, "SF Pro Text", monospace';
+
+      for (let r = 0; r <= gridRows; r++) {
+        const ratio = r / gridRows;
+        const gy = padTop + drawH * (1.0 - ratio);
+        const valAtGrid = yMin + ratio * (yMax - yMin);
+
+        ctx.beginPath();
+        ctx.strokeStyle = r === 0 || r === gridRows ? 'rgba(255, 255, 255, 0.16)' : 'rgba(255, 255, 255, 0.07)';
+        ctx.moveTo(padLeft, gy);
+        ctx.lineTo(w - padRight, gy);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+        ctx.fillText(valAtGrid.toFixed(ch.decimals > 1 ? 2 : ch.decimals), padLeft - 6, gy);
+      }
+
+      // Вертикальные линии развертки времени
+      const gridCols = 6;
+      for (let c = 1; c < gridCols; c++) {
+        const gx = padLeft + (drawW / gridCols) * c;
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.moveTo(gx, padTop);
+        ctx.lineTo(gx, padTop + drawH);
+        ctx.stroke();
+      }
+    }
+
+    // Опорная контрольная линия датчика
+    if (ch.refLine !== undefined && ch.refLine >= yMin && ch.refLine <= yMax) {
+      const normRef = (ch.refLine - yMin) / (yMax - yMin);
+      const yRef = padTop + drawH * (1.0 - normRef);
+      ctx.beginPath();
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+      ctx.lineWidth = 1;
+      ctx.moveTo(padLeft, yRef);
+      ctx.lineTo(w - padRight, yRef);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      if (isModal) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+        ctx.font = '9px -apple-system, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(ch.refLabel || `${ch.refLine}`, padLeft + 6, yRef - 6);
+      }
+    }
+
+    // Если нет достаточного числа точек
+    if (this.oscHistory.length < 2) {
+      if (isModal) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.textAlign = 'center';
+        ctx.font = '12px -apple-system, sans-serif';
+        ctx.fillText('Ожидание потока данных датчика...', w / 2, h / 2);
+      }
       ctx.restore();
       return;
     }
 
-    // 2. Расчет экранных координат точек синусоиды
-    const stepX = w / (this.maxO2Points - 1);
-    const startOffset = (this.maxO2Points - this.o2History.length) * stepX;
+    // Расчет экранных координат точек
+    const stepX = drawW / (this.maxOscPoints - 1);
+    const startOffset = padLeft + (this.maxOscPoints - this.oscHistory.length) * stepX;
     const points = [];
 
-    for (let i = 0; i < this.o2History.length; i++) {
-      const v = Math.max(0, Math.min(1.0, this.o2History[i]));
+    for (let i = 0; i < this.oscHistory.length; i++) {
+      const v = this.oscHistory[i];
+      const norm = Math.max(0, Math.min(1.0, (v - yMin) / (yMax - yMin)));
       const px = startOffset + i * stepX;
-      // Отступ сверху и снизу по 4px, чтобы кривая не обрезалась
-      const py = 4 + (h - 8) * (1.0 - v / 1.0);
-      points.push({ x: px, y: py });
+      const py = padTop + drawH * (1.0 - norm);
+      points.push({ x: px, y: py, val: v });
     }
 
-    // 3. Плавный сплайн кривой Безье через точки
+    // Плавный сплайн Безье
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
     for (let i = 1; i < points.length; i++) {
@@ -834,41 +1373,55 @@ class DashboardWidgetManager {
     const lastPt = points[points.length - 1];
     ctx.lineTo(lastPt.x, lastPt.y);
 
-    ctx.strokeStyle = '#00F5A0';
-    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = ch.color;
+    ctx.lineWidth = isModal ? 2.5 : 2.2;
+    ctx.shadowColor = ch.color;
+    ctx.shadowBlur = isModal ? 6 : 4;
     ctx.stroke();
+    ctx.shadowBlur = 0;
 
-    // 4. Мягкий неоновый градиент под синусоидой
-    const grad = ctx.createLinearGradient(0, 0, 0, h);
-    grad.addColorStop(0, 'rgba(0, 245, 160, 0.32)');
-    grad.addColorStop(1, 'rgba(0, 245, 160, 0.0)');
-    ctx.lineTo(lastPt.x, h);
-    ctx.lineTo(points[0].x, h);
+    // Градиентная заливка под графиком
+    const grad = ctx.createLinearGradient(0, padTop, 0, padTop + drawH);
+    grad.addColorStop(0, hexToRgba(ch.color, isModal ? 0.35 : 0.26));
+    grad.addColorStop(1, hexToRgba(ch.color, 0.0));
+    ctx.lineTo(lastPt.x, padTop + drawH);
+    ctx.lineTo(points[0].x, padTop + drawH);
     ctx.closePath();
     ctx.fillStyle = grad;
     ctx.fill();
 
-    // 5. Неоновый светящийся маркер текущего значения
+    // Неоновый маркер текущего значения
     ctx.beginPath();
-    ctx.arc(lastPt.x, lastPt.y, 3.5, 0, Math.PI * 2);
+    ctx.arc(lastPt.x, lastPt.y, isModal ? 4.5 : 3.5, 0, Math.PI * 2);
     ctx.fillStyle = '#FFFFFF';
-    ctx.shadowColor = '#00F5A0';
-    ctx.shadowBlur = 6;
+    ctx.shadowColor = ch.color;
+    ctx.shadowBlur = 8;
     ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Индикатор паузы в модалке
+    if (isModal && this.isOscPaused) {
+      ctx.fillStyle = 'rgba(255, 69, 58, 0.85)';
+      ctx.font = 'bold 11px -apple-system, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText('⏸ ЗАМОРОЗКА КАДРА', w - padRight - 8, padTop + 14);
+    }
 
     ctx.restore();
   }
 
+  drawO2Oscilloscope() {
+    this.drawOscilloscope();
+  }
+
   /**
-   * Обновление динамически добавленных датчиков из каталога
+   * Обновление динамически добавленных датчиков из каталога и осциллографа
    */
   updateDynamicWidgets(data) {
     if (!data) return;
 
-    // Обновляем ДК1 осциллограф
-    if (data.o2Volt !== undefined) {
-      this.updateO2(data.o2Volt);
-    }
+    // Подаем данные в универсальный осциллограф
+    this.feedOscilloscope(data);
 
     // Обновляем скрытые датчики, выведенные пользователем на экран
     this.extraSensorsCatalog.forEach(s => {
