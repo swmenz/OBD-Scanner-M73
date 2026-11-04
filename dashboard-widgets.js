@@ -132,7 +132,7 @@ const OSC_CHANNELS = {
     max: 15.0,
     refLine: 14.0,
     refLabel: '14.0 В',
-    extract: (d) => d.volt !== undefined ? d.volt : (d.adc ? d.adc.volt : null)
+    extract: (d) => d.voltage !== undefined ? d.voltage : (d.volt !== undefined ? d.volt : (d.adc ? d.adc.volt : null))
   },
   'speed': {
     id: 'speed',
@@ -171,7 +171,7 @@ const OSC_CHANNELS = {
     max: 80,
     refLine: 15,
     refLabel: '15%',
-    extract: (d) => d.duty
+    extract: (d) => d.dutyCycle !== undefined ? d.dutyCycle : d.duty
   },
   'knockVolt': {
     id: 'knockVolt',
@@ -1080,6 +1080,9 @@ class DashboardWidgetManager {
     this.oscHistory = [];
     this.o2History = this.oscHistory;
 
+    const valEl = document.getElementById('valO2Volt');
+    if (valEl) valEl.style.color = '';
+
     const tileSelect = document.getElementById('oscWidgetChannelSelect');
     if (tileSelect) tileSelect.value = chId;
 
@@ -1137,6 +1140,9 @@ class DashboardWidgetManager {
   clearOscHistory() {
     this.oscHistory = [];
     this.o2History = this.oscHistory;
+
+    const valEl = document.getElementById('valO2Volt');
+    if (valEl) valEl.style.color = '';
     const currEl = document.getElementById('oscHudCurr');
     const minEl = document.getElementById('oscHudMin');
     const maxEl = document.getElementById('oscHudMax');

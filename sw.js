@@ -1,5 +1,5 @@
 // Сервис-воркер для 100% оффлайн работы приложения в машине без интернета
-const CACHE_NAME = 'm73-diag-cache-v44';
+const CACHE_NAME = 'm73-diag-cache-v45';
 
 const ASSETS_TO_CACHE = [
   './',

@@ -184,6 +184,7 @@ class ItelmaM73Protocol {
       throw new Error("ЭБУ открыл сессию, но не отдает кадр 21 01: " + testResp);
     }
 
+    this.parseFrame2101(testResp);
     this.isInitialized = true;
     this.currentSpeedProfile = 'extreme';
     this.elm.log('info', '>>> СВЯЗЬ С ЭБУ ИТЭЛМА М73 УСПЕШНО УСТАНОВЛЕНА И ПРОВЕРЕНА! <<<');
@@ -278,10 +279,10 @@ class ItelmaM73Protocol {
     // 5: Скорость автомобиля (км/ч)
     const speed = Math.round(u8(5) * 1.25);
     // 6: Положение дроссельной заслонки (%)
-    const throttle = r1(u8(6) * 100 / 255);
+    const throttle = r1((u8(6) * 100.0) / 256.0);
     // 7: Обороты коленвала (шаг 40 об/мин)
         const rpm = u8(7) * 40;
-    // 8-9: ÐÐ°ÑÑÐ¾Ð²ÑÐ¹ ÑÐ°ÑÑÐ¾Ð´ Ð²Ð¾Ð·Ð´ÑÑÐ° ÐÐÐ Ð (ÐºÐ³/Ñ)
+    // 8-9: Массовый расход воздуха ДМРВ (кг/ч)
     const rawMaf = u16(8);
     let maf = r1(rawMaf / 10.0);
     if (rawMaf >= 0xFF00 || rawMaf === 0xFFFE || (rpm < 300 && maf > 100)) {
@@ -320,7 +321,7 @@ class ItelmaM73Protocol {
     const purgeRate = r1(u8(29) * 100.0 / 256.0);
 
     // 30-31: Нормализованный уровень сигнала датчика детонации (В)
-    const knockVolt = r3(u16(30) / 256.0);
+    const knockVolt = r2((u16(30) * 10.0) / 512.0);
     // 32-33: Среднее значение неравномерности вращения коленвала (об/с²)
     const unbalanceRpm = r1(u16(32) * 0.57554);
     // 34-35: Адаптация зубьев венца демпфера (об/с²)
@@ -353,7 +354,7 @@ class ItelmaM73Protocol {
     this.latestData.readiness = {
       cat: (b52 & 0x01) !== 0,
       purge: (b52 & 0x04) !== 0,
-      o2: (b52 & 0x10) !== 0 || (b52 & 0x20) !== 0,
+      o2: (b52 & 0x20) !== 0,
       o2Heater: (b52 & 0x40) !== 0
     };
 
@@ -361,15 +362,15 @@ class ItelmaM73Protocol {
     // В OpenDiag (hk.java, case 55): (s16(55) * 100.0) / 32768.0 (формат %.2f)
     const addAdapt = r2(s16(53) * 100.0 / 32768.0);
     // 55-56 (байты 57-58 ответа 61 01): Коррекция Bank 2 (в 1-банковых моторах Priora = 0)
-    const addAdaptBank2 = r2(s16(55) * 100.0 / 32768.0);
+    const addAdaptBank2 = 0;
     // 57-58 (байты 59-60 ответа 61 01): Мультипликативная составляющая коррекции смеси FR (-) (норма = 1.000)
     // В OpenDiag (hk.java, case 59): u16(59) / 32768.0 (формат %.3f)
     const multAdapt = r3(u16(57) / 32768.0);
     // 59-60 (байты 61-62 ответа 61 01): Смещение уставки расхода воздуха ХХ (кг/ч)
     // В OpenDiag (hk.java, case 61): (s16(61) * 3.0) / 64.0 (формат %.1f)
     const idleAirOffset = r1(s16(59) * 3.0 / 64.0);
-    const idleTorqueI = 0;
-    const idleTorquePD = 0;
+    const idleTorqueI = r2((s16(53) * 100.0) / 32768.0);
+    const idleTorquePD = r2((s16(55) * 100.0) / 32768.0);
 
     // 62, 63, 64: Битовые флаги состояния
     const b62 = u8(62);
@@ -478,82 +479,73 @@ class ItelmaM73Protocol {
     return this.latestData;
   }
 
-  /**
+    /**
    * Разбор Кадра АЦП (в М73 это 21 03, ответ 61 03)
-   * Точная калибровка ReadLogs (b797) и OpenDiag для процессора ST10F273 (Итэлма М73 / Bosch 7.9.7)
+   * Точная калибровка каналов из OpenDiag Mobile (hk.java, метод E1)
    */
   parseFrame2103(rawStr) {
     const hex = rawStr.replace(/[\s\r\n]/g, '').toUpperCase();
     const idx = hex.indexOf("6103");
     if (idx === -1) return null;
 
-    // Срез байтов, начиная с заголовка 61 03 (байт 0 = 61, байт 1 = 03)
+    // Срез байтов, начиная с заголовка 61 03 (байт 0 = 0x61, байт 1 = 0x03)
     const frameHex = hex.substring(idx);
     const bytes = [];
     for (let i = 0; i < frameHex.length - 1; i += 2) {
       bytes.push(parseInt(frameHex.substr(i, 2), 16));
     }
-    if (bytes.length < 12 || bytes.some(Number.isNaN)) return null;
+    if (bytes.length < 14 || bytes.some(Number.isNaN)) return null;
 
-    const u8 = (i) => bytes[i] || 0;
-    const u16 = (i) => ((bytes[i] || 0) << 8) | (bytes[i + 1] || 0);
-    const s8 = (i) => {
-      const v = u8(i);
-      return v > 127 ? v - 256 : v;
-    };
+    const u8 = (i) => bytes[i] !== undefined ? bytes[i] : 0;
+    const u16 = (i) => (bytes[i] !== undefined && bytes[i + 1] !== undefined) ? ((bytes[i] << 8) | bytes[i + 1]) : 0;
 
-    // Точная калибровка каналов АЦП из b797/Powertrain/pids.ini:
-    // Байт 2-3 (payload 0-1): Бортовое напряжение (b7, 16 бит) -> raw * 0.0176 В
+    // Точная карта каналов АЦП из OpenDiag Mobile (hk.java -> E1):
+    // Байты 2-3 (2B, param_84): Напряжение бортовой сети (В)
     this.latestData.adc.volt = +(u16(2) * 0.0176).toFixed(2);
 
-    // Байт 4 (payload 2): ДТОЖ (VA, 8 бит) -> raw * 5.0 / 256.0 В (181 -> 3.535 В)
-    this.latestData.adc.temp = +(u8(4) * (5.0 / 256.0)).toFixed(3);
+    // Байт 4 (1B, param_82): ДТОЖ (В) -> (raw * 10.0) / 512.0
+    this.latestData.adc.temp = +((u8(4) * 10.0) / 512.0).toFixed(3);
 
-    // Байт 5-6 (payload 3-4): ДМРВ (bJ, 10-бит АЦП 0..1023) -> raw * 5.0 / 1024.0 В
-    // При покое дает эталонные 0.991 ... 1.012 В
-    let mafAdcV = u16(5) * (5.0 / 1024.0);
-    if (mafAdcV < 0.5 || mafAdcV > 2.0) {
-      const raw7 = u16(7);
-      if (raw7 >= 8000 && raw7 <= 15000) {
-        mafAdcV = raw7 / 10000.0;
-      }
-    }
-    this.latestData.adc.maf = +mafAdcV.toFixed(3);
+    // Байты 5-6 (2B, param_83): ДТВ — Датчик температуры впускного воздуха (В) -> (raw * 1.25) / 256.0
+    this.latestData.adc.airTemp = +((u16(5) * 1.25) / 256.0).toFixed(3);
 
-        // ÐÐ°Ð¹Ñ 7 (payload 5): ÐÐÐÐ (8-Ð±Ð¸Ñ ÐÐ¦Ð) -> raw * 5.0 / 256.0 Ð (Ð¿Ð¾ÐºÐ¾Ð¹ 0.454 ... 0.74 Ð)
-    this.latestData.adc.tps = +(u8(7) * (5.0 / 256.0)).toFixed(3);
+    // Байты 7-8 (2B, param_191): ДМРВ — Датчик массового расхода воздуха (В) -> (raw * 1.25) / 16384.0
+    this.latestData.adc.maf = +((u16(7) * 1.25) / 16384.0).toFixed(3);
 
-    // Байт 9-10 (payload 7-8): ДК1 Управляющий лямбда-зонд (10-бит АЦП) -> raw * 5.0 / 1024.0 В (опорное 0.454 В)
-    this.latestData.adc.o2 = +(u16(9) * (5.0 / 1024.0)).toFixed(3);
+    // Байты 9-10 (2B, param_192): ДПДЗ — Датчик положения дроссельной заслонки (В) -> (raw * 1.25) / 256.0
+    this.latestData.adc.tps = +((u16(9) * 1.25) / 256.0).toFixed(3);
 
-    // Байт 11 (payload 9): ДТВ Температура воздуха во впускном коллекторе (VA, 8 бит) -> raw * 5.0 / 256.0 В (3.867 В)
-    this.latestData.adc.airTemp = +(u8(11) * (5.0 / 256.0)).toFixed(3);
+    // Байт 11 (1B, param_193): ДК1 — Управляющий лямбда-зонд до нейтрализатора (В) -> (raw * 10.0) / 512.0
+    this.latestData.adc.o2 = +((u8(11) * 10.0) / 512.0).toFixed(3);
 
-    // Байт 12-13 (payload 10-11): ДК2 Диагностический зонд (10-бит АЦП) -> raw * 5.0 / 1024.0 В
-    this.latestData.adc.o2_2 = +(u16(12) * (5.0 / 1024.0)).toFixed(3);
+    // Байты 12-13 (2B, param_194): ДК2 — Диагностический зонд после нейтрализатора (В) -> (raw * 1.25) / 256.0
+    this.latestData.adc.o2_2 = +((u16(12) * 1.25) / 256.0).toFixed(3);
 
-    // Байт 14-15 (payload 12-13): Сопротивление ДК1 (bN) -> raw * 2.0 Ом
+    // Байты 14-15 (2B, param_195): Сопротивление нагревателя ДК1 (Ом) -> raw * 2
     if (bytes.length >= 16) {
       this.latestData.adc.o2Resist1 = u16(14) * 2;
     }
 
-        // ÐÐ°Ð¹Ñ 16 (payload 14): ÐÐÐ ÐÐ¿Ð¾ÑÐ½Ð¾Ðµ Ð½Ð°Ð¿ÑÑÐ¶ÐµÐ½Ð¸Ðµ Ð°ÐºÑÐµÐ»ÐµÑÐ¾Ð¼ÐµÑÑÐ° -> raw * 5.0 / 256.0 Ð (Ð¿Ð¾ÐºÐ¾Ð¹ 2.500 Ð)
+    // Байт 16 (1B, param_196): Сигнал датчика неровной дороги ДНД
+    // Напряжение АЦП (покой ~2.500 В) и ускорение в g по формуле hk.java: ((raw * 6.25) / 128.0) - 6.25
     if (bytes.length >= 17) {
-      this.latestData.adc.roughRoad = +(u8(16) * (5.0 / 256.0)).toFixed(3);
+      this.latestData.adc.roughRoad = +((u8(16) * 10.0) / 512.0).toFixed(3);
+      this.latestData.adc.roughRoadG = +(((u8(16) * 6.25) / 128.0) - 6.25).toFixed(3);
     }
 
-    // Байт 17-18 (payload 15-16): Напряжение клапана продувки адсорбера -> raw * 5.0 / 1024.0 В
+    // Байты 17-18 (2B, param_197): Напряжение клапана продувки адсорбера (В) -> (raw * 1.25) / 256.0
     if (bytes.length >= 19) {
-      this.latestData.adc.valvePurge = +(u16(17) * (5.0 / 1024.0)).toFixed(3);
+      this.latestData.adc.valvePurge = +((u16(17) * 1.25) / 256.0).toFixed(3);
     }
 
-    // Байт 19-20 (payload 17-18): Сопротивление ДК2 (bN) -> raw * 2.0 Ом
+    // Байты 19-20 (2B, param_198): Сопротивление нагревателя ДК2 (Ом) -> raw * 2
     if (bytes.length >= 21) {
       this.latestData.adc.o2Resist2 = u16(19) * 2;
     }
 
-    return this.latestData.adc;
+    return this.latestData;
   }
+
 
   /**
    * ЧТЕНИЕ ОШИБОК ЭБУ (DTC)

@@ -357,7 +357,7 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v44\n\n• Светофор здоровья датчиков на вкладке АЦП:\n  1) ДМРВ (Bosch HFM5): автоанализ покоя (0.996-1.020В = Идеал, 1.021-1.035В = Норма, 1.036-1.050В = Износ, >1.050В = Замена) и динамики\n  2) ДПДЗ, АКБ/генератор, цепи ДТОЖ/ДТВ, ДК1, ДК2 и ДНД\n  3) Сводная карточка состояния и интерактивный справочник заводских допусков\n\n• Универсальный живой осциллограф (Canvas Pro):\n  1) Вывод в реальном времени любого из 13 параметров ЭБУ (ДК1, ДК2, ДМРВ, RPM, УОЗ, Впрыск, Дроссель, Бортсеть и др.)\n  2) Полноэкранный режим с измерительной шкалой, калиброванными эталонами и HUD телеметрией (Мин/Макс/Тек/Размах)\n  3) Пауза/заморозка кадра, очистка буфера и переключение авто/фикс масштаба");
+        alert("Диагностика М73 — Версия v45\n\n• Синхронизация протокола с эталоном OpenDiag (hk.java):\n  1) Кадр АЦП 21 03: точная формула ДМРВ ((u16(7) * 1.25) / 16384.0) дает эталонные 0.996-1.020В покоя Bosch HFM5, выверены смещения каналов ДТОЖ, ДТВ, ДПДЗ, ДК1, ДК2 и ДНД\n  2) Кадр 21 01: точный делитель ДПДЗ (/256.0), сигнал детонации ((u16(30)*10.0)/512.0) и моменты РХХ\n\n• Универсальный осциллограф и Светофор АЦП:\n  1) Исправлены каналы Бортсеть (volt), Загрузка форсунок (duty) и ДМРВ АЦП (mafAdc)\n  2) Устранен конфликт окраски ДК1 при выборе других каналов\n  3) Детектор работы двигателя переведен строго на RPM > 300 для исключения ложных тревог при ЗУ");
       });
     }
 
@@ -754,6 +754,9 @@ class M73Application {
         if (this.currentTab === 'tab-dashboard') {
           // Главная панель: опрашиваем ИСКЛЮЧИТЕЛЬНО Кадр 1 (21 01) на максимальной скорости K-Line
           const data = await this.m73.readConfiguredCycle('2101');
+          if (this.widgetManager && this.widgetManager.oscChannel === 'mafAdc') {
+            try { await this.m73.readConfiguredCycle('2103'); } catch (e) {}
+          }
           if (data) {
             this.updateDashboardUI(data);
             this.logger.addPoint(data);
@@ -763,12 +766,12 @@ class M73Application {
         } else if (this.currentTab === 'tab-adc') {
           // Вкладка АЦП: опрашиваем Кадр 3 (21 03) для оценки напряжений датчиков
           // Каждые 4 цикла также быстро считываем 21 01, чтобы обновить RPM для точного детектора покой/запущен
-          this.adcCycleCounter = (this.adcCycleCounter || 0) + 1;
-          if (this.adcCycleCounter % 4 === 0) {
+          if ((this.adcCycleCounter || 0) % 4 === 0) {
             try {
               await this.m73.readConfiguredCycle('2101');
             } catch(e) {}
           }
+          this.adcCycleCounter = (this.adcCycleCounter || 0) + 1;
           const dataAdc = await this.m73.readConfiguredCycle('2103');
           if (dataAdc) {
             this.updateAdcUI(dataAdc);
@@ -927,7 +930,8 @@ class M73Application {
         this.valKnockVolt.style.color = 'var(--text-primary)';
       }
     }
-    if (this.valO2Volt && data.o2Volt !== undefined) {
+    const isO2OscActive = !this.widgetManager || this.widgetManager.oscChannel === 'o2Volt';
+    if (this.valO2Volt && data.o2Volt !== undefined && isO2OscActive) {
       this.valO2Volt.textContent = data.o2Volt.toFixed(3);
       if (data.o2Volt >= 0.6) {
         this.valO2Volt.style.color = 'var(--apple-green)';
@@ -1009,7 +1013,7 @@ class M73Application {
     const adc = data.adc;
     const rpm = (this.m73.latestData && this.m73.latestData.rpm) || 0;
     const volt = Number(adc.volt) || 0;
-    const isRunning = rpm > 350 || volt >= 13.2;
+    const isRunning = rpm > 300;
 
     let countOk = 0;
     let countWarn = 0;
@@ -1045,7 +1049,7 @@ class M73Application {
         if (this.adcMaf) this.adcMaf.style.color = 'var(--apple-rose)';
       }
     } else {
-      if (mafV >= 1.05 && mafV <= 4.80) {
+      if (mafV >= 1.01 && mafV <= 4.80) {
         setBadge(this.healthAdcMaf, this.descAdcMaf, 'ok', '🟢 Активен', 'Двигатель запущен: динамический отклик расхода воздуха');
         if (this.adcMaf) this.adcMaf.style.color = 'var(--apple-green)';
       } else {
