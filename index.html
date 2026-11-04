@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" href="icon-192.png">
   <title>Диагностика М73 — Лада Приора</title>
   
-  <link rel="stylesheet" href="styles.css?v=45">
+  <link rel="stylesheet" href="styles.css?v=46">
   <script src="xlsx.full.min.js"></script>
   <link rel="manifest" href="manifest.json">
 </head>
@@ -25,7 +25,7 @@
     <header class="glass-navbar">
       <div class="navbar-brand">
         <span class="status-pulse" id="connIndicator"></span>
-        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v45</span></div>
+        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v46</span></div>
         <span class="status-text" id="connStateText">Не подключено</span>
       </div>
 
@@ -675,14 +675,93 @@
         </div>
 
       </section>
-
-      <!-- ВКЛАДКА 4: ТЕСТЫ И СБРОС С ИНИЦИАЛИЗАЦИЕЙ -->
+      <!-- ВКЛАДКА 4: ИСПОЛНИТЕЛЬНЫЕ МЕХАНИЗМЫ И УПРАВЛЕНИЕ М73 (17 ТЕСТОВ) -->
       <section id="tab-actuators" class="tab-pane">
-        <div class="glass-card">
+        
+        <!-- БЛОК 1: ПЛАВНОЕ УПРАВЛЕНИЕ УСТАВКАМИ (ХХ, РХХ, КПА) -->
+        <div class="glass-card mb-3">
           <div class="panel-header">
             <div>
-              <h2 class="panel-heading">Исполнительные механизмы</h2>
-              <p class="panel-sub">Проверка реле (проводить на заглушенном двигателе)</p>
+              <h2 class="panel-heading">Управление уставками</h2>
+              <p class="panel-sub">Плавные регуляторы с удержанием в K-Line (типы 41, 42, 43)</p>
+            </div>
+          </div>
+
+          <div class="regulators-container">
+            <!-- 1. Обороты холостого хода (ID 42) -->
+            <div class="regulator-card" id="regCardIdleRpm">
+              <div class="regulator-header">
+                <div>
+                  <div class="regulator-title">Обороты холостого хода (ХХ)</div>
+                  <div class="regulator-sub">Работает на заведённом двигателе (ID 42)</div>
+                </div>
+                <span class="badge-health badge-health-neutral" id="regStatusIdleRpm">Штатно (ЭБУ)</span>
+              </div>
+              <div class="regulator-body">
+                <div class="regulator-controls-row">
+                  <button class="glass-btn reg-step-btn" type="button" onclick="M73App.adjustRegulator('idleRpm', -40)">−40</button>
+                  <div class="reg-value-display" id="regValIdleRpm">880 об/мин</div>
+                  <button class="glass-btn reg-step-btn" type="button" onclick="M73App.adjustRegulator('idleRpm', +40)">+40</button>
+                </div>
+                <div class="regulator-actions-row">
+                  <button class="glass-btn btn-primary-glass reg-action-btn" type="button" onclick="M73App.applyRegulator('idleRpm')">Установить</button>
+                  <button class="glass-btn btn-glass-secondary reg-action-btn" type="button" onclick="M73App.releaseRegulator('idleRpm')">Сброс ЭБУ</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Шаги регулятора холостого хода (ID 41) -->
+            <div class="regulator-card" id="regCardRxx">
+              <div class="regulator-header">
+                <div>
+                  <div class="regulator-title">Регулятор холостого хода (РХХ)</div>
+                  <div class="regulator-sub">Прямое перемещение штока шагового мотора (ID 41)</div>
+                </div>
+                <span class="badge-health badge-health-neutral" id="regStatusRxx">Штатно (ЭБУ)</span>
+              </div>
+              <div class="regulator-body">
+                <div class="regulator-controls-row">
+                  <button class="glass-btn reg-step-btn" type="button" onclick="M73App.adjustRegulator('rxx', -5)">−5</button>
+                  <div class="reg-value-display" id="regValRxx">60 шагов</div>
+                  <button class="glass-btn reg-step-btn" type="button" onclick="M73App.adjustRegulator('rxx', +5)">+5</button>
+                </div>
+                <div class="regulator-actions-row">
+                  <button class="glass-btn btn-primary-glass reg-action-btn" type="button" onclick="M73App.applyRegulator('rxx')">Установить</button>
+                  <button class="glass-btn btn-glass-secondary reg-action-btn" type="button" onclick="M73App.releaseRegulator('rxx')">Сброс ЭБУ</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. Клапан продувки адсорбера (ID 43) -->
+            <div class="regulator-card" id="regCardPurge">
+              <div class="regulator-header">
+                <div>
+                  <div class="regulator-title">Клапан продувки адсорбера (КПА)</div>
+                  <div class="regulator-sub">Скважность импульсов открытия клапана (ID 43)</div>
+                </div>
+                <span class="badge-health badge-health-neutral" id="regStatusPurge">Штатно (ЭБУ)</span>
+              </div>
+              <div class="regulator-body">
+                <div class="regulator-controls-row">
+                  <button class="glass-btn reg-step-btn" type="button" onclick="M73App.adjustRegulator('purge', -10)">−10%</button>
+                  <div class="reg-value-display" id="regValPurge">30 %</div>
+                  <button class="glass-btn reg-step-btn" type="button" onclick="M73App.adjustRegulator('purge', +10)">+10%</button>
+                </div>
+                <div class="regulator-actions-row">
+                  <button class="glass-btn btn-primary-glass reg-action-btn" type="button" onclick="M73App.applyRegulator('purge')">Установить</button>
+                  <button class="glass-btn btn-glass-secondary reg-action-btn" type="button" onclick="M73App.releaseRegulator('purge')">Сброс ЭБУ</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- БЛОК 2: РЕЛЕ И ИНДИКАЦИЯ (6 МЕХАНИЗМОВ) -->
+        <div class="glass-card mb-3">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-heading">Реле и индикация</h2>
+              <p class="panel-sub">Проводить на заглушенном двигателе при включенном зажигании</p>
             </div>
           </div>
 
@@ -690,47 +769,146 @@
             <div class="actuator-item-glass">
               <div class="act-details">
                 <strong>Вентилятор охлаждения (1 скорость)</strong>
-                <span>Включение реле низкой скорости на 4 секунды</span>
+                <span>Реле низкой скорости (ID 0A, 4 сек)</span>
               </div>
-              <button class="glass-btn btn-glass-secondary" onclick="M73App.testActuator('fan1_on')">Включить</button>
+              <button class="glass-btn btn-glass-secondary" type="button" onclick="M73App.testActuator('fan1_on', this)">Тест</button>
             </div>
 
             <div class="actuator-item-glass">
               <div class="act-details">
                 <strong>Вентилятор охлаждения (2 скорость)</strong>
-                <span>Включение реле высокой скорости на 4 секунды</span>
+                <span>Реле высокой скорости (ID 0D, 4 сек)</span>
               </div>
-              <button class="glass-btn btn-glass-secondary" onclick="M73App.testActuator('fan2_on')">Включить</button>
+              <button class="glass-btn btn-glass-secondary" type="button" onclick="M73App.testActuator('fan2_on', this)">Тест</button>
             </div>
 
             <div class="actuator-item-glass">
               <div class="act-details">
-                <strong>Реле бензонасоса</strong>
-                <span>Принудительное включение топливного насоса</span>
+                <strong>Реле бензонасоса (ЭБН)</strong>
+                <span>Принудительная прокачка топлива (ID 09, 3 сек)</span>
               </div>
-              <button class="glass-btn btn-glass-secondary" onclick="M73App.testActuator('pump_on')">Включить</button>
+              <button class="glass-btn btn-glass-secondary" type="button" onclick="M73App.testActuator('pump_on', this)">Тест</button>
             </div>
 
             <div class="actuator-item-glass">
               <div class="act-details">
-                <strong>Лампа «Check Engine»</strong>
-                <span>Проверка индикатора на приборной панели</span>
+                <strong>Реле муфты кондиционера</strong>
+                <span>Управление включением компрессора (ID 0B, 3.5 сек)</span>
               </div>
-              <button class="glass-btn btn-glass-secondary" onclick="M73App.testActuator('mil_test')">Тест</button>
+              <button class="glass-btn btn-glass-secondary" type="button" onclick="M73App.testActuator('ac_on', this)">Тест</button>
+            </div>
+
+            <div class="actuator-item-glass">
+              <div class="act-details">
+                <strong>Лампа «Check Engine» (MIL)</strong>
+                <span>Проверка контрольной лампы на панели (ID 0C, 3.5 сек)</span>
+              </div>
+              <button class="glass-btn btn-glass-secondary" type="button" onclick="M73App.testActuator('mil_test', this)">Тест</button>
+            </div>
+
+            <div class="actuator-item-glass">
+              <div class="act-details">
+                <strong>Реле блокировки стартера</strong>
+                <span>Цепь защиты стартера (ID 0E, 2.5 сек)</span>
+              </div>
+              <button class="glass-btn btn-glass-secondary" type="button" onclick="M73App.testActuator('starter_on', this)">Тест</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- БЛОК 3: ФОРСУНКИ И КАТУШКИ ЗАЖИГАНИЯ (8 МЕХАНИЗМОВ В 2 КОЛОНКИ) -->
+        <div class="glass-card mb-3">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-heading">Цепи форсунок и зажигания</h2>
+              <p class="panel-sub">Проводить на заглушенном двигателе при включенном зажигании</p>
             </div>
           </div>
 
-          <div class="glass-danger-zone">
+          <div class="actuator-grid-2col">
+            <!-- Форсунки -->
+            <div class="actuator-card-compact">
+              <div class="act-compact-info">
+                <strong>Форсунка 1</strong>
+                <span>ID 01 (2.5 сек)</span>
+              </div>
+              <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('inj1_test', this)">Тест</button>
+            </div>
+
+            <div class="actuator-card-compact">
+              <div class="act-compact-info">
+                <strong>Форсунка 2</strong>
+                <span>ID 02 (2.5 сек)</span>
+              </div>
+              <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('inj2_test', this)">Тест</button>
+            </div>
+
+            <div class="actuator-card-compact">
+              <div class="act-compact-info">
+                <strong>Форсунка 3</strong>
+                <span>ID 03 (2.5 сек)</span>
+              </div>
+              <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('inj3_test', this)">Тест</button>
+            </div>
+
+            <div class="actuator-card-compact">
+              <div class="act-compact-info">
+                <strong>Форсунка 4</strong>
+                <span>ID 04 (2.5 сек)</span>
+              </div>
+              <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('inj4_test', this)">Тест</button>
+            </div>
+
+            <!-- Катушки зажигания -->
+            <div class="actuator-card-compact">
+              <div class="act-compact-info">
+                <strong>Катушка 1</strong>
+                <span>Цил. 1–4 (ID 05)</span>
+              </div>
+              <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('coil1_test', this)">Тест</button>
+            </div>
+
+            <div class="actuator-card-compact">
+              <div class="act-compact-info">
+                <strong>Катушка 2</strong>
+                <span>Цилиндр 2 (ID 06)</span>
+              </div>
+              <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('coil2_test', this)">Тест</button>
+            </div>
+
+            <div class="actuator-card-compact">
+              <div class="act-compact-info">
+                <strong>Катушка 3</strong>
+                <span>Цил. 2–3 (ID 07)</span>
+              </div>
+              <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('coil3_test', this)">Тест</button>
+            </div>
+
+            <div class="actuator-card-compact">
+              <div class="act-compact-info">
+                <strong>Катушка 4</strong>
+                <span>Цилиндр 4 (ID 08)</span>
+              </div>
+              <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('coil4_test', this)">Тест</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- БЛОК 4: СБРОС С ИНИЦИАЛИЗАЦИЕЙ -->
+        <div class="glass-card">
+          <div class="glass-danger-zone" style="margin-top: 0;">
             <div class="danger-heading">Сброс с инициализацией (сброс адаптаций)</div>
             <p class="danger-text">
               Очищает таблицы самообучения топлива и угла опережения зажигания к заводским значениям. Проводить строго при включенном зажигании и заглушенном моторе.
             </p>
-            <button class="glass-btn btn-danger-fluid" onclick="M73App.resetWithInit()">
+            <button class="glass-btn btn-danger-fluid" type="button" onclick="M73App.resetWithInit()">
               Выполнить сброс с инициализацией
             </button>
           </div>
         </div>
+
       </section>
+
 
       <!-- ВКЛАДКА 5: ТЕРМИНАЛ -->
       <section id="tab-terminal" class="tab-pane">
@@ -1029,10 +1207,10 @@
     </div>
   </div>
 
-<script src="elm327.js?v=45"></script>
-  <script src="m73.js?v=45"></script>
-  <script src="logger.js?v=45"></script>
-  <script src="dashboard-widgets.js?v=45"></script>
-  <script src="app.js?v=45"></script>
+<script src="elm327.js?v=46"></script>
+  <script src="m73.js?v=46"></script>
+  <script src="logger.js?v=46"></script>
+  <script src="dashboard-widgets.js?v=46"></script>
+  <script src="app.js?v=46"></script>
 </body>
 </html>

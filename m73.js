@@ -605,69 +605,159 @@ class ItelmaM73Protocol {
       try { await this.elm.send("AT SH 81 10 F1", 500); } catch (e) {}
     }
   }
+  /**
+   * Полный справочник всех 14 дискретных исполнительных механизмов Итэлма М73
+   * Выверен по res/menu/m73_im_menu.xml и FragmentParams.java из OpenDiag Mobile
+   */
+  static get ACTUATOR_MAP() {
+    return {
+      // Реле и индикация
+      pump_on:    { id: "09", duration: 3000, name: "Реле бензонасоса" },
+      fan1_on:    { id: "0A", duration: 4000, name: "Вентилятор охлаждения 1 (низкая ск.)" },
+      fan2_on:    { id: "0D", duration: 4000, name: "Вентилятор охлаждения 2 (высокая ск.)" },
+      ac_on:      { id: "0B", duration: 3500, name: "Реле кондиционера" },
+      mil_test:   { id: "0C", duration: 3500, name: "Лампа Check Engine (MIL)" },
+      starter_on: { id: "0E", duration: 2500, name: "Реле блокировки стартера" },
 
-  async runActuatorTest(testType) {
-    this.elm.log('info', `Запуск теста механизма: ${testType}`);
+      // Топливные форсунки
+      inj1_test:  { id: "01", duration: 2500, name: "Форсунка цилиндра 1" },
+      inj2_test:  { id: "02", duration: 2500, name: "Форсунка цилиндра 2" },
+      inj3_test:  { id: "03", duration: 2500, name: "Форсунка цилиндра 3" },
+      inj4_test:  { id: "04", duration: 2500, name: "Форсунка цилиндра 4" },
 
-    // Команды KWP2000 службы 0x30 из OpenDiag для Итэлма М73:
-    const map = {
-      fan1_on: { id: "0A", duration: 4000, name: "Вентилятор 1" },
-      fan2_on: { id: "0D", duration: 4000, name: "Вентилятор 2" },
-      pump_on: { id: "09", duration: 3000, name: "Бензонасос" },
-      mil_test: { id: "0C", duration: 3000, name: "Лампа Check Engine" }
+      // Катушки зажигания
+      coil1_test: { id: "05", duration: 2500, name: "Катушка зажигания 1 (цил. 1–4)" },
+      coil2_test: { id: "06", duration: 2500, name: "Катушка зажигания 2" },
+      coil3_test: { id: "07", duration: 2500, name: "Катушка зажигания 3 (цил. 2–3)" },
+      coil4_test: { id: "08", duration: 2500, name: "Катушка зажигания 4" }
     };
+  }
 
-    const target = map[testType];
+  /**
+   * Выполнение теста дискретного исполнительного механизма (тип <ID>NFF в OpenDiag)
+   * Последовательность KWP2000:
+   *  1) AT SH 83 10 F1 -> 30 <ID> 01 (вход в режим управления ИМ / проверка статуса)
+   *  2) AT SH 84 10 F1 -> 30 <ID> 06 FF (принудительное включение механизма)
+   *  3) Удержание в течение duration мс с опросом 30 <ID> 01 каждые 650 мс
+   *  4) AT SH 84 10 F1 -> 30 <ID> 06 00 (выключение) и AT SH 83 10 F1 -> 30 <ID> 00 (возврат ЭБУ)
+   */
+  async runActuatorTest(testType) {
+    const target = ItelmaM73Protocol.ACTUATOR_MAP[testType];
     if (!target) throw new Error("Неизвестный тест механизма: " + testType);
 
-    await this.delay(150);
+    this.elm.log('info', `[Тест ИМ] Подготовка теста: ${target.name} (ID ${target.id})`);
+    await this.delay(120);
+
+    const checkNegativeResponse = (resp, name) => {
+      if (resp.includes("7F3022") || resp.includes("7F22")) {
+        throw new Error("ЭБУ отклонил тест (код 7F 30 22: условия не соблюдены). Двигатель должен быть заглушен (0 об/мин), зажигание включено.");
+      }
+      if (resp.includes("7F3011") || resp.includes("7F3012") || resp.includes("7F3031") || resp.includes("7F3080")) {
+        throw new Error(`Механизм «${name}» не поддерживается в комплектации данной прошивки ЭБУ (${resp})`);
+      }
+      if (resp.includes("7F")) {
+        throw new Error(`ЭБУ отклонил команду управления (код: ${resp})`);
+      }
+      if (!resp.includes("70") && !resp.includes("OK")) {
+        throw new Error(`Нет подтверждения от ЭБУ (${resp || "пустой ответ"}). Проверьте зажигание.`);
+      }
+    };
 
     try {
-      // Устанавливаем заголовок под 3-байтовую команду управления ИМ
+      // Шаг 1: Запрос статуса / захват управления ИМ (3 байта: 30 <ID> 01)
       await this.elm.send("AT SH 83 10 F1", 500);
+      const initCmd = `30${target.id}01`;
+      const rawInit = await this.elm.send(initCmd, 1500);
+      const respInit = (rawInit || "").replace(/\s+/g, '').toUpperCase();
+      checkNegativeResponse(respInit, target.name);
 
-      // 1. Включение механизма (30 <ID> 01)
-      const cmdOn = `30${target.id}01`;
+      // Шаг 2: Непосредственное ВКЛЮЧЕНИЕ механизма (4 байта: 30 <ID> 06 FF)
+      await this.elm.send("AT SH 84 10 F1", 500);
+      const cmdOn = `30${target.id}06FF`;
       this.elm.log('info', `[Тест ИМ] Включение ${target.name}: ${cmdOn}`);
-      const rawResp = await this.elm.send(cmdOn, 2000);
-      const respOn = (rawResp || "").replace(/\s+/g, '').toUpperCase();
-      this.elm.log('info', `[Тест ИМ] Ответ ЭБУ: ${respOn || rawResp || "пусто"}`);
+      const rawOn = await this.elm.send(cmdOn, 2000);
+      const respOn = (rawOn || "").replace(/\s+/g, '').toUpperCase();
+      this.elm.log('info', `[Тест ИМ] Ответ ЭБУ: ${respOn}`);
+      checkNegativeResponse(respOn, target.name);
 
-      if (respOn.includes("7F3022") || respOn.includes("7F22")) {
-        throw new Error("ЭБУ отклонил тест (код 7F 30 22: условия не соблюдены). Двигатель должен быть полностью заглушен (0 об/мин) и включено зажигание.");
-      }
-      if (respOn.includes("7F3011") || respOn.includes("7F3012") || respOn.includes("7F3080")) {
-        throw new Error(`ЭБУ отклонил команду: тест ${target.name} не поддерживается в данной сессии/прошивке (${respOn})`);
-      }
-      if (respOn.includes("7F")) {
-        throw new Error(`ЭБУ отклонил команду (код ошибки: ${respOn})`);
-      }
-      if (!respOn.includes("70") && !respOn.includes("OK")) {
-        throw new Error(`ЭБУ не подтвердил включение (${respOn || "нет ответа"}). Проверьте зажигание.`);
-      }
+      this.elm.log('info', `[Тест ИМ] ${target.name} АКТИВИРОВАН! Удержание ${target.duration / 1000} сек...`);
 
-      this.elm.log('info', `[Тест ИМ] ${target.name} активирован! Удержание ${target.duration / 1000} сек...`);
-
-      // 2. Удержание в активном состоянии с Tester Present (3E)
+      // Шаг 3: Удержание активного состояния с опросом статуса 30 <ID> 01 (как в FragmentParams.b1)
+      await this.elm.send("AT SH 83 10 F1", 500);
       const startTime = Date.now();
       while (Date.now() - startTime < target.duration) {
-        await this.delay(800);
-        try { await this.elm.send("3E", 500); } catch (e) {}
+        await this.delay(650);
+        try {
+          await this.elm.send(`30${target.id}01`, 800);
+        } catch (e) {}
       }
 
-      // 3. Выключение механизма (30 <ID> 00)
-      await this.delay(100);
-      const cmdOff = `30${target.id}00`;
-      this.elm.log('info', `[Тест ИМ] Выключение ${target.name}: ${cmdOff}`);
+      // Шаг 4: Выключение механизма (30 <ID> 06 00) и возврат управления ЭБУ (30 <ID> 00)
       try {
-        await this.elm.send(cmdOff, 1500);
+        await this.elm.send("AT SH 84 10 F1", 500);
+        await this.elm.send(`30${target.id}0600`, 1000);
       } catch (e) {}
 
+      await this.delay(80);
+      try {
+        await this.elm.send("AT SH 83 10 F1", 500);
+        await this.elm.send(`30${target.id}00`, 1000);
+      } catch (e) {}
+
+      this.elm.log('info', `[Тест ИМ] ${target.name} выключен, управление возвращено ЭБУ.`);
       return true;
     } finally {
       try { await this.elm.send("AT SH 81 10 F1", 500); } catch (e) {}
     }
   }
+
+  /**
+   * Плавное управление уставками (тип X07 в m73_im_menu.xml):
+   *  - idHex = "41" (РХХ, 0..255 шагов, rawByte = steps)
+   *  - idHex = "42" (Обороты ХХ, 0..2550 об/мин, rawByte = Math.round(rpm / 10))
+   *  - idHex = "43" (Клапан продувки адсорбера, 0..100 %, rawByte = percent)
+   */
+  async setActuatorSetpoint(idHex, rawByte) {
+    const clamped = Math.max(0, Math.min(255, Math.round(rawByte)));
+    const hexVal = clamped.toString(16).toUpperCase().padStart(2, '0');
+    try {
+      await this.elm.send("AT SH 84 10 F1", 500);
+      const cmd = `30${idHex}07${hexVal}`;
+      this.elm.log('info', `[Уставка ИМ] Отправка ${cmd}`);
+      const rawResp = await this.elm.send(cmd, 1500);
+      const resp = (rawResp || "").replace(/\s+/g, '').toUpperCase();
+
+      if (resp.includes("7F3022") || resp.includes("7F22")) {
+        throw new Error("Условия не соблюдены (7F 30 22). Для управления оборотами ХХ двигатель должен работать на холостом ходу.");
+      }
+      if (resp.includes("7F")) {
+        throw new Error(`ЭБУ отклонил уставку (ответ: ${resp})`);
+      }
+      if (!resp.includes("70") && !resp.includes("OK")) {
+        throw new Error(`Нет ответа от ЭБУ (${resp || "пусто"})`);
+      }
+      return true;
+    } finally {
+      try { await this.elm.send("AT SH 81 10 F1", 500); } catch (e) {}
+    }
+  }
+
+  /**
+   * Возврат управления регулятором обратно ЭБУ (30 <ID> 00)
+   */
+  async releaseActuatorControl(idHex) {
+    try {
+      await this.elm.send("AT SH 83 10 F1", 500);
+      await this.elm.send(`30${idHex}00`, 1000);
+      this.elm.log('info', `[Уставка ИМ] Управление ${idHex} возвращено ЭБУ (30${idHex}00)`);
+      return true;
+    } catch (e) {
+      return false;
+    } finally {
+      try { await this.elm.send("AT SH 81 10 F1", 500); } catch (e) {}
+    }
+  }
+
 
   async resetWithInit() {
     this.elm.log('info', 'Выполнение сброса ЭБУ с инициализацией (KWP2000 Reset 11 01)...');

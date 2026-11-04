@@ -1240,6 +1240,161 @@ body {
   line-height: 1.4;
 }
 
+/* Вспомогательные отступы */
+.mb-3 {
+  margin-bottom: 12px;
+}
+
+/* Нейтральный статус */
+.badge-health-neutral {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Плавные регуляторы уставки (Block 1) */
+.regulators-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.regulator-card {
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.regulator-card.regulator-active {
+  background: rgba(48, 209, 88, 0.08);
+  border-color: rgba(48, 209, 88, 0.45);
+  box-shadow: 0 4px 20px rgba(48, 209, 88, 0.15);
+}
+
+.regulator-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.regulator-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+
+.regulator-sub {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.regulator-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.regulator-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 6px 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.reg-step-btn {
+  min-width: 52px;
+  height: 38px;
+  padding: 0 12px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--apple-blue);
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+}
+
+.reg-step-btn:active {
+  background: rgba(255, 255, 255, 0.16);
+  transform: scale(0.95);
+}
+
+.reg-value-display {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  text-align: center;
+  flex: 1;
+}
+
+.regulator-actions-row {
+  display: flex;
+  gap: 8px;
+}
+
+.reg-action-btn {
+  flex: 1;
+  padding: 10px 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: 12px;
+}
+
+/* Сетка форсунок и катушек зажигания (Block 3) */
+.actuator-grid-2col {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.actuator-card-compact {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  gap: 6px;
+}
+
+.act-compact-info strong {
+  display: block;
+  font-size: 0.8rem;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.act-compact-info span {
+  display: block;
+  font-size: 0.65rem;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* Состояние работающего теста на кнопке */
+.actuator-btn-running {
+  background: rgba(255, 159, 10, 0.25) !important;
+  color: var(--apple-amber) !important;
+  border-color: rgba(255, 159, 10, 0.5) !important;
+  animation: pulse-border 1.2s infinite ease-in-out;
+}
+
+@keyframes pulse-border {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
 /* Терминал */
 .terminal-card-glass {
   display: flex;

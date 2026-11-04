@@ -201,6 +201,14 @@ class M73Application {
     this.shouldBeConnected = false;
     this.needsReconnectOnVisible = false;
 
+    // Состояние управления исполнительными механизмами и уставками (v46)
+    this.activeRegulator = null; // { key: 'rxx'|'idleRpm'|'purge', idHex: '41'|'42'|'43', rawByte: 0 }
+    this.regulatorValues = {
+      idleRpm: 880, // об/мин (ID 42, шаг 20/40, диапазон 600..1800)
+      rxx: 60,      // шагов (ID 41, шаг 5, диапазон 10..200)
+      purge: 30     // % (ID 43, шаг 10, диапазон 0..100)
+    };
+
     this.initElements();
     this.bindEvents();
     if (window.DashboardWidgetManager) {
@@ -357,7 +365,7 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v45\n\n• Синхронизация протокола с эталоном OpenDiag (hk.java):\n  1) Кадр АЦП 21 03: точная формула ДМРВ ((u16(7) * 1.25) / 16384.0) дает эталонные 0.996-1.020В покоя Bosch HFM5, выверены смещения каналов ДТОЖ, ДТВ, ДПДЗ, ДК1, ДК2 и ДНД\n  2) Кадр 21 01: точный делитель ДПДЗ (/256.0), сигнал детонации ((u16(30)*10.0)/512.0) и моменты РХХ\n\n• Универсальный осциллограф и Светофор АЦП:\n  1) Исправлены каналы Бортсеть (volt), Загрузка форсунок (duty) и ДМРВ АЦП (mafAdc)\n  2) Устранен конфликт окраски ДК1 при выборе других каналов\n  3) Детектор работы двигателя переведен строго на RPM > 300 для исключения ложных тревог при ЗУ");
+        alert("Диагностика М73 — Версия v46\n\n• Полная панель исполнительных механизмов (17 тестов ИМ по эталону OpenDiag):\n  1) 3 плавных регулятора уставки: Обороты ХХ (42), Шаги РХХ (41), Клапан продувки адсорбера (43) с удержанием в цикле K-Line\n  2) 6 тестов реле и ламп: Вентилятор 1/2, Бензонасос, Кондиционер, Check Engine, Стартер\n  3) 8 тестов цепей управления: Форсунки 1–4 и Катушки зажигания 1–4\n\n• Исправление протокола KWP2000 Service 0x30:\n  1) Активация 4-байтовыми командами 30 <ID> 06 FF с заголовком AT SH 84 10 F1\n  2) Удержание активности опросом 30 <ID> 01 и безопасный возврат управления ЭБУ (30 <ID> 00)");
       });
     }
 
@@ -739,14 +747,22 @@ class M73Application {
         // 1. На вкладках Ошибок, Тестов или Терминала фоновый циклический опрос 2101/2103 приостанавливается,
         // чтобы не занимать шину K-Line и исключить коллизии с ручными сервисными запросами.
         if (this.currentTab === 'tab-dtc' || this.currentTab === 'tab-actuators' || this.currentTab === 'tab-terminal') {
-          // Раз в 2 секунды отправляем легкий Tester Present (3E), чтобы сессия ЭБУ не закрылась по таймауту
-          if (Date.now() - lastTesterPresent > 2000) {
+          if (this.currentTab === 'tab-actuators' && this.activeRegulator) {
+            // Удержание активной уставки регулятора (обороты ХХ, РХХ, адсорбер) каждые 700 мс
+            if (Date.now() - lastTesterPresent > 700) {
+              try {
+                await this.m73.setActuatorSetpoint(this.activeRegulator.idHex, this.activeRegulator.rawByte);
+                lastTesterPresent = Date.now();
+              } catch (e) {}
+            }
+          } else if (Date.now() - lastTesterPresent > 2000) {
+            // Раз в 2 секунды отправляем легкий Tester Present (3E), чтобы сессия ЭБУ не закрылась по таймауту
             try {
               await this.elm.send("3E", 500);
               lastTesterPresent = Date.now();
             } catch (e) {}
           }
-          await this.delay(250);
+          await this.delay(200);
           continue;
         }
 
@@ -1353,21 +1369,118 @@ class M73Application {
       if (prevPolling) this.startContinuousPolling();
     }
   }
+  adjustRegulator(key, delta) {
+    const limits = {
+      idleRpm: { min: 600, max: 1800, unit: 'об/мин', elId: 'regValIdleRpm' },
+      rxx:     { min: 10,  max: 200,  unit: 'шагов',  elId: 'regValRxx' },
+      purge:   { min: 0,   max: 100,  unit: '%',      elId: 'regValPurge' }
+    };
+    const cfg = limits[key];
+    if (!cfg) return;
 
-  async testActuator(testType) {
+    this.regulatorValues[key] = Math.max(cfg.min, Math.min(cfg.max, this.regulatorValues[key] + delta));
+    const el = document.getElementById(cfg.elId);
+    if (el) el.textContent = `${this.regulatorValues[key]} ${cfg.unit}`;
+
+    // Если этот регулятор уже захвачен — мгновенно отправляем новое значение в ЭБУ
+    if (this.activeRegulator && this.activeRegulator.key === key) {
+      this.applyRegulator(key);
+    }
+  }
+
+  async applyRegulator(key) {
+    if (!this.elm.isConnected) return alert("Адаптер не подключен к ЭБУ");
+
+    const map = {
+      idleRpm: { idHex: '42', toRaw: (v) => Math.round(v / 10), statusId: 'regStatusIdleRpm', cardId: 'regCardIdleRpm' },
+      rxx:     { idHex: '41', toRaw: (v) => Math.round(v),      statusId: 'regStatusRxx',     cardId: 'regCardRxx' },
+      purge:   { idHex: '43', toRaw: (v) => Math.round(v),      statusId: 'regStatusPurge',   cardId: 'regCardPurge' }
+    };
+    const cfg = map[key];
+    if (!cfg) return;
+
+    const prevPolling = this.isPolling;
+    await this.stopPolling();
+
+    // Если был активен другой регулятор — сначала отпускаем его
+    if (this.activeRegulator && this.activeRegulator.key !== key) {
+      await this.m73.releaseActuatorControl(this.activeRegulator.idHex);
+      this._updateRegulatorUI(this.activeRegulator.key, false);
+      this.activeRegulator = null;
+    }
+
+    const rawByte = cfg.toRaw(this.regulatorValues[key]);
+    try {
+      await this.m73.setActuatorSetpoint(cfg.idHex, rawByte);
+      this.activeRegulator = { key, idHex: cfg.idHex, rawByte };
+      this._updateRegulatorUI(key, true);
+    } catch (err) {
+      alert("Ошибка установки параметра: " + err.message);
+    } finally {
+      if (prevPolling) this.startContinuousPolling();
+    }
+  }
+
+  async releaseRegulator(key, silent = false) {
+    const idMap = { idleRpm: '42', rxx: '41', purge: '43' };
+    const idHex = idMap[key];
+    if (!idHex) return;
+
+    const prevPolling = this.isPolling;
+    await this.stopPolling();
+
+    if (this.activeRegulator && this.activeRegulator.key === key) {
+      this.activeRegulator = null;
+    }
+    this._updateRegulatorUI(key, false);
+
+    try {
+      if (this.elm.isConnected) {
+        await this.m73.releaseActuatorControl(idHex);
+      }
+    } catch (e) {} finally {
+      if (prevPolling && this.elm.isConnected) this.startContinuousPolling();
+    }
+  }
+
+  _updateRegulatorUI(key, isActive) {
+    const uiMap = {
+      idleRpm: { statusId: 'regStatusIdleRpm', cardId: 'regCardIdleRpm' },
+      rxx:     { statusId: 'regStatusRxx',     cardId: 'regCardRxx' },
+      purge:   { statusId: 'regStatusPurge',   cardId: 'regCardPurge' }
+    };
+    const cfg = uiMap[key];
+    if (!cfg) return;
+    const statusEl = document.getElementById(cfg.statusId);
+    const cardEl = document.getElementById(cfg.cardId);
+    if (statusEl) {
+      statusEl.textContent = isActive ? '🟢 Удерживается' : 'Штатно (ЭБУ)';
+      statusEl.className = `badge-health ${isActive ? 'badge-health-ok' : 'badge-health-neutral'}`;
+    }
+    if (cardEl) {
+      cardEl.classList.toggle('regulator-active', isActive);
+    }
+  }
+
+  async testActuator(testType, btnEl = null) {
     if (!this.elm.isConnected) return alert("Адаптер не подключен к ЭБУ");
 
     const prevPolling = this.isPolling;
     await this.stopPolling();
+
+    // Если был активен плавный регулятор — сначала отпускаем его
+    if (this.activeRegulator) {
+      await this.releaseRegulator(this.activeRegulator.key, true);
+    }
 
     // 1. Опрашиваем актуальный статус перед тестом (проверка заглушен ли мотор)
     try {
       await this.m73.readConfiguredCycle('2101');
     } catch (e) {}
 
-    // 2. Проверка условий безопасности: тесты разрешены ТОЛЬКО при RPM == 0
+    // 2. Проверка условий безопасности: дискретные тесты разрешены ТОЛЬКО при RPM == 0
     if (this.m73.latestData && this.m73.latestData.rpm > 0) {
-      alert("Внимание! Тесты исполнительных механизмов разрешены только при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nЭБУ M73 аппаратно блокирует тесты при заведённом моторе.");
+      alert("Внимание! Тесты реле, форсунок и катушек зажигания разрешены только при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nЭБУ M73 аппаратно блокирует тесты при заведённом моторе.");
       if (prevPolling) this.startContinuousPolling();
       return;
     }
@@ -1375,17 +1488,29 @@ class M73Application {
     // 3. Даем шине 150 мс тишины для исключения коллизий пакетов
     await this.delay(150);
 
+    const origBtnText = btnEl ? btnEl.textContent : '';
+    if (btnEl) {
+      btnEl.disabled = true;
+      btnEl.textContent = "⏳ Активно...";
+      btnEl.classList.add('actuator-btn-running');
+    }
+
     try {
       this.connStateText.textContent = "Выполняется тест...";
       await this.m73.runActuatorTest(testType);
-      alert("Тест успешно выполнен! Механизм отработал штатно.");
     } catch (err) {
       alert("Ошибка выполнения теста: " + err.message);
     } finally {
+      if (btnEl) {
+        btnEl.disabled = false;
+        btnEl.textContent = origBtnText;
+        btnEl.classList.remove('actuator-btn-running');
+      }
       this.connStateText.textContent = "Подключено к ЭБУ";
       if (prevPolling) this.startContinuousPolling();
     }
   }
+
 
   async resetWithInit() {
     if (!this.elm.isConnected) return alert("Адаптер не подключен");
@@ -1431,6 +1556,9 @@ class M73Application {
   }
 
   switchTab(tabId) {
+    if (this.currentTab === 'tab-actuators' && tabId !== 'tab-actuators' && this.activeRegulator) {
+      this.releaseRegulator(this.activeRegulator.key, true);
+    }
     this.currentTab = tabId;
     document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.tabbar-item, .dock-item').forEach(el => el.classList.remove('active'));
