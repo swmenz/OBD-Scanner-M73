@@ -296,6 +296,7 @@ class TripLogger {
         "Суммарный счетчик пропусков (-)": mis.total || 0,
         "Активные пропуски за цикл (1000 об)": mis.cycle !== undefined ? mis.cycle : 0,
         "Время с момента сброса контроллера (мин)": params.timeSinceReset !== undefined ? params.timeSinceReset : 0,
+        "Время с момента сброса контроллера (ч)": params.timeSinceResetHours !== undefined ? params.timeSinceResetHours : 0,
         "Количество ошибок DTC (-)": params.dtcCount !== undefined ? params.dtcCount : 0,
 
         // Битовые флаги состояния ЭБУ

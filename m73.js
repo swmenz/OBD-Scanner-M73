@@ -71,7 +71,8 @@ class ItelmaM73Protocol {
 
       // 8. РџСЂРѕРїСѓСЃРєРё РІРѕСЃРїР»Р°РјРµРЅРµРЅРёСЏ Рё СЃР±СЂРѕСЃ
       misfires: { cyl1: 0, cyl2: 0, cyl3: 0, cyl4: 0, total: 0, cycle: 0 },
-      timeSinceReset: 0,    // Р’СЂРµРјСЏ СЃ РјРѕРјРµРЅС‚Р° РїРѕСЃР»РµРґРЅРµРіРѕ СЃР±СЂРѕСЃР° Р­Р‘РЈ (РјРёРЅ)
+      timeSinceReset: 0,    // Время с момента последнего сброса ЭБУ (мин)
+      timeSinceResetHours: 0, // Время с момента последнего сброса ЭБУ (ч)
       ecuChecksum: 0,
 
       // 9. РљР°РЅР°Р»С‹ РђР¦Рџ (РљР°РґСЂ 21 03)
@@ -337,14 +338,17 @@ class ItelmaM73Protocol {
                                     this.latestData.misfires.cyl3 +
                                     this.latestData.misfires.cyl4;
 
-    // 46-47: Р’СЂРµРјСЏ СЃ РјРѕРјРµРЅС‚Р° РїРѕСЃР»РµРґРЅРµРіРѕ СЃР±СЂРѕСЃР° РєРѕРЅС‚СЂРѕР»Р»РµСЂР° (РјРёРЅ)
-    const timeSinceReset = r1(u16(46) / 10.0);
-    // 48-49: РљРѕРЅС‚СЂРѕР»СЊРЅР°СЏ СЃСѓРјРјР° Р­Р‘РЈ
+    // 46-47 (байты 48-49 пакета 61 01): Время с момента последнего сброса контроллера
+    // В OpenDiag (param_152): u16(46) / 10.0 (ч) с шагом 0.1 ч (= 6 мин).
+    // В ReadLogs: в минутах = (u16(46) / 10.0) * 60 = u16(46) * 6 (мин).
+    const timeSinceResetHours = r1(u16(46) / 10.0);
+    const timeSinceReset = Math.round(u16(46) * 6);
+    // 48-49: Контрольная сумма ЭБУ
     const ecuChecksum = u16(48);
-    // 50-51: Р§Р°СЃРѕРІРѕР№ СЂР°СЃС…РѕРґ С‚РѕРїР»РёРІР° (Р»/С‡)
+    // 50-51: Часовой расход топлива (л/ч)
     const fuelRate = r2(u16(50) * 0.00215);
 
-    // 52: Р¤Р»Р°РіРё Р·Р°РІРµСЂС€РµРЅРёСЏ С‚РµСЃС‚РѕРІ OBD-II
+    // 52: Флаги завершения тестов OBD-II
     const b52 = u8(52);
     this.latestData.readiness = {
       cat: (b52 & 0x01) !== 0,
@@ -353,14 +357,19 @@ class ItelmaM73Protocol {
       o2Heater: (b52 & 0x40) !== 0
     };
 
-    // 53-54: РџРѕС‚СЂРµР±РЅРѕСЃС‚СЊ РІ РјРѕРјРµРЅС‚Рµ РґР»СЏ СЂРµРіСѓР»РёСЂРѕРІР°РЅРёСЏ РҐРҐ: I-С‡Р°СЃС‚СЊ (%)
-    const idleTorqueI = r2(s16(53) * 100.0 / 32768.0);
-    // 55-56: РџРѕС‚СЂРµР±РЅРѕСЃС‚СЊ РІ РјРѕРјРµРЅС‚Рµ РґР»СЏ СЂРµРіСѓР»РёСЂРѕРІР°РЅРёСЏ РҐРҐ: PD-С‡Р°СЃС‚СЊ (%)
-    const idleTorquePD = r2(s16(55) * 100.0 / 32768.0);
-    // 57-58: РњСѓР»СЊС‚РёРїР»РёРєР°С‚РёРІРЅР°СЏ СЃРѕСЃС‚Р°РІР»СЏСЋС‰Р°СЏ РєРѕСЂСЂРµРєС†РёРё СЃРјРµСЃРё FR (-) (РЅРѕСЂРјР° = 1.000)
+    // 53-54 (байты 55-56 ответа 61 01): Аддитивная составляющая коррекции смеси FRA (%) (норма = 0.00%)
+    // В OpenDiag (hk.java, case 55): (s16(55) * 100.0) / 32768.0 (формат %.2f)
+    const addAdapt = r2(s16(53) * 100.0 / 32768.0);
+    // 55-56 (байты 57-58 ответа 61 01): Коррекция Bank 2 (в 1-банковых моторах Priora = 0)
+    const addAdaptBank2 = r2(s16(55) * 100.0 / 32768.0);
+    // 57-58 (байты 59-60 ответа 61 01): Мультипликативная составляющая коррекции смеси FR (-) (норма = 1.000)
+    // В OpenDiag (hk.java, case 59): u16(59) / 32768.0 (формат %.3f)
     const multAdapt = r3(u16(57) / 32768.0);
-    // 59-60: РђРґРґРёС‚РёРІРЅР°СЏ СЃРѕСЃС‚Р°РІР»СЏСЋС‰Р°СЏ РєРѕСЂСЂРµРєС†РёРё СЃРјРµСЃРё FRA (%) (РЅРѕСЂРјР° = 0.00%)
-    const addAdapt = r2(s16(59) * 100.0 / 32768.0);
+    // 59-60 (байты 61-62 ответа 61 01): Смещение уставки расхода воздуха ХХ (кг/ч)
+    // В OpenDiag (hk.java, case 61): (s16(61) * 3.0) / 64.0 (формат %.1f)
+    const idleAirOffset = r1(s16(59) * 3.0 / 64.0);
+    const idleTorqueI = 0;
+    const idleTorquePD = 0;
 
     // 62, 63, 64: Р‘РёС‚РѕРІС‹Рµ С„Р»Р°РіРё СЃРѕСЃС‚РѕСЏРЅРёСЏ
     const b62 = u8(62);
@@ -460,6 +469,9 @@ class ItelmaM73Protocol {
     this.latestData.engineTorque = engineTorque;
 
     this.latestData.timeSinceReset = timeSinceReset;
+    this.latestData.timeSinceResetHours = timeSinceResetHours;
+    this.latestData.addAdaptBank2 = addAdaptBank2;
+    this.latestData.idleAirOffset = idleAirOffset;
     this.latestData.ecuChecksum = ecuChecksum;
     this.latestData.flags = flags;
 

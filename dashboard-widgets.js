@@ -40,7 +40,8 @@ class DashboardWidgetManager {
       { id: 'extra-damper-adapt', title: 'Адаптация демпфера', unit: 'об/с²', field: 'damperAdapt', category: 'dynamics', decimals: 2 },
       { id: 'extra-unbalance-rpm', title: 'Неравномерность коленвала', unit: 'об/с²', field: 'unbalanceRpm', category: 'dynamics', decimals: 2 },
       { id: 'extra-temp-start', title: 'Температура ОЖ при пуске', unit: '°C', field: 'tempAtStart', category: 'ignition', decimals: 1 },
-      { id: 'extra-time-reset', title: 'Время с момента сброса', unit: 'мин', field: 'timeSinceReset', category: 'main', decimals: 0 }
+      { id: 'extra-time-reset', title: 'Время с момента сброса', unit: 'мин', field: 'timeSinceReset', category: 'main', decimals: 0 },
+      { id: 'extra-time-reset-hours', title: 'Время сброса ЭБУ (ч)', unit: 'ч', field: 'timeSinceResetHours', category: 'main', decimals: 1 }
     ];
   }
 
