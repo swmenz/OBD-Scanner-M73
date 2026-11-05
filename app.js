@@ -201,7 +201,8 @@ class M73Application {
     this.shouldBeConnected = false;
     this.needsReconnectOnVisible = false;
 
-    // Состояние управления исполнительными механизмами и уставками (v46)
+    // Состояние управления исполнительными механизмами и уставками (v49 Mutex)
+    this.isActuatorBusy = false;
     this.activeRegulator = null; // { key: 'rxx'|'idleRpm'|'purge', idHex: '41'|'42'|'43', rawByte: 0 }
     this.regulatorValues = {
       idleRpm: 880, // об/мин (ID 42, шаг 20/40, диапазон 600..1800)
@@ -367,8 +368,42 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v48\n\n• Обновление системы кастомизации приборной панели:\n  1) Быстрый отклик перетаскивания: захват блока срабатывает за 0.5с (вместо 1.5с) с тактильной отдачей\n  2) Примагничивание к пальцу: блок следует строго за движением пальца в реальном времени с 60 FPS\n  3) Прямой обмен местами (Swap): блок встаёт на место целевого виджета напрямую без хаотичного сдвига промежуточных блоков\n  4) Неоновая подсветка цели: блок-получатель подсвечивается изумрудным контуром и мягко масштабируется");
+        alert("Диагностика М73 — Версия v49\n\nОбновления:\n1) УОЗ и Отскок: равновеликие крупные индикаторы для мгновенного контроля детонации\n2) Защита от гонок команд (Mutex) и тайминги исполнительных механизмов\n3) Полная калибровка каналов АЦП по стандарту OpenDiag E1 (ДМРВ, ДК1, ДТВ, ДПДЗ)\n4) Точный расчет аддитивной коррекции смеси TRA (%)\n5) Интеллектуальное автоскрытие нижнего дока при скролле\n6) Монолитная сетка датчиков без сдвигов и скачков при смене значений\n7) Корректный экспорт CSV с запятой для открывания в русском Excel без дат");
       });
+    }
+
+    // Интеллектуальное скрытие нижнего плавающего дока при скролле вниз
+    const scrollView = document.querySelector('.app-scroll-view');
+    const dock = document.querySelector('.liquid-dock');
+    if (scrollView && dock) {
+      let lastScrollY = scrollView.scrollTop;
+      let ticking = false;
+
+      scrollView.addEventListener('scroll', () => {
+        if (!ticking) {
+          window.requestAnimationFrame(() => {
+            const currentScrollY = scrollView.scrollTop;
+            const diff = currentScrollY - lastScrollY;
+
+            // Если скроллим вниз более чем на 8px и отошли от верха — прячем док
+            if (diff > 8 && currentScrollY > 40) {
+              dock.classList.add('dock-hidden');
+            } else if (diff < -6 || currentScrollY <= 15) {
+              // Скролл вверх или возврат наверх — показываем
+              dock.classList.remove('dock-hidden');
+            }
+
+            // Если доскроллили до нижнего края — показываем док
+            if (scrollView.scrollHeight - (currentScrollY + scrollView.clientHeight) < 30) {
+              dock.classList.remove('dock-hidden');
+            }
+
+            lastScrollY = currentScrollY;
+            ticking = false;
+          });
+          ticking = true;
+        }
+      }, { passive: true });
     }
 
     // Режим скорости опроса K-Line: Экстрим (стандартный)
@@ -712,6 +747,12 @@ class M73Application {
     this.shouldBeConnected = false;
     this.isReconnecting = false;
     this.needsReconnectOnVisible = false;
+    this.isActuatorBusy = false;
+
+    if (this.activeRegulator) {
+      this._updateRegulatorUI(this.activeRegulator.key, false);
+      this.activeRegulator = null;
+    }
 
     // Освобождаем блокировку экрана и фоновые процессы
     await this.wakeLockMgr.release();
@@ -866,18 +907,19 @@ class M73Application {
     if (this.valMaf) this.valMaf.textContent = data.maf.toFixed(1);
     if (this.valCycleAir) this.valCycleAir.textContent = data.cycleAir.toFixed(1);
 
-    // УОЗ и отскок детонации (Интеллектуальная тревожная подсветка)
-    if (this.valSpark) this.valSpark.textContent = data.spark.toFixed(1);
+    // УОЗ и отскок детонации (симметричный сплит-виджет v49)
+    if (this.valSpark) this.valSpark.textContent = `${data.spark.toFixed(1)}°`;
     if (this.valRetard) {
-      this.valRetard.textContent = data.sparkRetard !== 0 ? `${data.sparkRetard}°` : `0.0°`;
-      if (data.sparkRetard < 0) {
+      const isKnock = Math.abs(data.sparkRetard) > 0.05;
+      this.valRetard.textContent = isKnock ? `-${Math.abs(data.sparkRetard).toFixed(1)}°` : `0.0°`;
+      if (isKnock) {
         this.valRetard.classList.add('active-knock');
       } else {
         this.valRetard.classList.remove('active-knock');
       }
     }
     if (this.cardSpark) {
-      if (data.sparkRetard < 0) {
+      if (Math.abs(data.sparkRetard) > 0.05) {
         this.cardSpark.classList.add('alert-knock');
       } else {
         this.cardSpark.classList.remove('alert-knock');
@@ -1392,9 +1434,9 @@ class M73Application {
   }
   adjustRegulator(key, delta) {
     const limits = {
-      idleRpm: { min: 600, max: 1800, unit: 'об/мин', elId: 'regValIdleRpm' },
-      rxx:     { min: 10,  max: 200,  unit: 'шагов',  elId: 'regValRxx' },
-      purge:   { min: 0,   max: 100,  unit: '%',      elId: 'regValPurge' }
+      idleRpm: { min: 600, max: 1800, unit: 'об/мин', elId: 'regValIdleRpm', toRaw: (v) => Math.round(v / 10) },
+      rxx:     { min: 10,  max: 200,  unit: 'шагов',  elId: 'regValRxx',     toRaw: (v) => Math.round(v) },
+      purge:   { min: 0,   max: 100,  unit: '%',      elId: 'regValPurge',   toRaw: (v) => Math.round(v) }
     };
     const cfg = limits[key];
     if (!cfg) return;
@@ -1403,14 +1445,19 @@ class M73Application {
     const el = document.getElementById(cfg.elId);
     if (el) el.textContent = `${this.regulatorValues[key]} ${cfg.unit}`;
 
-    // Если этот регулятор уже захвачен — мгновенно отправляем новое значение в ЭБУ
+    // Если этот регулятор уже удерживается — сразу обновляем целевой байт для цикла _pollLoop
+    // и отправляем команду в ЭБУ только если канал сейчас не занят
     if (this.activeRegulator && this.activeRegulator.key === key) {
-      this.applyRegulator(key);
+      this.activeRegulator.rawByte = cfg.toRaw(this.regulatorValues[key]);
+      if (!this.isActuatorBusy) {
+        this.applyRegulator(key);
+      }
     }
   }
 
   async applyRegulator(key) {
     if (!this.elm.isConnected) return alert("Адаптер не подключен к ЭБУ");
+    if (this.isActuatorBusy) return;
 
     const map = {
       idleRpm: { idHex: '42', toRaw: (v) => Math.round(v / 10), statusId: 'regStatusIdleRpm', cardId: 'regCardIdleRpm' },
@@ -1420,25 +1467,29 @@ class M73Application {
     const cfg = map[key];
     if (!cfg) return;
 
-    const prevPolling = this.isPolling;
+    this.isActuatorBusy = true;
+    const prevPolling = this.isPolling || this.shouldBeConnected;
     await this.stopPolling();
 
-    // Если был активен другой регулятор — сначала отпускаем его
-    if (this.activeRegulator && this.activeRegulator.key !== key) {
-      await this.m73.releaseActuatorControl(this.activeRegulator.idHex);
-      this._updateRegulatorUI(this.activeRegulator.key, false);
-      this.activeRegulator = null;
-    }
-
-    const rawByte = cfg.toRaw(this.regulatorValues[key]);
     try {
+      // Если был активен другой регулятор — сначала отпускаем его
+      if (this.activeRegulator && this.activeRegulator.key !== key) {
+        await this.m73.releaseActuatorControl(this.activeRegulator.idHex);
+        this._updateRegulatorUI(this.activeRegulator.key, false);
+        this.activeRegulator = null;
+      }
+
+      const rawByte = cfg.toRaw(this.regulatorValues[key]);
       await this.m73.setActuatorSetpoint(cfg.idHex, rawByte);
       this.activeRegulator = { key, idHex: cfg.idHex, rawByte };
       this._updateRegulatorUI(key, true);
     } catch (err) {
       alert("Ошибка установки параметра: " + err.message);
     } finally {
-      if (prevPolling) this.startContinuousPolling();
+      this.isActuatorBusy = false;
+      if (prevPolling && this.elm.isConnected) {
+        this.startContinuousPolling();
+      }
     }
   }
 
@@ -1447,20 +1498,26 @@ class M73Application {
     const idHex = idMap[key];
     if (!idHex) return;
 
-    const prevPolling = this.isPolling;
-    await this.stopPolling();
-
     if (this.activeRegulator && this.activeRegulator.key === key) {
       this.activeRegulator = null;
     }
     this._updateRegulatorUI(key, false);
+
+    if (this.isActuatorBusy) return;
+    this.isActuatorBusy = true;
+
+    const prevPolling = this.isPolling || this.shouldBeConnected;
+    await this.stopPolling();
 
     try {
       if (this.elm.isConnected) {
         await this.m73.releaseActuatorControl(idHex);
       }
     } catch (e) {} finally {
-      if (prevPolling && this.elm.isConnected) this.startContinuousPolling();
+      this.isActuatorBusy = false;
+      if (prevPolling && this.elm.isConnected) {
+        this.startContinuousPolling();
+      }
     }
   }
 
@@ -1485,50 +1542,63 @@ class M73Application {
 
   async testActuator(testType, btnEl = null) {
     if (!this.elm.isConnected) return alert("Адаптер не подключен к ЭБУ");
+    if (this.isActuatorBusy) return;
 
-    const prevPolling = this.isPolling;
+    this.isActuatorBusy = true;
+    const prevPolling = this.isPolling || this.shouldBeConnected;
     await this.stopPolling();
 
-    // Если был активен плавный регулятор — сначала отпускаем его
-    if (this.activeRegulator) {
-      await this.releaseRegulator(this.activeRegulator.key, true);
-    }
-
-    // 1. Опрашиваем актуальный статус перед тестом (проверка заглушен ли мотор)
     try {
-      await this.m73.readConfiguredCycle('2101');
-    } catch (e) {}
-
-    // 2. Проверка условий безопасности: дискретные тесты разрешены ТОЛЬКО при RPM == 0
-    if (this.m73.latestData && this.m73.latestData.rpm > 0) {
-      alert("Внимание! Тесты реле, форсунок и катушек зажигания разрешены только при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nЭБУ M73 аппаратно блокирует тесты при заведённом моторе.");
-      if (prevPolling) this.startContinuousPolling();
-      return;
-    }
-
-    // 3. Даем шине 150 мс тишины для исключения коллизий пакетов
-    await this.delay(150);
-
-    const origBtnText = btnEl ? btnEl.textContent : '';
-    if (btnEl) {
-      btnEl.disabled = true;
-      btnEl.textContent = "⏳ Активно...";
-      btnEl.classList.add('actuator-btn-running');
-    }
-
-    try {
-      this.connStateText.textContent = "Выполняется тест...";
-      await this.m73.runActuatorTest(testType);
-    } catch (err) {
-      alert("Ошибка выполнения теста: " + err.message);
-    } finally {
-      if (btnEl) {
-        btnEl.disabled = false;
-        btnEl.textContent = origBtnText;
-        btnEl.classList.remove('actuator-btn-running');
+      // Если был активен плавный регулятор — сначала отпускаем его
+      if (this.activeRegulator) {
+        const prevKey = this.activeRegulator.key;
+        const prevIdHex = this.activeRegulator.idHex;
+        this.activeRegulator = null;
+        this._updateRegulatorUI(prevKey, false);
+        try { await this.m73.releaseActuatorControl(prevIdHex); } catch (e) {}
       }
-      this.connStateText.textContent = "Подключено к ЭБУ";
-      if (prevPolling) this.startContinuousPolling();
+
+      // 1. Опрашиваем актуальный статус перед тестом (проверка заглушен ли мотор)
+      try {
+        await this.m73.readConfiguredCycle('2101');
+      } catch (e) {}
+
+      // 2. Проверка условий безопасности: дискретные тесты разрешены ТОЛЬКО при RPM == 0
+      if (this.m73.latestData && this.m73.latestData.rpm > 0) {
+        alert("Внимание! Тесты реле, форсунок и катушек зажигания разрешены только при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nЭБУ M73 аппаратно блокирует тесты при заведённом моторе.");
+        return;
+      }
+
+      // 3. Даем шине 150 мс тишины для исключения коллизий пакетов
+      await this.delay(150);
+
+      const origBtnText = btnEl ? btnEl.textContent : '';
+      if (btnEl) {
+        btnEl.disabled = true;
+        btnEl.textContent = "⏳ Активно...";
+        btnEl.classList.add('actuator-btn-running');
+      }
+
+      try {
+        if (this.connStateText) this.connStateText.textContent = "Выполняется тест...";
+        await this.m73.runActuatorTest(testType);
+      } catch (err) {
+        alert("Ошибка выполнения теста: " + err.message);
+      } finally {
+        if (btnEl) {
+          btnEl.disabled = false;
+          btnEl.textContent = origBtnText;
+          btnEl.classList.remove('actuator-btn-running');
+        }
+        if (this.elm.isConnected && this.connStateText) {
+          this.connStateText.textContent = "Подключено к ЭБУ";
+        }
+      }
+    } finally {
+      this.isActuatorBusy = false;
+      if (prevPolling && this.elm.isConnected) {
+        this.startContinuousPolling();
+      }
     }
   }
 
@@ -1588,6 +1658,10 @@ class M73Application {
     const targetNav = document.querySelector(`[data-tab="${tabId}"]`);
     if (targetContent) targetContent.classList.add('active');
     if (targetNav) targetNav.classList.add('active');
+
+    // Гарантированно открываем док при переключении вкладки
+    const dock = document.querySelector('.liquid-dock');
+    if (dock) dock.classList.remove('dock-hidden');
 
     // Кнопка настройки виджетов в шапке доступна только на приборной панели
     const btnCustomize = document.getElementById('btnCustomizeDash');

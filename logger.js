@@ -350,6 +350,11 @@ class TripLogger {
 
     const escapeCsv = (val) => {
       if (val === null || val === undefined) return '';
+      // Если число с плавающей точкой — для русской локали Excel заменяем точку на запятую,
+      // чтобы русский Excel на ПК не конвертировал значения вроде 22.3 в дату «22.мар»!
+      if (typeof val === 'number') {
+        return String(val).replace('.', ',');
+      }
       const str = String(val);
       if (str.includes(';') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
         return `"${str.replace(/"/g, '""')}"`;

@@ -358,19 +358,19 @@ class ItelmaM73Protocol {
       o2Heater: (b52 & 0x40) !== 0
     };
 
-    // 53-54 (байты 55-56 ответа 61 01): Аддитивная составляющая коррекции смеси FRA (%) (норма = 0.00%)
-    // В OpenDiag (hk.java, case 55): (s16(55) * 100.0) / 32768.0 (формат %.2f)
-    const addAdapt = r2(s16(53) * 100.0 / 32768.0);
-    // 55-56 (байты 57-58 ответа 61 01): Коррекция Bank 2 (в 1-банковых моторах Priora = 0)
+    // 53-54 (байты 55-56 ответа 61 01): Потребность в моменте для регулирования ХХ: I-часть (%) (в покое = -100.00%)
+    // В OpenDiag (hk.java, case 55): (s16(55) * 100.0) / 32768.0
+    const idleTorqueI = r2((s16(53) * 100.0) / 32768.0);
+    // 55-56 (байты 57-58 ответа 61 01): Потребность в моменте для регулирования ХХ: PD-часть (%)
+    const idleTorquePD = r2((s16(55) * 100.0) / 32768.0);
     const addAdaptBank2 = 0;
-    // 57-58 (байты 59-60 ответа 61 01): Мультипликативная составляющая коррекции смеси FR (-) (норма = 1.000)
+    // 57-58 (байты 59-60 ответа 61 01): Мультипликативная составляющая коррекции смеси FR / FRA2 (-) (норма = 1.000)
     // В OpenDiag (hk.java, case 59): u16(59) / 32768.0 (формат %.3f)
     const multAdapt = r3(u16(57) / 32768.0);
-    // 59-60 (байты 61-62 ответа 61 01): Смещение уставки расхода воздуха ХХ (кг/ч)
-    // В OpenDiag (hk.java, case 61): (s16(61) * 3.0) / 64.0 (формат %.1f)
-    const idleAirOffset = r1(s16(59) * 3.0 / 64.0);
-    const idleTorqueI = r2((s16(53) * 100.0) / 32768.0);
-    const idleTorquePD = r2((s16(55) * 100.0) / 32768.0);
+    // 59-60 (байты 61-62 ответа 61 01): Аддитивная составляющая коррекции смеси самообучением (TRA, %)
+    // В OpenDiag (hk.java, case 61): (s16(61) * 3.0) / 64.0 (норма около 0%, на прогретом XX +2.2%)
+    const addAdapt = r2((s16(59) * 3.0) / 64.0);
+    const idleAirOffset = addAdapt;
 
     // 62, 63, 64: Битовые флаги состояния
     const b62 = u8(62);
@@ -506,17 +506,17 @@ class ItelmaM73Protocol {
     // Байт 4 (1B, param_82): ДТОЖ (В) -> (raw * 10.0) / 512.0
     this.latestData.adc.temp = +((u8(4) * 10.0) / 512.0).toFixed(3);
 
-    // Байты 5-6 (2B, param_83): ДТВ — Датчик температуры впускного воздуха (В) -> (raw * 1.25) / 256.0
-    this.latestData.adc.airTemp = +((u16(5) * 1.25) / 256.0).toFixed(3);
+    // Байты 5-6 (2B, param_83): ДМРВ — Датчик массового расхода воздуха (В) -> (raw * 1.25) / 256.0
+    this.latestData.adc.maf = +((u16(5) * 1.25) / 256.0).toFixed(3);
 
-    // Байты 7-8 (2B, param_191): ДМРВ — Датчик массового расхода воздуха (В) -> (raw * 1.25) / 16384.0
-    this.latestData.adc.maf = +((u16(7) * 1.25) / 16384.0).toFixed(3);
+    // Байт 7 (1B, param_191): ДПДЗ — Датчик положения дроссельной заслонки (В) -> (raw * 10.0) / 512.0
+    this.latestData.adc.tps = +((u8(7) * 10.0) / 512.0).toFixed(3);
 
-    // Байты 9-10 (2B, param_192): ДПДЗ — Датчик положения дроссельной заслонки (В) -> (raw * 1.25) / 256.0
-    this.latestData.adc.tps = +((u16(9) * 1.25) / 256.0).toFixed(3);
+    // Байты 9-10 (2B, param_193): ДК1 — Управляющий лямбда-зонд до нейтрализатора (В) -> (raw * 1.25) / 256.0
+    this.latestData.adc.o2 = +((u16(9) * 1.25) / 256.0).toFixed(3);
 
-    // Байт 11 (1B, param_193): ДК1 — Управляющий лямбда-зонд до нейтрализатора (В) -> (raw * 10.0) / 512.0
-    this.latestData.adc.o2 = +((u8(11) * 10.0) / 512.0).toFixed(3);
+    // Байт 11 (1B, param_192): ДТВ — Датчик температуры впускного воздуха (В) -> (raw * 10.0) / 512.0
+    this.latestData.adc.airTemp = +((u8(11) * 10.0) / 512.0).toFixed(3);
 
     // Байты 12-13 (2B, param_194): ДК2 — Диагностический зонд после нейтрализатора (В) -> (raw * 1.25) / 256.0
     this.latestData.adc.o2_2 = +((u16(12) * 1.25) / 256.0).toFixed(3);
@@ -665,14 +665,14 @@ class ItelmaM73Protocol {
 
     try {
       // Шаг 1: Запрос статуса / захват управления ИМ (3 байта: 30 <ID> 01)
-      await this.elm.send("AT SH 83 10 F1", 500);
+      await this.elm.send("AT SH 83 10 F1", 1000);
       const initCmd = `30${target.id}01`;
       const rawInit = await this.elm.send(initCmd, 1500);
       const respInit = (rawInit || "").replace(/\s+/g, '').toUpperCase();
       checkNegativeResponse(respInit, target.name);
 
       // Шаг 2: Непосредственное ВКЛЮЧЕНИЕ механизма (4 байта: 30 <ID> 06 FF)
-      await this.elm.send("AT SH 84 10 F1", 500);
+      await this.elm.send("AT SH 84 10 F1", 1000);
       const cmdOn = `30${target.id}06FF`;
       this.elm.log('info', `[Тест ИМ] Включение ${target.name}: ${cmdOn}`);
       const rawOn = await this.elm.send(cmdOn, 2000);
@@ -683,7 +683,7 @@ class ItelmaM73Protocol {
       this.elm.log('info', `[Тест ИМ] ${target.name} АКТИВИРОВАН! Удержание ${target.duration / 1000} сек...`);
 
       // Шаг 3: Удержание активного состояния с опросом статуса 30 <ID> 01 (как в FragmentParams.b1)
-      await this.elm.send("AT SH 83 10 F1", 500);
+      await this.elm.send("AT SH 83 10 F1", 1000);
       const startTime = Date.now();
       while (Date.now() - startTime < target.duration) {
         await this.delay(650);
@@ -694,20 +694,20 @@ class ItelmaM73Protocol {
 
       // Шаг 4: Выключение механизма (30 <ID> 06 00) и возврат управления ЭБУ (30 <ID> 00)
       try {
-        await this.elm.send("AT SH 84 10 F1", 500);
+        await this.elm.send("AT SH 84 10 F1", 1000);
         await this.elm.send(`30${target.id}0600`, 1000);
       } catch (e) {}
 
       await this.delay(80);
       try {
-        await this.elm.send("AT SH 83 10 F1", 500);
+        await this.elm.send("AT SH 83 10 F1", 1000);
         await this.elm.send(`30${target.id}00`, 1000);
       } catch (e) {}
 
       this.elm.log('info', `[Тест ИМ] ${target.name} выключен, управление возвращено ЭБУ.`);
       return true;
     } finally {
-      try { await this.elm.send("AT SH 81 10 F1", 500); } catch (e) {}
+      try { await this.elm.send("AT SH 81 10 F1", 1000); } catch (e) {}
     }
   }
 
@@ -721,7 +721,7 @@ class ItelmaM73Protocol {
     const clamped = Math.max(0, Math.min(255, Math.round(rawByte)));
     const hexVal = clamped.toString(16).toUpperCase().padStart(2, '0');
     try {
-      await this.elm.send("AT SH 84 10 F1", 500);
+      await this.elm.send("AT SH 84 10 F1", 1000);
       const cmd = `30${idHex}07${hexVal}`;
       this.elm.log('info', `[Уставка ИМ] Отправка ${cmd}`);
       const rawResp = await this.elm.send(cmd, 1500);
@@ -738,7 +738,7 @@ class ItelmaM73Protocol {
       }
       return true;
     } finally {
-      try { await this.elm.send("AT SH 81 10 F1", 500); } catch (e) {}
+      try { await this.elm.send("AT SH 81 10 F1", 1000); } catch (e) {}
     }
   }
 
@@ -747,14 +747,14 @@ class ItelmaM73Protocol {
    */
   async releaseActuatorControl(idHex) {
     try {
-      await this.elm.send("AT SH 83 10 F1", 500);
+      await this.elm.send("AT SH 83 10 F1", 1000);
       await this.elm.send(`30${idHex}00`, 1000);
       this.elm.log('info', `[Уставка ИМ] Управление ${idHex} возвращено ЭБУ (30${idHex}00)`);
       return true;
     } catch (e) {
       return false;
     } finally {
-      try { await this.elm.send("AT SH 81 10 F1", 500); } catch (e) {}
+      try { await this.elm.send("AT SH 81 10 F1", 1000); } catch (e) {}
     }
   }
 

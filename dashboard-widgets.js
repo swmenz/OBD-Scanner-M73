@@ -981,6 +981,24 @@ class DashboardWidgetManager {
         </div>
       `;
     }
+    if (id === 'spark') {
+      return `
+        <div class="glass-card metric-tile" id="cardSpark">
+          <span class="tile-label">Зажигание / Детонация</span>
+          <div class="spark-split-grid">
+            <div class="spark-split-col">
+              <span class="spark-sub-label">УОЗ</span>
+              <span class="tile-num-split" id="valSpark">0.0°</span>
+            </div>
+            <div class="spark-split-divider"></div>
+            <div class="spark-split-col">
+              <span class="spark-sub-label">Отскок</span>
+              <span class="tile-num-split" id="valRetard">0.0°</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
     const standardDefMap = {
       'maf': { title: 'Расход воздуха (ДМРВ)', valId: 'valMaf', unit: 'кг/ч', def: '0.0' },
       'cycle-air': { title: 'Цикловой расход', valId: 'valCycleAir', unit: 'мг/такт', def: '0.0', featured: true },

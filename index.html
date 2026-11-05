@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" href="icon-192.png">
   <title>Диагностика М73 — Лада Приора</title>
   
-  <link rel="stylesheet" href="styles.css?v=48">
+  <link rel="stylesheet" href="styles.css?v=49">
   <script src="xlsx.full.min.js"></script>
   <link rel="manifest" href="manifest.json">
 </head>
@@ -25,7 +25,7 @@
     <header class="glass-navbar">
       <div class="navbar-brand">
         <span class="status-pulse" id="connIndicator"></span>
-        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v48</span></div>
+        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v49</span></div>
         <span class="status-text" id="connStateText">Не подключено</span>
       </div>
 
@@ -200,13 +200,20 @@
             </div>
           </div>
 
-          <!-- Виджет 9: УОЗ / Отскок -->
+          <!-- Виджет 9: УОЗ / Отскок (Симметричный сплит-виджет v49) -->
           <div class="dashboard-widget widget-compact" data-widget-id="spark" data-title="УОЗ / Отскок">
             <div class="glass-card metric-tile" id="cardSpark">
-              <span class="tile-label">УОЗ / Отскок</span>
-              <div class="tile-val-wrap">
-                <span class="tile-num" id="valSpark">0.0</span>
-                <span class="glass-retard-tag" id="valRetard">0.0°</span>
+              <span class="tile-label">Зажигание / Детонация</span>
+              <div class="spark-split-grid">
+                <div class="spark-split-col">
+                  <span class="spark-sub-label">УОЗ</span>
+                  <span class="tile-num-split" id="valSpark">0.0°</span>
+                </div>
+                <div class="spark-split-divider"></div>
+                <div class="spark-split-col">
+                  <span class="spark-sub-label">Отскок</span>
+                  <span class="tile-num-split" id="valRetard">0.0°</span>
+                </div>
               </div>
             </div>
           </div>
@@ -427,9 +434,9 @@
                   <span class="chip-beacon"></span>
                   <span>Лямбда-петля</span>
                 </div>
-                <div class="glass-chip chip-alert" id="flagKnock">
+                <div class="glass-chip" id="flagKnock">
                   <span class="chip-beacon"></span>
-                  <span>Детонация</span>
+                  <span>Контроль детонации</span>
                 </div>
                 <div class="glass-chip" id="flagFuelCut">
                   <span class="chip-beacon"></span>
@@ -711,7 +718,7 @@
                 </div>
                 <div class="regulator-actions-row">
                   <button class="glass-btn btn-primary-glass reg-action-btn" type="button" onclick="M73App.applyRegulator('idleRpm')">Установить</button>
-                  <button class="glass-btn btn-glass-secondary reg-action-btn" type="button" onclick="M73App.releaseRegulator('idleRpm')">Сброс ЭБУ</button>
+                  <button class="glass-btn btn-glass-secondary reg-action-btn" type="button" onclick="M73App.releaseRegulator('idleRpm')">Штатно (ЭБУ)</button>
                 </div>
               </div>
             </div>
@@ -733,7 +740,7 @@
                 </div>
                 <div class="regulator-actions-row">
                   <button class="glass-btn btn-primary-glass reg-action-btn" type="button" onclick="M73App.applyRegulator('rxx')">Установить</button>
-                  <button class="glass-btn btn-glass-secondary reg-action-btn" type="button" onclick="M73App.releaseRegulator('rxx')">Сброс ЭБУ</button>
+                  <button class="glass-btn btn-glass-secondary reg-action-btn" type="button" onclick="M73App.releaseRegulator('rxx')">Штатно (ЭБУ)</button>
                 </div>
               </div>
             </div>
@@ -755,7 +762,7 @@
                 </div>
                 <div class="regulator-actions-row">
                   <button class="glass-btn btn-primary-glass reg-action-btn" type="button" onclick="M73App.applyRegulator('purge')">Установить</button>
-                  <button class="glass-btn btn-glass-secondary reg-action-btn" type="button" onclick="M73App.releaseRegulator('purge')">Сброс ЭБУ</button>
+                  <button class="glass-btn btn-glass-secondary reg-action-btn" type="button" onclick="M73App.releaseRegulator('purge')">Штатно (ЭБУ)</button>
                 </div>
               </div>
             </div>
@@ -1213,10 +1220,10 @@
     </div>
   </div>
 
-<script src="elm327.js?v=48"></script>
-  <script src="m73.js?v=48"></script>
-  <script src="logger.js?v=48"></script>
-  <script src="dashboard-widgets.js?v=48"></script>
-  <script src="app.js?v=48"></script>
+  <script src="elm327.js?v=49"></script>
+  <script src="m73.js?v=49"></script>
+  <script src="logger.js?v=49"></script>
+  <script src="dashboard-widgets.js?v=49"></script>
+  <script src="app.js?v=49"></script>
 </body>
 </html>

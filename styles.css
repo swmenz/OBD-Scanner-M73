@@ -173,13 +173,7 @@ body {
 }
 
 .status-text {
-  font-size: 0.72rem;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 120px;
-  line-height: 1.2;
+  display: none; /* v49: убираем обрезающийся текст, оставляя чистый неоновый индикатор */
 }
 
 .navbar-right {
@@ -742,6 +736,58 @@ body {
   font-size: 0.75rem;
   color: var(--text-tertiary);
   font-weight: 500;
+}
+
+/* УОЗ / Отскок: Симметричный сплит-виджет с равновеликими цифрами v49 */
+.spark-split-grid {
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  width: 100%;
+}
+
+.spark-split-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.spark-split-divider {
+  height: 32px;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.spark-sub-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+.tile-num-split {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  transition: color 0.2s ease, text-shadow 0.2s ease;
+}
+
+.tile-num-split.active-knock {
+  color: var(--apple-rose) !important;
+  text-shadow: 0 0 16px rgba(255, 69, 58, 0.65);
+}
+
+.glass-card.alert-knock {
+  border-color: rgba(255, 69, 58, 0.5) !important;
+  box-shadow: 0 0 20px rgba(255, 69, 58, 0.25) !important;
 }
 
 .glass-retard-tag {
@@ -1485,6 +1531,14 @@ body {
     0 16px 40px rgba(0, 0, 0, 0.85),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
   z-index: 100;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+  will-change: transform, opacity;
+}
+
+.liquid-dock.dock-hidden {
+  transform: translateY(calc(100% + env(safe-area-inset-bottom) + 30px));
+  opacity: 0;
+  pointer-events: none;
 }
 
 .dock-item {
@@ -1908,14 +1962,19 @@ body {
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 12px;
   position: relative;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .dashboard-widget {
   position: relative;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
   transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.2s ease;
 }
 
@@ -2298,6 +2357,10 @@ body {
 
 .widget-compact .control-buttons button {
   width: 100%;
+}
+
+.widget-compact .control-buttons #btnExportXlsx {
+  flex: 1 1 auto;
 }
 
 /* ========================================================
