@@ -443,6 +443,7 @@ body {
   flex-direction: column;
   justify-content: space-between;
   min-height: 114px;
+  margin-bottom: 0;
 }
 
 .hero-digital-row {
@@ -1006,6 +1007,24 @@ body {
 
 .cyl-val.has-misfires {
   color: var(--apple-rose);
+}
+
+.misfire-cycle-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.misfire-cycle-summary .mono-badge {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Стек АЦП */
@@ -1978,6 +1997,10 @@ body {
   transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.2s ease;
 }
 
+.dashboard-widget .glass-card {
+  margin-bottom: 0;
+}
+
 .dashboard-widget.widget-compact {
   grid-column: span 1;
 }
@@ -2308,36 +2331,134 @@ body {
 }
 
 /* Адаптации содержимого виджетов под компактный (1 колонка) и широкий (2 колонки) размеры */
+.dashboard-widget.widget-compact[data-widget-id="hero-gauges"] {
+  display: flex;
+  flex-direction: column;
+}
+
 .widget-compact .hero-grid {
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
   margin-bottom: 0;
+  height: 100%;
+  flex: 1 1 auto;
 }
 
 .widget-compact .hero-card {
-  min-height: 84px;
-  padding: 10px 12px;
+  flex: 1 1 0;
+  min-height: 70px;
+  padding: 8px 12px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.widget-compact .hero-card .card-top-row {
+  margin-bottom: 2px;
+}
+
+.widget-compact .hero-digital-row {
+  margin: 2px 0;
 }
 
 .widget-compact .hero-digital-row .hero-value {
-  font-size: 1.85rem;
+  font-size: 1.75rem;
+  line-height: 1;
+}
+
+.widget-compact .hero-digital-row .hero-unit {
+  font-size: 0.7rem;
+}
+
+.widget-compact .hero-card .hero-subtext {
+  margin-top: 2px;
+  font-size: 0.72rem;
 }
 
 .widget-wide .hero-grid {
   margin-bottom: 0;
 }
 
+/* Компактный блок пропусков зажигания (равной высоты с hero-gauges) */
+.dashboard-widget.widget-compact[data-widget-id="misfires"] {
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-widget.widget-compact[data-widget-id="misfires"] .glass-card {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 148px;
+  padding: 8px 12px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.widget-compact[data-widget-id="misfires"] .panel-header {
+  margin-bottom: 4px;
+}
+
+.widget-compact[data-widget-id="misfires"] .panel-heading {
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.15;
+  margin: 0;
+}
+
 .widget-compact .cyl-matrix {
+  display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 6px;
+  gap: 5px;
+  margin-top: 2px;
 }
 
 .widget-compact .cyl-tile {
-  padding: 6px 4px;
+  padding: 4px 4px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.widget-compact .cyl-lbl {
+  font-size: 0.60rem;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--text-secondary);
 }
 
 .widget-compact .cyl-val {
-  font-size: 1.25rem;
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1.1;
+  margin-top: 1px;
+}
+
+.widget-compact .misfire-cycle-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 5px !important;
+  padding-top: 5px !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.70rem !important;
+  color: var(--text-secondary);
+}
+
+.widget-compact .misfire-cycle-summary span:first-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.widget-compact .misfire-cycle-summary .mono-badge {
+  font-size: 0.90rem !important;
+  font-weight: 700;
 }
 
 .widget-compact .flags-container .glass-chips-grid {

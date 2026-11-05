@@ -932,16 +932,16 @@ class DashboardWidgetManager {
     if (id === 'misfires') {
       return `
         <div class="glass-card">
-          <div class="panel-header"><div><h2 class="panel-heading">Пропуски зажигания</h2><p class="panel-sub">Счётчики воспламенения по цилиндрам</p></div></div>
+          <div class="panel-header"><div><h2 class="panel-heading">Пропуски зажигания</h2></div></div>
           <div class="cyl-matrix">
             <div class="cyl-tile"><span class="cyl-lbl">Цилиндр 1</span><span class="cyl-val" id="misCyl1">0</span></div>
             <div class="cyl-tile"><span class="cyl-lbl">Цилиндр 2</span><span class="cyl-val" id="misCyl2">0</span></div>
             <div class="cyl-tile"><span class="cyl-lbl">Цилиндр 3</span><span class="cyl-val" id="misCyl3">0</span></div>
             <div class="cyl-tile"><span class="cyl-lbl">Цилиндр 4</span><span class="cyl-val" id="misCyl4">0</span></div>
           </div>
-          <div class="misfire-cycle-summary" style="display:flex;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);font-size:13px;color:var(--text-secondary);">
-            <span>Активные пропуски (1000 об):</span>
-            <span class="mono-badge" id="misCycle" style="font-weight:700;color:var(--text-primary);font-size:16px;">0</span>
+          <div class="misfire-cycle-summary">
+            <span>За цикл (1000 об):</span>
+            <span class="mono-badge" id="misCycle">0</span>
           </div>
         </div>
       `;
