@@ -70,7 +70,7 @@ class ItelmaM73Protocol {
       engineTorque: 0,      // Расчётный крутящий момент по ДМРВ (Н·м)
 
       // 8. Пропуски воспламенения и сброс
-      misfires: { cyl1: 0, cyl2: 0, cyl3: 0, cyl4: 0, total: 0, cycle: 0 },
+      misfires: { cyl1: 0, cyl2: 0, cyl3: 0, cyl4: 0, total: 0, cylSum: 0, cycle: 0 },
       timeSinceReset: 0,    // Время с момента последнего сброса ЭБУ (мин)
       timeSinceResetHours: 0, // Время с момента последнего сброса ЭБУ (ч)
       ecuChecksum: 0,
@@ -327,17 +327,18 @@ class ItelmaM73Protocol {
     // 34-35: Адаптация зубьев венца демпфера (об/с²)
     const damperAdapt = r1(s16(34) * 0.57554);
 
-    // 36-43: Счетчики пропусков воспламенения (порядок в М73: 1, 3, 4, 2)
+    // 36-43: Счётчики пропусков воспламенения по цилиндрам, влияющих на токсичность (порядок в М73: 1, 3, 4, 2)
     this.latestData.misfires.cyl1 = u16(36);
     this.latestData.misfires.cyl3 = u16(38);
     this.latestData.misfires.cyl4 = u16(40);
     this.latestData.misfires.cyl2 = u16(42);
-    // 44-45: Активные цикловые пропуски за 1000 об (5-й счетчик ЭБУ М73)
-    this.latestData.misfires.cycle = u16(44);
-    this.latestData.misfires.total = this.latestData.misfires.cyl1 +
-                                    this.latestData.misfires.cyl2 +
-                                    this.latestData.misfires.cyl3 +
-                                    this.latestData.misfires.cyl4;
+    // 44-45 (байт 46 кадра 2101 в OpenDiag hk.java): Суммарный счётчик пропусков зажигания, влияющих на нейтрализатор
+    this.latestData.misfires.total = u16(44);
+    this.latestData.misfires.cycle = u16(44); // синоним для обратной совместимости
+    this.latestData.misfires.cylSum = this.latestData.misfires.cyl1 +
+                                      this.latestData.misfires.cyl2 +
+                                      this.latestData.misfires.cyl3 +
+                                      this.latestData.misfires.cyl4;
 
     // 46-47 (байты 48-49 пакета 61 01): Время с момента последнего сброса контроллера
     // В OpenDiag (param_152): u16(46) / 10.0 (ч) с шагом 0.1 ч (= 6 мин).
@@ -370,7 +371,6 @@ class ItelmaM73Protocol {
     // 59-60 (байты 61-62 ответа 61 01): Аддитивная составляющая коррекции смеси самообучением (TRA, %)
     // В OpenDiag (hk.java, case 61): (s16(61) * 3.0) / 64.0 (норма около 0%, на прогретом XX +2.2%)
     const addAdapt = r2((s16(59) * 3.0) / 64.0);
-    const idleAirOffset = addAdapt;
 
     // 62, 63, 64: Битовые флаги состояния
     const b62 = u8(62);
@@ -472,7 +472,6 @@ class ItelmaM73Protocol {
     this.latestData.timeSinceReset = timeSinceReset;
     this.latestData.timeSinceResetHours = timeSinceResetHours;
     this.latestData.addAdaptBank2 = addAdaptBank2;
-    this.latestData.idleAirOffset = idleAirOffset;
     this.latestData.ecuChecksum = ecuChecksum;
     this.latestData.flags = flags;
 
@@ -692,7 +691,11 @@ class ItelmaM73Protocol {
         } catch (e) {}
       }
 
-      // Шаг 4: Выключение механизма (30 <ID> 06 00) и возврат управления ЭБУ (30 <ID> 00)
+      this.elm.log('info', `[Тест ИМ] ${target.name}: тест завершён по таймеру (${target.duration / 1000} сек).`);
+      return true;
+    } finally {
+      // Гарантированное выключение механизма (30 <ID> 06 00) и возврат управления ЭБУ (30 <ID> 00)
+      // Срабатывает ВСЕГДА, даже если включение завершилось ошибкой, таймаутом или обрывом связи
       try {
         await this.elm.send("AT SH 84 10 F1", 1000);
         await this.elm.send(`30${target.id}0600`, 1000);
@@ -704,10 +707,8 @@ class ItelmaM73Protocol {
         await this.elm.send(`30${target.id}00`, 1000);
       } catch (e) {}
 
-      this.elm.log('info', `[Тест ИМ] ${target.name} выключен, управление возвращено ЭБУ.`);
-      return true;
-    } finally {
       try { await this.elm.send("AT SH 81 10 F1", 1000); } catch (e) {}
+      this.elm.log('info', `[Тест ИМ] ${target.name}: выключение и возврат управления ЭБУ выполнены.`);
     }
   }
 

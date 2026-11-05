@@ -208,7 +208,7 @@ class M73Application {
     this.regulatorValues = {
       idleRpm: 880, // об/мин (ID 42, шаг 20/40, диапазон 600..1800)
       rxx: 60,      // шагов (ID 41, шаг 5, диапазон 10..200)
-      purge: 30     // % (ID 43, шаг 10, диапазон 0..100)
+      purge: 20     // % (ID 43, шаг 10, диапазон 0..50)
     };
 
     this.initElements();
@@ -369,7 +369,7 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v51.6\n\nОбновления:\n1) Выровнены и строго оцентрованы мини-блоки форсунок и катушек в блоке «Цепи форсунок и зажигания»\n2) Одинаковые симметричные отступы от левого и правого краев родительской карточки\n3) Жесткая геометрия 2-колоночной сетки 50%/50% (minmax) с защитой от выталкивания\n4) Гармоничные подписи катушек (Цил. 1–4, Цил. 2, Цил. 2–3, Цил. 4)");
+        alert("Диагностика М73 — Версия v51.7\n\nОбновления:\n1) Синхронизация с OpenDiag: байт 46 кадра 2101 назначен как «Суммарный счётчик пропусков (влияет на нейтрализатор)»\n2) В логах удален дубликат колонки idleAirOffset, оставлена эталонная «Аддитивная коррекция (TRA) (%)»\n3) Лимит регулятора КПА ограничен до 50% (старт 20%), добавлено подтверждение confirm() и проверка скорости speed == 0\n4) Устранена гонка при переключении вкладки регуляторов и гарантировано безопасное выключение тестов в finally");
       });
     }
 
@@ -1015,8 +1015,8 @@ class M73Application {
       this.updateMisfireBox(this.misCyl2, data.misfires.cyl2);
       this.updateMisfireBox(this.misCyl3, data.misfires.cyl3);
       this.updateMisfireBox(this.misCyl4, data.misfires.cyl4);
-      if (this.misCycle && data.misfires.cycle !== undefined) {
-        this.misCycle.textContent = data.misfires.cycle;
+      if (this.misCycle && (data.misfires.total !== undefined || data.misfires.cycle !== undefined)) {
+        this.misCycle.textContent = data.misfires.total !== undefined ? data.misfires.total : data.misfires.cycle;
       }
     }
 
@@ -1411,7 +1411,7 @@ class M73Application {
     const limits = {
       idleRpm: { min: 600, max: 1800, unit: 'об/мин', elId: 'regValIdleRpm', toRaw: (v) => Math.round(v / 10) },
       rxx:     { min: 10,  max: 200,  unit: 'шагов',  elId: 'regValRxx',     toRaw: (v) => Math.round(v) },
-      purge:   { min: 0,   max: 100,  unit: '%',      elId: 'regValPurge',   toRaw: (v) => Math.round(v) }
+      purge:   { min: 0,   max: 50,   unit: '%',      elId: 'regValPurge',   toRaw: (v) => Math.round(v) }
     };
     const cfg = limits[key];
     if (!cfg) return;
@@ -1425,12 +1425,12 @@ class M73Application {
     if (this.activeRegulator && this.activeRegulator.key === key) {
       this.activeRegulator.rawByte = cfg.toRaw(this.regulatorValues[key]);
       if (!this.isActuatorBusy) {
-        this.applyRegulator(key);
+        this.applyRegulator(key, true);
       }
     }
   }
 
-  async applyRegulator(key) {
+  async applyRegulator(key, skipConfirm = false) {
     if (!this.elm.isConnected) return alert("Адаптер не подключен к ЭБУ");
     if (this.isActuatorBusy) return;
 
@@ -1441,6 +1441,19 @@ class M73Application {
     };
     const cfg = map[key];
     if (!cfg) return;
+
+    // Проверка условий безопасности: управление уставками разрешено только на стоянке
+    try {
+      await this.m73.readConfiguredCycle('2101');
+    } catch (e) {}
+
+    if (this.m73.latestData && this.m73.latestData.speed > 0) {
+      return alert("Внимание! Ручное управление уставками разрешено только на стоянке (скорость 0 км/ч). При движении автомобиля управление блокируется в целях безопасности.");
+    }
+
+    if (!skipConfirm && !confirm("Внимание! Ручное управление уставками разрешено выполнять только на стоянке автомобиля. Применить выбранное значение?")) {
+      return;
+    }
 
     this.isActuatorBusy = true;
     this._cancelRegulatorRequested = false;
@@ -1551,9 +1564,13 @@ class M73Application {
         await this.m73.readConfiguredCycle('2101');
       } catch (e) {}
 
-      // 2. Проверка условий безопасности: дискретные тесты разрешены ТОЛЬКО при RPM == 0
-      if (this.m73.latestData && this.m73.latestData.rpm > 0) {
-        alert("Внимание! Тесты реле, форсунок и катушек зажигания разрешены только при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nЭБУ M73 аппаратно блокирует тесты при заведённом моторе.");
+      // 2. Проверка условий безопасности: дискретные тесты разрешены ТОЛЬКО при RPM == 0 и SPEED == 0
+      if (this.m73.latestData && (this.m73.latestData.rpm > 0 || this.m73.latestData.speed > 0)) {
+        alert("Внимание! Тесты реле, форсунок и катушек зажигания разрешены только на СТОЯНКЕ (скорость 0 км/ч) при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nЭБУ M73 аппаратно блокирует тесты при движении или заведённом моторе.");
+        return;
+      }
+
+      if (!confirm("Внимание! Тест исполнительного механизма разрешено выполнять только на стоянке при заглушенном двигателе и включенном зажигании. Запустить тест?")) {
         return;
       }
 
@@ -1636,8 +1653,12 @@ class M73Application {
   }
 
   switchTab(tabId) {
-    if (this.currentTab === 'tab-actuators' && tabId !== 'tab-actuators' && this.activeRegulator) {
-      this.releaseRegulator(this.activeRegulator.key, true);
+    if (this.currentTab === 'tab-actuators' && tabId !== 'tab-actuators') {
+      if (this.activeRegulator) {
+        this.releaseRegulator(this.activeRegulator.key, true);
+      } else if (this.isActuatorBusy) {
+        this._cancelRegulatorRequested = true;
+      }
     }
     this.currentTab = tabId;
     if (this.widgetManager) {

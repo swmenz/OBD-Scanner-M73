@@ -231,7 +231,7 @@ class DashboardWidgetManager {
       { id: 'extra-temp-start', title: 'Температура ОЖ при пуске', unit: '°C', field: 'tempAtStart', category: 'ignition', decimals: 1 },
       { id: 'extra-time-reset', title: 'Время с момента сброса', unit: 'мин', field: 'timeSinceReset', category: 'main', decimals: 0 },
       { id: 'extra-time-reset-hours', title: 'Время сброса ЭБУ (ч)', unit: 'ч', field: 'timeSinceResetHours', category: 'main', decimals: 1 },
-      { id: 'extra-idle-air-offset', title: 'Смещение воздуха ХХ', unit: 'кг/ч', field: 'idleAirOffset', category: 'air', decimals: 1 }
+      { id: 'extra-idle-air-offset', title: 'Аддитивная корр. TRA', unit: '%', field: 'addAdapt', category: 'fuel', decimals: 1 }
     ];
   }
 
@@ -940,8 +940,8 @@ class DashboardWidgetManager {
             <div class="cyl-tile"><span class="cyl-lbl">Цилиндр 4</span><span class="cyl-val" id="misCyl4">0</span></div>
           </div>
           <div class="misfire-cycle-summary">
-            <span>За цикл (1000 об):</span>
-            <span class="mono-badge" id="misCycle">0</span>
+            <span>Влияет на нейтрализатор:</span>
+            <span class="mono-badge" id="misCycle" title="Суммарный счётчик пропусков зажигания, влияющих на нейтрализатор">0</span>
           </div>
         </div>
       `;
