@@ -1993,7 +1993,7 @@ body {
   position: relative;
   min-width: 0;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: visible;
   transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.2s ease;
   display: flex;
   flex-direction: column;
@@ -2026,11 +2026,16 @@ body {
   100% { transform: rotate(-0.75deg); }
 }
 
+.dashboard-grid.edit-mode {
+  padding-top: 8px;
+}
+
 .dashboard-grid.edit-mode .dashboard-widget {
   animation: iosJiggle 0.28s infinite ease-in-out;
   user-select: none;
   -webkit-user-select: none;
   touch-action: pan-y;
+  overflow: visible !important;
 }
 
 .dashboard-grid.edit-mode .dashboard-widget:nth-child(2n) {
@@ -2048,19 +2053,19 @@ body {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  background: rgba(30, 30, 30, 0.92);
+  border: 1.5px solid rgba(255, 255, 255, 0.6);
+  background: rgba(30, 30, 30, 0.95);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   color: #fff;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1;
   align-items: center;
   justify-content: center;
-  z-index: 25;
+  z-index: 50;
   cursor: pointer;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
   transition: transform 0.15s ease, background 0.15s ease;
 }
 
@@ -2073,15 +2078,29 @@ body {
 }
 
 .widget-btn-remove {
-  top: -6px;
-  left: 6px;
+  top: -8px;
+  left: -5px;
   background: rgba(255, 69, 58, 0.95);
 }
 
 .widget-btn-resize {
-  top: -6px;
-  right: 6px;
+  top: -8px;
+  right: -5px;
   background: rgba(10, 132, 255, 0.95);
+}
+
+/* Плавный сдвиг заголовков при редактировании, чтобы бейджи не наезжали на текст */
+.dashboard-grid.edit-mode .tile-label,
+.dashboard-grid.edit-mode .micro-header,
+.dashboard-grid.edit-mode .panel-heading {
+  padding-left: 14px;
+  transition: padding 0.18s ease;
+}
+
+.dashboard-grid.edit-mode .peak-badge,
+.dashboard-grid.edit-mode .gear-badge {
+  margin-right: 14px;
+  transition: margin 0.18s ease;
 }
 
 .dashboard-widget.is-dragging {
