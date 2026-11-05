@@ -2347,8 +2347,9 @@ body {
 
 .widget-compact .hero-card {
   flex: 1 1 0;
-  min-height: 70px;
-  padding: 8px 12px;
+  min-height: 82px;
+  padding: 7px 11px;
+  border-radius: 16px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -2356,25 +2357,39 @@ body {
 }
 
 .widget-compact .hero-card .card-top-row {
-  margin-bottom: 2px;
+  min-height: 0;
+  margin-bottom: 0;
+}
+
+.widget-compact .peak-badge,
+.widget-compact .gear-badge {
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  line-height: 1.2;
 }
 
 .widget-compact .hero-digital-row {
-  margin: 2px 0;
+  margin: 1px 0;
 }
 
 .widget-compact .hero-digital-row .hero-value {
-  font-size: 1.75rem;
+  font-size: 1.62rem;
   line-height: 1;
 }
 
 .widget-compact .hero-digital-row .hero-unit {
-  font-size: 0.7rem;
+  font-size: 0.68rem;
 }
 
 .widget-compact .hero-card .hero-subtext {
-  margin-top: 2px;
-  font-size: 0.72rem;
+  margin-top: 1px;
+  font-size: 0.70rem;
+  line-height: 1.15;
+}
+
+.widget-compact .glass-progress-track {
+  margin-top: 3px;
+  height: 4px;
 }
 
 .widget-wide .hero-grid {
@@ -2390,7 +2405,8 @@ body {
 .dashboard-widget.widget-compact[data-widget-id="misfires"] .glass-card {
   flex: 1 1 auto;
   height: 100%;
-  min-height: 148px;
+  min-height: 172px;
+  border-radius: 16px;
   padding: 8px 12px;
   box-sizing: border-box;
   display: flex;
