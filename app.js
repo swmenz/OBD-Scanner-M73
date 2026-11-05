@@ -204,11 +204,12 @@ class M73Application {
     // Состояние управления исполнительными механизмами и уставками (v51.3 Mutex)
     this.isActuatorBusy = false;
     this._cancelRegulatorRequested = false;
+    this._pendingReleases = new Set(); // ID регуляторов, которые надо вернуть ЭБУ, когда канал освободится
     this.activeRegulator = null; // { key: 'rxx'|'idleRpm'|'purge', idHex: '41'|'42'|'43', rawByte: 0 }
     this.regulatorValues = {
       idleRpm: 880, // об/мин (ID 42, шаг 20/40, диапазон 600..1800)
       rxx: 60,      // шагов (ID 41, шаг 5, диапазон 10..200)
-      purge: 20     // % (ID 43, шаг 10, диапазон 0..50)
+      purge: 20     // % (ID 43, шаг 10, диапазон 0..100)
     };
 
     this.initElements();
@@ -369,7 +370,7 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v52\n\nОбновления:\n1) Устранена скрытая гонка при быстрых кликах регулировки уставок (+/-): опрос 2101 и confirm перенесены внутрь мьютекса, повторный опрос при удержании отключен\n2) Защита от потери опроса при повторных нажатиях «Считать/Сбросить ошибки» и «Инициализация ЭБУ» (мьютекс isActuatorBusy + prevPolling)\n3) Защита безопасности: инициализация ЭБУ заблокирована при скорости выше 0 км/ч (стоянка + заглушенный мотор)\n4) Плавное переключение и сохранение высокой скорости K-Line");
+        alert("Диагностика М73 — Версия v52.1\n\nОбновления:\n1) Устранена регрессия сброса уставки: гарантированный возврат управления ЭБУ (30 ID 00) через очередь _pendingReleases при клике «Штатно» или смене вкладки\n2) Устранена гонка при быстрых кликах регулировки уставок (+/-): опрос 2101 и confirm перенесены внутрь мьютекса, повторный опрос при удержании отключен\n3) Информативное оповещение пользователя («Идёт тест механизма, подождите») вместо молчаливого игнорирования кликов\n4) Защита безопасности: сброс ЭБУ с инициализацией заблокирован при скорости выше 0 км/ч (стоянка + заглушенный мотор)");
       });
     }
 
@@ -720,6 +721,8 @@ class M73Application {
     this.isReconnecting = false;
     this.needsReconnectOnVisible = false;
     this.isActuatorBusy = false;
+    this._cancelRegulatorRequested = false;
+    if (this._pendingReleases) this._pendingReleases.clear();
 
     if (this.activeRegulator) {
       this._updateRegulatorUI(this.activeRegulator.key, false);
@@ -1363,7 +1366,10 @@ class M73Application {
       alert("Сначала подключитесь к адаптеру");
       return;
     }
-    if (this.isActuatorBusy) return;
+    if (this.isActuatorBusy) {
+      alert("Идёт тест механизма, подождите");
+      return;
+    }
 
     this.isActuatorBusy = true;
     this.dtcList.innerHTML = '<div class="empty-state-card">Опрос памяти ошибок ЭБУ...</div>';
@@ -1386,10 +1392,7 @@ class M73Application {
     } catch (err) {
       this.dtcList.innerHTML = `<div class="empty-state-card" style="color: var(--apple-rose)">Ошибка чтения: ${err.message}</div>`;
     } finally {
-      this.isActuatorBusy = false;
-      if (prevPolling && this.elm.isConnected) {
-        this.startContinuousPolling();
-      }
+      await this._finishBusy(prevPolling);
     }
   }
 
@@ -1398,7 +1401,10 @@ class M73Application {
       alert("Сначала подключитесь к адаптеру");
       return;
     }
-    if (this.isActuatorBusy) return;
+    if (this.isActuatorBusy) {
+      alert("Идёт тест механизма, подождите");
+      return;
+    }
     if (!confirm("Вы действительно хотите сбросить ошибки в контроллере?")) return;
     
     this.isActuatorBusy = true;
@@ -1417,10 +1423,7 @@ class M73Application {
     } catch (err) {
       alert("Ошибка сброса: " + err.message);
     } finally {
-      this.isActuatorBusy = false;
-      if (prevPolling && this.elm.isConnected && !clearedOk) {
-        this.startContinuousPolling();
-      }
+      await this._finishBusy(prevPolling && !clearedOk);
     }
 
     if (clearedOk && this.elm.isConnected) {
@@ -1505,7 +1508,7 @@ class M73Application {
 
       // Если во время ожидания ответа пользователь нажал «Штатно (ЭБУ)» или сменил вкладку — немедленно возвращаем управление ЭБУ
       if (this._cancelRegulatorRequested) {
-        await this.m73.releaseActuatorControl(cfg.idHex);
+        this._pendingReleases.add(cfg.idHex); // уставка уже ушла — вернуть управление в _finishBusy()
         this.activeRegulator = null;
         this._updateRegulatorUI(key, false);
       } else {
@@ -1515,6 +1518,21 @@ class M73Application {
       }
     } catch (err) {
       alert("Ошибка установки параметра: " + err.message);
+    } finally {
+      await this._finishBusy(prevPolling);
+    }
+  }
+
+  // Отправляет отложенные «30 <ID> 00» (отмена пришла, пока канал был занят) и освобождает канал
+  async _finishBusy(prevPolling) {
+    try {
+      const ids = [...this._pendingReleases];
+      this._pendingReleases.clear();
+      if (this.elm.isConnected) {
+        for (const id of ids) {
+          try { await this.m73.releaseActuatorControl(id); } catch (e) {}
+        }
+      }
     } finally {
       this.isActuatorBusy = false;
       if (prevPolling && this.elm.isConnected) {
@@ -1535,8 +1553,11 @@ class M73Application {
     }
     this._updateRegulatorUI(key, false);
 
-    // Если канал занят активным вызовом applyRegulator — он сам отправит releaseActuatorControl по флагу _cancelRegulatorRequested
-    if (this.isActuatorBusy) return;
+    // Канал занят: запоминаем возврат управления, его отправит _finishBusy() владельца канала
+    if (this.isActuatorBusy) {
+      this._pendingReleases.add(idHex);
+      return;
+    }
     this.isActuatorBusy = true;
 
     const prevPolling = this.isPolling || this.shouldBeConnected;
@@ -1547,10 +1568,7 @@ class M73Application {
         await this.m73.releaseActuatorControl(idHex);
       }
     } catch (e) {} finally {
-      this.isActuatorBusy = false;
-      if (prevPolling && this.elm.isConnected) {
-        this.startContinuousPolling();
-      }
+      await this._finishBusy(prevPolling);
     }
   }
 
@@ -1575,7 +1593,10 @@ class M73Application {
 
   async testActuator(testType, btnEl = null) {
     if (!this.elm.isConnected) return alert("Адаптер не подключен к ЭБУ");
-    if (this.isActuatorBusy) return;
+    if (this.isActuatorBusy) {
+      alert("Идёт тест механизма, подождите");
+      return;
+    }
 
     this.isActuatorBusy = true;
     const prevPolling = this.isPolling || this.shouldBeConnected;
@@ -1633,17 +1654,17 @@ class M73Application {
         }
       }
     } finally {
-      this.isActuatorBusy = false;
-      if (prevPolling && this.elm.isConnected) {
-        this.startContinuousPolling();
-      }
+      await this._finishBusy(prevPolling);
     }
   }
 
 
   async resetWithInit() {
     if (!this.elm.isConnected) return alert("Адаптер не подключен");
-    if (this.isActuatorBusy) return;
+    if (this.isActuatorBusy) {
+      alert("Идёт тест механизма, подождите");
+      return;
+    }
 
     this.isActuatorBusy = true;
     const prevPolling = this.isPolling || this.shouldBeConnected;
@@ -1680,9 +1701,11 @@ class M73Application {
     } catch (err) {
       alert("Ошибка сброса: " + err.message);
     } finally {
-      this.isActuatorBusy = false;
-      if (prevPolling && !sessionEnded && this.elm.isConnected) {
-        this.startContinuousPolling();
+      if (sessionEnded) {
+        this._pendingReleases.clear();
+        this.isActuatorBusy = false;
+      } else {
+        await this._finishBusy(prevPolling);
       }
     }
   }
