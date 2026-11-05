@@ -369,7 +369,7 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v51.8\n\nОбновления:\n1) Возвращен полный диапазон регулятора продувки адсорбера (0–100%) без искусственных ограничений\n2) Синхронизация с OpenDiag: байт 46 кадра 2101 назначен как «Суммарный счётчик пропусков (влияет на нейтрализатор)»\n3) В логах удален дубликат колонки idleAirOffset, оставлена эталонная «Аддитивная коррекция (TRA) (%)»\n4) Защита от случайного включения тестов в движении (speed == 0) и гарантированное выключение в finally");
+        alert("Диагностика М73 — Версия v52\n\nОбновления:\n1) Устранена скрытая гонка при быстрых кликах регулировки уставок (+/-): опрос 2101 и confirm перенесены внутрь мьютекса, повторный опрос при удержании отключен\n2) Защита от потери опроса при повторных нажатиях «Считать/Сбросить ошибки» и «Инициализация ЭБУ» (мьютекс isActuatorBusy + prevPolling)\n3) Защита безопасности: инициализация ЭБУ заблокирована при скорости выше 0 км/ч (стоянка + заглушенный мотор)\n4) Плавное переключение и сохранение высокой скорости K-Line");
       });
     }
 
@@ -1363,9 +1363,12 @@ class M73Application {
       alert("Сначала подключитесь к адаптеру");
       return;
     }
+    if (this.isActuatorBusy) return;
+
+    this.isActuatorBusy = true;
     this.dtcList.innerHTML = '<div class="empty-state-card">Опрос памяти ошибок ЭБУ...</div>';
     
-    const prevPolling = this.isPolling;
+    const prevPolling = this.isPolling || this.shouldBeConnected;
     await this.stopPolling();
 
     try {
@@ -1383,28 +1386,45 @@ class M73Application {
     } catch (err) {
       this.dtcList.innerHTML = `<div class="empty-state-card" style="color: var(--apple-rose)">Ошибка чтения: ${err.message}</div>`;
     } finally {
-      if (prevPolling) this.startContinuousPolling();
+      this.isActuatorBusy = false;
+      if (prevPolling && this.elm.isConnected) {
+        this.startContinuousPolling();
+      }
     }
   }
 
   async clearDtc() {
+    if (!this.elm.isConnected) {
+      alert("Сначала подключитесь к адаптеру");
+      return;
+    }
+    if (this.isActuatorBusy) return;
     if (!confirm("Вы действительно хотите сбросить ошибки в контроллере?")) return;
     
-    const prevPolling = this.isPolling;
+    this.isActuatorBusy = true;
+    const prevPolling = this.isPolling || this.shouldBeConnected;
     await this.stopPolling();
 
+    let clearedOk = false;
     try {
       const ok = await this.m73.clearDtcCodes();
       if (ok) {
+        clearedOk = true;
         alert("Ошибки успешно сброшены!");
-        await this.readDtc();
       } else {
         alert("Контроллер отклонил команду сброса");
       }
     } catch (err) {
       alert("Ошибка сброса: " + err.message);
     } finally {
-      if (prevPolling) this.startContinuousPolling();
+      this.isActuatorBusy = false;
+      if (prevPolling && this.elm.isConnected && !clearedOk) {
+        this.startContinuousPolling();
+      }
+    }
+
+    if (clearedOk && this.elm.isConnected) {
+      await this.readDtc();
     }
   }
   adjustRegulator(key, delta) {
@@ -1442,25 +1462,37 @@ class M73Application {
     const cfg = map[key];
     if (!cfg) return;
 
-    // Проверка условий безопасности: управление уставками разрешено только на стоянке
-    try {
-      await this.m73.readConfiguredCycle('2101');
-    } catch (e) {}
-
-    if (this.m73.latestData && this.m73.latestData.speed > 0) {
-      return alert("Внимание! Ручное управление уставками разрешено только на стоянке (скорость 0 км/ч). При движении автомобиля управление блокируется в целях безопасности.");
-    }
-
-    if (!skipConfirm && !confirm("Внимание! Ручное управление уставками разрешено выполнять только на стоянке автомобиля. Применить выбранное значение?")) {
-      return;
-    }
-
     this.isActuatorBusy = true;
     this._cancelRegulatorRequested = false;
     const prevPolling = this.isPolling || this.shouldBeConnected;
     await this.stopPolling();
 
     try {
+      // При первичном включении (!skipConfirm) опрашиваем свежий кадр 21 01 для проверки стоянки (speed == 0)
+      if (!skipConfirm) {
+        try {
+          await this.m73.readConfiguredCycle('2101');
+        } catch (e) {}
+
+        if (this.m73.latestData && this.m73.latestData.speed > 0) {
+          alert("Внимание! Ручное управление уставками разрешено только на стоянке (скорость 0 км/ч). При движении автомобиля управление блокируется в целях безопасности.");
+          return;
+        }
+
+        if (!confirm("Внимание! Ручное управление уставками разрешено выполнять только на стоянке автомобиля. Применить выбранное значение?")) {
+          return;
+        }
+      } else if (this.m73.latestData && this.m73.latestData.speed > 0) {
+        return;
+      }
+
+      // Если во время подтверждения пользователь переключил вкладку или нажал сброс — выходим
+      if (this._cancelRegulatorRequested) {
+        this.activeRegulator = null;
+        this._updateRegulatorUI(key, false);
+        return;
+      }
+
       // Если был активен другой регулятор — сначала отпускаем его
       if (this.activeRegulator && this.activeRegulator.key !== key) {
         await this.m73.releaseActuatorControl(this.activeRegulator.idHex);
@@ -1611,36 +1643,36 @@ class M73Application {
 
   async resetWithInit() {
     if (!this.elm.isConnected) return alert("Адаптер не подключен");
+    if (this.isActuatorBusy) return;
 
-    const prevPolling = this.isPolling;
+    this.isActuatorBusy = true;
+    const prevPolling = this.isPolling || this.shouldBeConnected;
     await this.stopPolling();
-
-    // Опрашиваем актуальный статус перед сбросом (проверка заглушен ли мотор)
-    try {
-      await this.m73.readConfiguredCycle('2101');
-    } catch (e) {}
-
-    // Проверка условий безопасности: сброс ЭБУ разрешен ТОЛЬКО при RPM == 0
-    if (this.m73.latestData && this.m73.latestData.rpm > 0) {
-      alert("Внимание! Сброс ЭБУ с инициализацией разрешен только при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nПерезапуск контроллера при заведённом двигателе или во время движения строго запрещен.");
-      if (prevPolling) this.startContinuousPolling();
-      return;
-    }
-
-    if (!confirm("Внимание! Будут сброшены таблицы самообучения топлива и угла зажигания М73 к заводским значениям. Двигатель должен быть заглушен, зажигание включено. Продолжить?")) {
-      if (prevPolling) this.startContinuousPolling();
-      return;
-    }
 
     let sessionEnded = false;
     try {
+      // Опрашиваем актуальный статус перед сбросом (проверка заглушен ли мотор и стоит ли машина)
+      try {
+        await this.m73.readConfiguredCycle('2101');
+      } catch (e) {}
+
+      // Проверка условий безопасности: сброс ЭБУ разрешен ТОЛЬКО при RPM == 0 и SPEED == 0
+      if (this.m73.latestData && (this.m73.latestData.rpm > 0 || this.m73.latestData.speed > 0)) {
+        alert("Внимание! Сброс ЭБУ с инициализацией разрешен только на СТОЯНКЕ (скорость 0 км/ч) при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nПерезапуск контроллера при заведённом двигателе или во время движения строго запрещен.");
+        return;
+      }
+
+      if (!confirm("Внимание! Будут сброшены таблицы самообучения топлива и угла зажигания М73 к заводским значениям. Двигатель должен быть заглушен, зажигание включено. Продолжить?")) {
+        return;
+      }
+
       const ok = await this.m73.resetWithInit();
       if (ok) {
         // После сброса ЭБУ закрывает диагностическую сессию — опрос продолжать бессмысленно
         sessionEnded = true;
         this.userExplicitDisconnect = true;
         await this.elm.disconnect();
-        this.handleDisconnectedState();
+        await this.handleDisconnectedState();
         alert("Сброс с инициализацией выполнен! Выключите зажигание на 10 секунд, затем включите и подключитесь заново.");
       } else {
         alert("ЭБУ не подтвердил сброс (подробности во вкладке «Терминал»).");
@@ -1648,7 +1680,10 @@ class M73Application {
     } catch (err) {
       alert("Ошибка сброса: " + err.message);
     } finally {
-      if (prevPolling && !sessionEnded) this.startContinuousPolling();
+      this.isActuatorBusy = false;
+      if (prevPolling && !sessionEnded && this.elm.isConnected) {
+        this.startContinuousPolling();
+      }
     }
   }
 
