@@ -1428,19 +1428,28 @@ body {
 /* Сетка форсунок и катушек зажигания (Block 3) */
 .actuator-grid-2col {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .actuator-card-compact {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 12px;
+  padding: 9px 10px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--glass-border);
   border-radius: 14px;
   gap: 6px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.act-compact-info {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .act-compact-info strong {
@@ -1448,6 +1457,8 @@ body {
   font-size: 0.8rem;
   color: #fff;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .act-compact-info span {
@@ -1455,6 +1466,15 @@ body {
   font-size: 0.65rem;
   color: var(--text-tertiary);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.actuator-card-compact .btn-sm {
+  flex-shrink: 0;
+  padding: 5px 9px;
+  min-height: 32px;
+  font-size: 0.74rem;
 }
 
 /* Состояние работающего теста на кнопке */
