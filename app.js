@@ -369,7 +369,7 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v51.3\n\nОбновления:\n1) Устранена гонка в регуляторах ИМ: гарантированный возврат контроля ЭБУ по кнопке «Штатно»\n2) Бесшовный опрос на вкладке АЦП без замирания Гц/мс и скачков интервала в логе\n3) Полная 10-битная разрядность АЦП ДПДЗ по эталону OpenDiag (0.005 В)\n4) Адаптивный размер шрифта сплит-виджета «УОЗ / Отскок» без переполнения\n5) Идеальное выравнивание и плавающие бейджи управления в режиме редактирования");
+        alert("Диагностика М73 — Версия v51.4\n\nОбновления:\n1) Плавный 60/120 FPS скроллинг графика ДК1 (Осциллограф) по принципу честного самописца\n2) Исправлено переполнение компактного виджета ДК1: напряжение датчика гарантированно умещается в карточке\n3) Оригинальные векторные значки Apple SF Symbols для всех тестов и регуляторов во вкладке «Тесты»\n4) Замена системных эмодзи на неоновые светодиодные индикаторы и круговой спиннер");
       });
     }
 
@@ -514,7 +514,8 @@ class M73Application {
       this.shouldBeConnected = false;
       this.btnConnect.disabled = false;
       this.btnConnectText.textContent = "Подключить";
-      this.btnConnect.classList.remove('connected');
+      if (this.widgetManager) this.widgetManager.stopOscLoop();
+    this.btnConnect.classList.remove('connected');
       this.connIndicator.className = 'status-pulse';
       this.connStateText.textContent = "Не подключено";
       this.elm.log('info', 'Поиск отменён пользователем');
@@ -594,7 +595,8 @@ class M73Application {
       this.btnConnect.disabled = false;
       if (!this.elm.isConnected) {
         this.btnConnectText.textContent = "Подключить";
-        this.btnConnect.classList.remove('connected');
+        if (this.widgetManager) this.widgetManager.stopOscLoop();
+    this.btnConnect.classList.remove('connected');
         this.connIndicator.className = 'status-pulse';
         this.connStateText.textContent = "Не подключено";
       }
@@ -732,6 +734,7 @@ class M73Application {
     if (this.logger.isRecording) {
       await this.stopLogging();
     }
+    if (this.widgetManager) this.widgetManager.stopOscLoop();
     this.btnConnect.classList.remove('connected');
     this.btnConnectText.textContent = "Подключить";
     this.connIndicator.className = 'status-pulse';
@@ -1517,7 +1520,7 @@ class M73Application {
     const statusEl = document.getElementById(cfg.statusId);
     const cardEl = document.getElementById(cfg.cardId);
     if (statusEl) {
-      statusEl.textContent = isActive ? '🟢 Удерживается' : 'Штатно (ЭБУ)';
+      statusEl.innerHTML = isActive ? '<span class="badge-dot"></span>Удерживается' : '<span class="badge-dot"></span>Штатно (ЭБУ)';
       statusEl.className = `badge-health ${isActive ? 'badge-health-ok' : 'badge-health-neutral'}`;
     }
     if (cardEl) {
@@ -1557,10 +1560,10 @@ class M73Application {
       // 3. Даем шине 150 мс тишины для исключения коллизий пакетов
       await this.delay(150);
 
-      const origBtnText = btnEl ? btnEl.textContent : '';
+      const origBtnHtml = btnEl ? btnEl.innerHTML : '';
       if (btnEl) {
         btnEl.disabled = true;
-        btnEl.textContent = "⏳ Активно...";
+        btnEl.innerHTML = '<span class="act-spinner"></span>Активно...';
         btnEl.classList.add('actuator-btn-running');
       }
 
@@ -1572,7 +1575,7 @@ class M73Application {
       } finally {
         if (btnEl) {
           btnEl.disabled = false;
-          btnEl.textContent = origBtnText;
+          btnEl.innerHTML = origBtnHtml;
           btnEl.classList.remove('actuator-btn-running');
         }
         if (this.elm.isConnected && this.connStateText) {
@@ -1636,6 +1639,10 @@ class M73Application {
       this.releaseRegulator(this.activeRegulator.key, true);
     }
     this.currentTab = tabId;
+    if (this.widgetManager) {
+      if (tabId === 'tab-dashboard') this.widgetManager.ensureOscLoop();
+      else this.widgetManager.stopOscLoop();
+    }
     document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.tabbar-item, .dock-item').forEach(el => el.classList.remove('active'));
 

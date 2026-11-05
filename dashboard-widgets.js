@@ -1310,10 +1310,19 @@ class DashboardWidgetManager {
     if (typeof volt !== 'number' || isNaN(volt)) return;
     if (this.oscChannel === 'o2Volt') {
       if (!this.isOscPaused) {
+        const now = performance.now();
+        if (this._lastPointTime > 0) {
+          const delta = now - this._lastPointTime;
+          this._pointInterval = Math.max(60, Math.min(300, delta));
+        }
+        this._lastPointTime = now;
         this.oscHistory.push(volt);
         if (this.oscHistory.length > this.maxOscPoints) this.oscHistory.shift();
       }
-      this.drawOscilloscope();
+      this.ensureOscLoop();
+      if (this.isOscPaused) {
+        this.drawOscilloscope();
+      }
     }
   }
 
@@ -1333,6 +1342,13 @@ class DashboardWidgetManager {
 
       // Добавляем точку в буфер
       if (!this.isOscPaused) {
+        const now = performance.now();
+        if (this._lastPointTime > 0) {
+          const delta = now - this._lastPointTime;
+          this._pointInterval = Math.max(60, Math.min(300, delta));
+        }
+        this._lastPointTime = now;
+
         this.oscHistory.push(num);
         if (this.oscHistory.length > this.maxOscPoints) {
           this.oscHistory.shift();
@@ -1357,7 +1373,34 @@ class DashboardWidgetManager {
         if (hudDelta) hudDelta.textContent = delta.toFixed(ch.decimals);
       }
 
-      this.drawOscilloscope();
+      this.ensureOscLoop();
+      if (this.isOscPaused) {
+        this.drawOscilloscope();
+      }
+    }
+  }
+
+  ensureOscLoop() {
+    if (this._oscAnimId) return;
+    const animate = () => {
+      const dashPane = document.getElementById('tab-dashboard');
+      const isDashActive = dashPane && dashPane.classList.contains('active');
+      const isModalOpen = this.modalOsc && (this.modalOsc.classList.contains('open') || this.modalOsc.style.display === 'flex');
+
+      if ((isDashActive || isModalOpen) && this.oscHistory.length >= 2 && !this.isOscPaused) {
+        this.drawOscilloscope();
+        this._oscAnimId = requestAnimationFrame(animate);
+      } else {
+        this._oscAnimId = null;
+      }
+    };
+    this._oscAnimId = requestAnimationFrame(animate);
+  }
+
+  stopOscLoop() {
+    if (this._oscAnimId) {
+      cancelAnimationFrame(this._oscAnimId);
+      this._oscAnimId = null;
     }
   }
 
@@ -1493,7 +1536,17 @@ class DashboardWidgetManager {
 
     // Расчет экранных координат точек
     const stepX = drawW / (this.maxOscPoints - 1);
-    const startOffset = padLeft + (this.maxOscPoints - this.oscHistory.length) * stepX;
+
+    // Плавный субпиксельный сдвиг ленты по времени (интерполяция шага)
+    let subpixelShift = 0;
+    if (!this.isOscPaused && this._lastPointTime > 0) {
+      const elapsed = performance.now() - this._lastPointTime;
+      const interval = this._pointInterval || 120;
+      const progress = Math.min(1.0, elapsed / interval);
+      subpixelShift = progress * stepX;
+    }
+
+    const startOffset = padLeft + (this.maxOscPoints - this.oscHistory.length) * stepX - subpixelShift;
     const points = [];
 
     for (let i = 0; i < this.oscHistory.length; i++) {
@@ -1503,6 +1556,12 @@ class DashboardWidgetManager {
       const py = padTop + drawH * (1.0 - norm);
       points.push({ x: px, y: py, val: v });
     }
+
+    // Область отсечения волны
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(padLeft, padTop - 2, drawW, drawH + 4);
+    ctx.clip();
 
     // Плавный сплайн Безье
     ctx.beginPath();
@@ -1533,6 +1592,8 @@ class DashboardWidgetManager {
     ctx.closePath();
     ctx.fillStyle = grad;
     ctx.fill();
+
+    ctx.restore();
 
     // Неоновый маркер текущего значения
     ctx.beginPath();
