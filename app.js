@@ -372,39 +372,8 @@ class M73Application {
       });
     }
 
-    // Интеллектуальное скрытие нижнего плавающего дока при скролле вниз
-    const scrollView = document.querySelector('.app-scroll-view');
-    const dock = document.querySelector('.liquid-dock');
-    if (scrollView && dock) {
-      let lastScrollY = scrollView.scrollTop;
-      let ticking = false;
-
-      scrollView.addEventListener('scroll', () => {
-        if (!ticking) {
-          window.requestAnimationFrame(() => {
-            const currentScrollY = scrollView.scrollTop;
-            const diff = currentScrollY - lastScrollY;
-
-            // Если скроллим вниз более чем на 8px и отошли от верха — прячем док
-            if (diff > 8 && currentScrollY > 40) {
-              dock.classList.add('dock-hidden');
-            } else if (diff < -6 || currentScrollY <= 15) {
-              // Скролл вверх или возврат наверх — показываем
-              dock.classList.remove('dock-hidden');
-            }
-
-            // Если доскроллили до нижнего края — показываем док
-            if (scrollView.scrollHeight - (currentScrollY + scrollView.clientHeight) < 30) {
-              dock.classList.remove('dock-hidden');
-            }
-
-            lastScrollY = currentScrollY;
-            ticking = false;
-          });
-          ticking = true;
-        }
-      }, { passive: true });
-    }
+    // Интеллектуальное автоскрытие нижнего дока при отсутствии взаимодействия (HUD режим в поездке)
+    this.initDockAutoHide();
 
     // Режим скорости опроса K-Line: Экстрим (стандартный)
     const cadencePill = document.querySelector('.cadence-pill');
@@ -1659,9 +1628,13 @@ class M73Application {
     if (targetContent) targetContent.classList.add('active');
     if (targetNav) targetNav.classList.add('active');
 
-    // Гарантированно открываем док при переключении вкладки
-    const dock = document.querySelector('.liquid-dock');
-    if (dock) dock.classList.remove('dock-hidden');
+    // Гарантированно открываем док при переключении вкладки и перезапускаем таймер
+    if (this.resetDockTimer) {
+      this.resetDockTimer();
+    } else {
+      const dock = document.querySelector('.liquid-dock');
+      if (dock) dock.classList.remove('dock-hidden');
+    }
 
     // Кнопка настройки виджетов в шапке доступна только на приборной панели
     const btnCustomize = document.getElementById('btnCustomizeDash');
@@ -1673,6 +1646,65 @@ class M73Application {
     }
 
     if (tabId === 'tab-terminal') this.renderTerminal();
+  }
+
+  /**
+   * Интеллектуальное автоскрытие нижнего парящего дока при отсутствии взаимодействия (HUD режим в поездке):
+   * Телефон в держателе -> через 4 секунды без касаний док плавно и красиво уезжает за нижний край экрана.
+   * Любое касание экрана, тап, клик или скролл моментально возвращает док.
+   */
+  initDockAutoHide() {
+    const dock = document.querySelector('.liquid-dock');
+    if (!dock) return;
+
+    let hideTimer = null;
+    const INACTIVITY_MS = 4000; // 4 секунды неактивности до плавного скрытия
+
+    const showDock = () => {
+      dock.classList.remove('dock-hidden');
+    };
+
+    const hideDock = () => {
+      // Не прячем, если включен режим настройки виджетов или открыты модальные окна
+      if (this.widgetManager && this.widgetManager.isEditMode) return;
+      const modalOpen = document.querySelector('.modal-backdrop.open, .history-modal.open, .adc-ref-sheet.open, [style*="display: flex"].modal-backdrop');
+      if (modalOpen) return;
+
+      dock.classList.add('dock-hidden');
+    };
+
+    const resetTimer = () => {
+      showDock();
+      if (hideTimer) clearTimeout(hideTimer);
+      hideTimer = setTimeout(hideDock, INACTIVITY_MS);
+    };
+
+    // Слушаем любые события взаимодействия пользователя с экраном (тап, клик, скролл, жест)
+    const events = ['pointerdown', 'touchstart', 'scroll', 'click', 'keydown'];
+    events.forEach(ev => {
+      window.addEventListener(ev, resetTimer, { passive: true, capture: true });
+    });
+
+    const scrollView = document.querySelector('.app-scroll-view');
+    if (scrollView) {
+      scrollView.addEventListener('scroll', resetTimer, { passive: true });
+    }
+
+    // Если палец или курсор находится прямо на доке — удерживаем его открытым
+    dock.addEventListener('mouseenter', () => {
+      if (hideTimer) clearTimeout(hideTimer);
+      showDock();
+    });
+    dock.addEventListener('mouseleave', () => {
+      resetTimer();
+    });
+
+    // Запускаем таймер при старте приложения
+    resetTimer();
+
+    this.resetDockTimer = resetTimer;
+    this.showDock = showDock;
+    this.hideDock = hideDock;
   }
 
   /**
