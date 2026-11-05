@@ -201,8 +201,9 @@ class M73Application {
     this.shouldBeConnected = false;
     this.needsReconnectOnVisible = false;
 
-    // Состояние управления исполнительными механизмами и уставками (v49 Mutex)
+    // Состояние управления исполнительными механизмами и уставками (v51.3 Mutex)
     this.isActuatorBusy = false;
+    this._cancelRegulatorRequested = false;
     this.activeRegulator = null; // { key: 'rxx'|'idleRpm'|'purge', idHex: '41'|'42'|'43', rawByte: 0 }
     this.regulatorValues = {
       idleRpm: 880, // об/мин (ID 42, шаг 20/40, диапазон 600..1800)
@@ -368,7 +369,7 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v49\n\nОбновления:\n1) УОЗ и Отскок: равновеликие крупные индикаторы для мгновенного контроля детонации\n2) Защита от гонок команд (Mutex) и тайминги исполнительных механизмов\n3) Полная калибровка каналов АЦП по стандарту OpenDiag E1 (ДМРВ, ДК1, ДТВ, ДПДЗ)\n4) Точный расчет аддитивной коррекции смеси TRA (%)\n5) Интеллектуальное автоскрытие нижнего дока при скролле\n6) Монолитная сетка датчиков без сдвигов и скачков при смене значений\n7) Корректный экспорт CSV с запятой для открывания в русском Excel без дат");
+        alert("Диагностика М73 — Версия v51.3\n\nОбновления:\n1) Устранена гонка в регуляторах ИМ: гарантированный возврат контроля ЭБУ по кнопке «Штатно»\n2) Бесшовный опрос на вкладке АЦП без замирания Гц/мс и скачков интервала в логе\n3) Полная 10-битная разрядность АЦП ДПДЗ по эталону OpenDiag (0.005 В)\n4) Адаптивный размер шрифта сплит-виджета «УОЗ / Отскок» без переполнения\n5) Идеальное выравнивание и плавающие бейджи управления в режиме редактирования");
       });
     }
 
@@ -805,11 +806,14 @@ class M73Application {
           }
         } else if (this.currentTab === 'tab-adc') {
           // Вкладка АЦП: опрашиваем Кадр 3 (21 03) для оценки напряжений датчиков
-          // Каждые 4 цикла также быстро считываем 21 01, чтобы обновить RPM для точного детектора покой/запущен
+          // Каждые 4 цикла также быстро считываем 21 01, чтобы обновить RPM и записать полную точку в лог
           if ((this.adcCycleCounter || 0) % 4 === 0) {
             try {
-              await this.m73.readConfiguredCycle('2101');
-            } catch(e) {}
+              const data2101 = await this.m73.readConfiguredCycle('2101');
+              if (data2101 && this.logger.isRecording) {
+                this.logger.addPoint(data2101);
+              }
+            } catch (e) {}
           }
           this.adcCycleCounter = (this.adcCycleCounter || 0) + 1;
           const dataAdc = await this.m73.readConfiguredCycle('2103');
@@ -818,9 +822,8 @@ class M73Application {
             if (this.widgetManager) {
               this.widgetManager.updateDynamicWidgets(dataAdc);
             }
-            if (!this.logger.isRecording) {
-              this.logger.addPoint(dataAdc);
-            }
+            // Всегда обновляем частоту опроса (Гц / мс) и таймер кадра без записи пустых точек в лог
+            this.logger.updateCadenceOnly();
           } else {
             throw new Error("Пустой кадр АЦП 21 03");
           }
@@ -1437,6 +1440,7 @@ class M73Application {
     if (!cfg) return;
 
     this.isActuatorBusy = true;
+    this._cancelRegulatorRequested = false;
     const prevPolling = this.isPolling || this.shouldBeConnected;
     await this.stopPolling();
 
@@ -1450,8 +1454,17 @@ class M73Application {
 
       const rawByte = cfg.toRaw(this.regulatorValues[key]);
       await this.m73.setActuatorSetpoint(cfg.idHex, rawByte);
-      this.activeRegulator = { key, idHex: cfg.idHex, rawByte };
-      this._updateRegulatorUI(key, true);
+
+      // Если во время ожидания ответа пользователь нажал «Штатно (ЭБУ)» или сменил вкладку — немедленно возвращаем управление ЭБУ
+      if (this._cancelRegulatorRequested) {
+        await this.m73.releaseActuatorControl(cfg.idHex);
+        this.activeRegulator = null;
+        this._updateRegulatorUI(key, false);
+      } else {
+        const latestByte = cfg.toRaw(this.regulatorValues[key]);
+        this.activeRegulator = { key, idHex: cfg.idHex, rawByte: latestByte };
+        this._updateRegulatorUI(key, true);
+      }
     } catch (err) {
       alert("Ошибка установки параметра: " + err.message);
     } finally {
@@ -1467,11 +1480,14 @@ class M73Application {
     const idHex = idMap[key];
     if (!idHex) return;
 
+    // Взводим флаг отмены на случай, если applyRegulator сейчас находится в процессе отправки
+    this._cancelRegulatorRequested = true;
     if (this.activeRegulator && this.activeRegulator.key === key) {
       this.activeRegulator = null;
     }
     this._updateRegulatorUI(key, false);
 
+    // Если канал занят активным вызовом applyRegulator — он сам отправит releaseActuatorControl по флагу _cancelRegulatorRequested
     if (this.isActuatorBusy) return;
     this.isActuatorBusy = true;
 

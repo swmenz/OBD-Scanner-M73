@@ -772,13 +772,18 @@ body {
 }
 
 .tile-num-split {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   color: #fff;
   transition: color 0.2s ease, text-shadow 0.2s ease;
+}
+
+.widget-wide .tile-num-split {
+  font-size: 1.6rem;
 }
 
 .tile-num-split.active-knock {

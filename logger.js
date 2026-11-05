@@ -224,6 +224,34 @@ class TripLogger {
   }
 
   /**
+   * Обновление только метрик частоты опроса (Гц и мс) без добавления строки в массив записей лога.
+   * Используется на вкладке АЦП (21 03), чтобы индикатор частоты в шапке не замирал во время записи.
+   */
+  updateCadenceOnly() {
+    const now = performance.now();
+    if (this.lastFrameTime > 0) {
+      const deltaMs = now - this.lastFrameTime;
+      this.currentMs = Math.round(deltaMs);
+      const instantHz = 1000 / Math.max(1, deltaMs);
+
+      this.hzHistory.push(instantHz);
+      if (this.hzHistory.length > 10) this.hzHistory.shift();
+
+      const sumHz = this.hzHistory.reduce((a, b) => a + b, 0);
+      this.currentHz = parseFloat((sumHz / this.hzHistory.length).toFixed(1));
+    }
+    this.lastFrameTime = now;
+
+    if (this.onStatsUpdate) {
+      this.onStatsUpdate({
+        count: this.records.length,
+        hz: this.currentHz,
+        ms: this.currentMs
+      });
+    }
+  }
+
+  /**
    * Добавление точки данных в лог
    */
   addPoint(params) {
