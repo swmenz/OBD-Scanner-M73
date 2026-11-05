@@ -1995,6 +1995,16 @@ body {
   box-sizing: border-box;
   overflow: hidden;
   transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.2s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-widget > .glass-card,
+.dashboard-widget > .metric-tile {
+  flex: 1 1 auto;
+  height: 100%;
+  margin-bottom: 0;
+  box-sizing: border-box;
 }
 
 .dashboard-widget .glass-card {
