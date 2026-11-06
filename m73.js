@@ -9,7 +9,7 @@ class ItelmaM73Protocol {
     this.elm = elm;
     this.isInitialized = false;
 
-    // Режим Турбо v54.3: суффикс 1, чистый постоянный таймаут шины AT ST 10 (~64 мс)
+    // Режим Турбо v54.5: суффикс 1, чистый постоянный таймаут шины AT ST 10 (~64 мс)
     this.singleFrameSuffixSupported = null; // null = не проверено, true = '21011', false = '2101'
     this.fastStEnabled = true;
 
@@ -135,7 +135,7 @@ class ItelmaM73Protocol {
     await this.elm.send("AT AL");     // Разрешить длинные ответы (кадр 21 01 = 74 байта)
     await this.elm.send("AT AT 2");   // Агрессивный адаптивный тайминг (разгон)
     await this.elm.send("AT S0");     // Пробелы выкл
-    await this.elm.send("AT ST 10");  // Чистый турбо-таймаут шины v54.3 (~64 мс, максимум скорости)
+    await this.elm.send("AT ST 10");  // Чистый турбо-таймаут шины v54.5 (~64 мс, максимум скорости)
     await this.elm.send("AT SH 81 10 F1");
     await this.elm.send("AT IIA 10"); // Адрес ЭБУ для Fast Init
     await this.elm.send("AT SP 5");
@@ -200,7 +200,7 @@ class ItelmaM73Protocol {
   }
 
   /**
-   * Профиль скорости опроса K-Line (Постоянный Турбо v54.4: AT AT 2, AT ST 10, ~64 мс)
+   * Профиль скорости опроса K-Line (Постоянный Турбо v54.5: AT AT 2, AT ST 10, ~64 мс)
    */
   async setSpeedProfile(profile = 'extreme') {
     if (!this.elm || !this.elm.isConnected) return false;
@@ -209,7 +209,7 @@ class ItelmaM73Protocol {
       await this.elm.send("AT ST 10"); // ~64 мс (чистый турбо таймаут тишины)
       this.currentSpeedProfile = 'extreme';
       this.fastStEnabled = true;
-      this.elm.log('info', 'Режим скорости: Турбо v54.4 (AT AT 2, AT ST 10, ~64мс)');
+      this.elm.log('info', 'Режим скорости: Турбо v54.5 (AT AT 2, AT ST 10, ~64мс)');
       return true;
     } catch (e) {
       this.elm.log('warn', 'Ошибка установки профиля скорости: ' + (e.message || e));
@@ -229,8 +229,12 @@ class ItelmaM73Protocol {
         const probeResp = await this.elm.send(baseCmd + "1", 1000);
         const cleanProbe = (probeResp || "").replace(/[\s\r\n]/g, '').toUpperCase();
         const expectedHeader = "61" + baseCmd.substring(2, 4);
+        const idx = cleanProbe.indexOf(expectedHeader);
         const minHexLen = baseCmd === "2101" ? 132 : 28;
-        if (cleanProbe.includes(expectedHeader) && cleanProbe.length >= minHexLen) {
+        const parsedOk = baseCmd === "2101"
+          ? Boolean(this.parseFrame2101(probeResp))
+          : Boolean(this.parseFrame2103(probeResp));
+        if (idx !== -1 && (cleanProbe.length - idx) >= minHexLen && parsedOk) {
           this.singleFrameSuffixSupported = true;
           this.elm.log('info', `Турбо-опрос активирован: адаптер поддерживает ${baseCmd}1 (закрытие кадра 0 мс)`);
           return probeResp;
@@ -267,8 +271,18 @@ class ItelmaM73Protocol {
     }
 
     // По умолчанию — базовый скоростной Кадр 1 (21 01)
-    const raw1 = await this._sendFastRead("2101");
-    if (!this.parseFrame2101(raw1)) return null;
+    let raw1 = await this._sendFastRead("2101");
+    if (!this.parseFrame2101(raw1)) {
+      // Если суффикс '1' был активирован на коротком кадре 2103, но обрезал длинный 74-байтный кадр 2101
+      if (this.singleFrameSuffixSupported && raw1 && raw1.replace(/\s+/g, '').toUpperCase().includes("6101")) {
+        this.singleFrameSuffixSupported = false;
+        this.elm.log('info', 'Суффикс 1 обрезал длинный кадр 2101, переключение на стандартный 2101');
+        raw1 = await this.elm.send("2101", 1200);
+        if (!this.parseFrame2101(raw1)) return null;
+      } else {
+        return null;
+      }
+    }
 
     this.latestData.timestamp = new Date();
     return this.latestData;

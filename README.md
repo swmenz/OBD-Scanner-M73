@@ -1,6 +1,6 @@
 # Priora Diag M73 
 
-[![Release](https://img.shields.io/badge/Release-v54.4-1c1917?style=flat-square)](https://github.com/swmenz/OBD-Scanner-M73)
+[![Release](https://img.shields.io/badge/Release-v54.5-1c1917?style=flat-square)](https://github.com/swmenz/OBD-Scanner-M73)
 [![Protocol](https://img.shields.io/badge/Protocol-KWP2000%20(ISO%2014230)-1c1917?style=flat-square)](docs/protocol-and-kline.md)
 [![Transport](https://img.shields.io/badge/Transport-Web%20Bluetooth%20BLE-1c1917?style=flat-square)](https://caniuse.com/web-bluetooth)
 [![PWA](https://img.shields.io/badge/PWA-Offline--capable-1c1917?style=flat-square)](docs/pwa-and-ios-architecture.md)
@@ -140,7 +140,7 @@
 ├── dashboard-widgets.js        # Модульные виджеты панели, Jiggle Mode и осциллограф
 ├── logger.js                   # Логгер телеметрии (66 колонок), IndexedDB и экспорт XLSX/CSV
 ├── app.js                      # Главный координатор, жизненный цикл и арбитраж шины
-├── sw.js                       # Service Worker (кэш v54.4, автономный офлайн-режим)
+├── sw.js                       # Service Worker (кэш v54.5, автономный офлайн-режим)
 ├── xlsx.full.min.js            # Автономная библиотека SheetJS для генерации Excel без сети
 ├── manifest.json               # Манифест Progressive Web App для установки на домашний экран
 └── docs/                       # Углубленная техническая документация

@@ -370,17 +370,17 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v54.4\n\nОбновления:\n1) Защита Auto-Probe: проверка полной длины HEX-кадра (132 символа) для исключения ложного включения урезанных кадров 21011 на клонах ELM327\n2) Надежный Dirty Checking: сверка textContent напрямую исключает рассинхронизацию, а проверка .isConnected защищает кэш DOM при перенастройке виджетов\n3) Защита K-Line сессии: диалоговые окна подтверждения вынесены ДО отправки тестового кадра, предотвращая сброс сессии по таймауту S3\n4) Сглаживание осциллографа: устранено 4-кратное дублирование точек на вкладке АЦП\n5) Очистка потокового декодера TextDecoder при сбросах буфера приема");
+        alert("Диагностика М73 — Версия v54.5\n\nОбновления:\n1) Полная верификация Auto-Probe (21011/21031) по срезу от заголовка 61xx + валидация парсером + авто-откат при обрезке длинного кадра\n2) Надежный Dirty Checking во всех вкладках (Панель, АЦП, шапка) со сверкой напрямую с DOM и проверкой .isConnected\n3) Точный расчет частоты (Гц/мс) на вкладке АЦП при выключенной записи лога\n4) Защита K-Line сессии (диалоги подтверждения вынесены ДО опроса ЭБУ) и очереди BLE-команд при дисконнекте\n5) Оптимизация осциллографа без spread-аллокаций в цикле отрисовки 120 FPS");
       });
     }
 
     // Интеллектуальное автоскрытие нижнего дока при отсутствии взаимодействия (HUD режим в поездке)
     this.initDockAutoHide();
 
-    // Режим скорости опроса K-Line: Постоянный Турбо v54.4
+    // Режим скорости опроса K-Line: Постоянный Турбо v54.5
     const cadencePill = document.querySelector('.cadence-pill');
     if (cadencePill) {
-      cadencePill.title = 'Частота опроса K-Line: Турбо v54.4';
+      cadencePill.title = 'Частота опроса K-Line: Турбо v54.5';
       this.currentSpeedProfile = 'extreme';
 
       cadencePill.addEventListener('click', () => {
@@ -388,7 +388,7 @@ class M73Application {
           ? "Включен (21011 / 21031, закрытие кадра 0 мс)"
           : (this.m73 && this.m73.singleFrameSuffixSupported === false ? "Отключен адаптером (стандартный 2101)" : "Определяется...");
         alert(
-          `⚡ Режим опроса: Постоянный Турбо (Релиз v54.4)\n\n` +
+          `⚡ Режим опроса: Постоянный Турбо (Релиз v54.5)\n\n` +
           `• Адаптивный тайминг: AT AT 2\n` +
           `• Таймаут шины: AT ST 10 (~64 мс, постоянный Турбо)\n` +
           `• Замедленный режим AT ST 20: Полностью отключен\n` +
@@ -415,10 +415,10 @@ class M73Application {
     window.addEventListener('focus', () => this.handleWindowFocus());
 
     this.logger.onStatsUpdate = (stats) => {
-      this.hzValue.textContent = stats.hz.toFixed(1);
-      this.msValue.textContent = stats.ms;
+      this._updateText(this.hzValue, stats.hz.toFixed(1));
+      this._updateText(this.msValue, stats.ms);
       if (this.logger.isRecording) {
-        this.loggerStatsText.textContent = `Идёт запись • ${stats.count} точек (${stats.hz} Гц)`;
+        this._updateText(this.loggerStatsText, `Идёт запись • ${stats.count} точек (${stats.hz} Гц)`);
       }
     };
 
@@ -782,6 +782,7 @@ class M73Application {
   async _pollLoop() {
     let failures = 0;
     let lastTesterPresent = Date.now();
+    this.adcCycleCounter = 0;
 
     while (this.isPolling && this.elm.isConnected) {
       try {
@@ -810,7 +811,7 @@ class M73Application {
 
         // 2. Логика строго раздельного опроса (1 вкладка = 1 кадр):
         if (this.currentTab === 'tab-dashboard') {
-          // Главная панель: опрашиваем ИСКЛЮЧИТЕЛЬНО Кадр 1 (21 01) на максимальной скорости K-Line
+          // Главная панель: опрашиваем ИСКЛЮЧИЛЬНО Кадр 1 (21 01) на максимальной скорости K-Line
           const data = await this.m73.readConfiguredCycle('2101');
           if (this.widgetManager && this.widgetManager.oscChannel === 'mafAdc') {
             try { await this.m73.readConfiguredCycle('2103'); } catch (e) {}
@@ -831,6 +832,8 @@ class M73Application {
               if (data2101) {
                 if (this.logger.isRecording) {
                   this.logger.addPoint(data2101);
+                } else {
+                  this.logger.updateCadenceOnly();
                 }
                 if (this.widgetManager && this.widgetManager.oscChannel !== 'mafAdc') {
                   this.widgetManager.updateDynamicWidgets(data2101);
@@ -878,7 +881,7 @@ class M73Application {
   }
 
   /**
-   * Вспомогательные методы ультра-быстрого обновления DOM с Dirty Checking (v54.4):
+   * Вспомогательные методы ультра-быстрого обновления DOM с Dirty Checking (v54.5):
    * Исключают холостые мутации DOM (70-80% экономии процессорного времени)
    */
   _updateText(el, val) {
@@ -900,8 +903,7 @@ class M73Application {
   _setClass(el, className, condition) {
     if (!el) return;
     const has = Boolean(condition);
-    if (el['_lastClass_' + className] !== has) {
-      el['_lastClass_' + className] = has;
+    if (el.classList.contains(className) !== has) {
       if (has) el.classList.add(className);
       else el.classList.remove(className);
     }
@@ -1064,14 +1066,14 @@ class M73Application {
     const o2_2V = adc.o2_2 !== undefined ? Number(adc.o2_2) : null;
     const voltV = Number(adc.volt);
 
-    if (this.adcMaf) this.adcMaf.textContent = `${mafV.toFixed(3)} В`;
-    if (this.adcThrottle) this.adcThrottle.textContent = `${tpsV.toFixed(3)} В`;
-    if (this.adcTemp) this.adcTemp.textContent = `${tempV.toFixed(3)} В`;
-    if (this.adcAirTemp && airV !== null) this.adcAirTemp.textContent = `${airV.toFixed(3)} В`;
-    if (this.adcRoughRoad && roughV !== null) this.adcRoughRoad.textContent = `${roughV.toFixed(3)} В`;
-    if (this.adcO2) this.adcO2.textContent = `${o2V.toFixed(3)} В`;
-    if (this.adcO2_2 && o2_2V !== null) this.adcO2_2.textContent = `${o2_2V.toFixed(3)} В`;
-    if (this.adcVolt) this.adcVolt.textContent = `${voltV.toFixed(2)} В`;
+    this._updateText(this.adcMaf, `${mafV.toFixed(3)} В`);
+    this._updateText(this.adcThrottle, `${tpsV.toFixed(3)} В`);
+    this._updateText(this.adcTemp, `${tempV.toFixed(3)} В`);
+    if (airV !== null) this._updateText(this.adcAirTemp, `${airV.toFixed(3)} В`);
+    if (roughV !== null) this._updateText(this.adcRoughRoad, `${roughV.toFixed(3)} В`);
+    this._updateText(this.adcO2, `${o2V.toFixed(3)} В`);
+    if (o2_2V !== null) this._updateText(this.adcO2_2, `${o2_2V.toFixed(3)} В`);
+    this._updateText(this.adcVolt, `${voltV.toFixed(2)} В`);
 
     // Вычисляем здоровье каждого датчика и обновляем бейджи со сводкой
     this.evaluateAdcHealth(data);
@@ -1090,9 +1092,10 @@ class M73Application {
 
     const setBadge = (badgeEl, descEl, status, badgeText, descText) => {
       if (!badgeEl) return;
-      badgeEl.className = `badge-health badge-health-${status}`;
-      badgeEl.textContent = badgeText;
-      if (descEl && descText) descEl.textContent = descText;
+      const nextClass = `badge-health badge-health-${status}`;
+      if (badgeEl.className !== nextClass) badgeEl.className = nextClass;
+      this._updateText(badgeEl, badgeText);
+      if (descEl && descText) this._updateText(descEl, descText);
       if (status === 'ok') countOk++;
       else if (status === 'warn') countWarn++;
       else if (status === 'danger') countDanger++;
@@ -1221,22 +1224,27 @@ class M73Application {
     }
 
     // Обновление счетчиков
-    if (this.adcCountOk) this.adcCountOk.textContent = countOk;
-    if (this.adcCountWarn) this.adcCountWarn.textContent = countWarn;
-    if (this.adcCountDanger) this.adcCountDanger.textContent = countDanger;
+    this._updateText(this.adcCountOk, countOk);
+    this._updateText(this.adcCountWarn, countWarn);
+    this._updateText(this.adcCountDanger, countDanger);
 
     // Обновление верхнего статусного орба и подзаголовка
     if (this.adcSummaryOrb && this.adcSummaryText) {
-      this.adcSummaryOrb.className = 'adc-status-orb';
       if (countDanger > 0) {
-        this.adcSummaryOrb.classList.add('status-orb-danger');
-        this.adcSummaryText.textContent = `Обнаружены неисправности цепей: ${countDanger} датч.`;
+        if (this.adcSummaryOrb.className !== 'adc-status-orb status-orb-danger') {
+          this.adcSummaryOrb.className = 'adc-status-orb status-orb-danger';
+        }
+        this._updateText(this.adcSummaryText, `Обнаружены неисправности цепей: ${countDanger} датч.`);
       } else if (countWarn > 0) {
-        this.adcSummaryOrb.classList.add('status-orb-warn');
-        this.adcSummaryText.textContent = `Есть предупреждения по датчикам: ${countWarn} откл.`;
+        if (this.adcSummaryOrb.className !== 'adc-status-orb status-orb-warn') {
+          this.adcSummaryOrb.className = 'adc-status-orb status-orb-warn';
+        }
+        this._updateText(this.adcSummaryText, `Есть предупреждения по датчикам: ${countWarn} откл.`);
       } else {
-        this.adcSummaryOrb.classList.add('status-orb-ok');
-        this.adcSummaryText.textContent = 'Все электрические цепи датчиков соответствуют норме М73';
+        if (this.adcSummaryOrb.className !== 'adc-status-orb status-orb-ok') {
+          this.adcSummaryOrb.className = 'adc-status-orb status-orb-ok';
+        }
+        this._updateText(this.adcSummaryText, 'Все электрические цепи датчиков соответствуют норме М73');
       }
     }
   }
@@ -1265,8 +1273,7 @@ class M73Application {
   setFlag(element, isActive) {
     if (!element) return;
     const activeBool = Boolean(isActive);
-    if (element._lastActive !== activeBool) {
-      element._lastActive = activeBool;
+    if (element.classList.contains('active') !== activeBool) {
       if (activeBool) element.classList.add('active');
       else element.classList.remove('active');
     }

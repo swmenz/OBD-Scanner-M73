@@ -1487,8 +1487,13 @@ class DashboardWidgetManager {
     let yMax = ch.max;
 
     if (this.isOscAutoScale && this.oscHistory.length >= 2) {
-      const histMin = Math.min(...this.oscHistory);
-      const histMax = Math.max(...this.oscHistory);
+      let histMin = this.oscHistory[0];
+      let histMax = this.oscHistory[0];
+      for (let i = 1; i < this.oscHistory.length; i++) {
+        const v = this.oscHistory[i];
+        if (v < histMin) histMin = v;
+        if (v > histMax) histMax = v;
+      }
       const delta = histMax - histMin;
       const margin = delta > 0.0001 ? delta * 0.16 : (Math.abs(histMin) * 0.1 || 1.0);
       yMin = histMin - margin;
@@ -1660,7 +1665,11 @@ class DashboardWidgetManager {
     this.feedOscilloscope(data);
 
     // Кэш только РЕАЛЬНО отображаемых на панели дополнительных датчиков
-    if (!this._cachedActiveSensors || this._activeSensorsDirty) {
+    if (
+      !this._cachedActiveSensors ||
+      this._activeSensorsDirty ||
+      (this._cachedActiveSensors.length > 0 && !this._cachedActiveSensors[0].el.isConnected)
+    ) {
       this._cachedActiveSensors = [];
       this.extraSensorsCatalog.forEach(s => {
         const el = document.getElementById(`val_${s.id}`);
@@ -1676,8 +1685,7 @@ class DashboardWidgetManager {
       if (data[s.field] !== undefined && data[s.field] !== null) {
         const val = Number(data[s.field]);
         const str = isNaN(val) ? String(data[s.field]) : val.toFixed(s.decimals);
-        if (el._lastVal !== str) {
-          el._lastVal = str;
+        if (el.textContent !== str) {
           el.textContent = str;
         }
       }
