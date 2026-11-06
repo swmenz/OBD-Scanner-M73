@@ -370,25 +370,52 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v54.1\n\nОбновления:\n1) Устранена задержка rAF: убран конфликт планировщика отрисовки с шиной K-Line, восстановлена максимальная частота опроса\n2) Синхронный микро-рендеринг: сверхбыстрый Dirty Checking (<0.3 мс) без задержки следующего кадра\n3) Умный осциллограф: холостой цикл 60 FPS отключается, если график не на экране\n4) Частота опроса: стабильные 4.6–4.8 Гц на приборной панели и до 5.1 Гц на АЦП");
+        alert("Диагностика М73 — Версия v54.2\n\nОбновления:\n1) Устранено залипание таймаута: добавлен двусторонний Auto-Recovery шины K-Line — при стабильных ответах приложение автоматически возвращает турбо-режим AT ST 12 (~72 мс, 4.6–4.8 Гц)\n2) Оптимизирован турбо-таймаут шины: вместо пограничных 64 мс установлен сбалансированный AT ST 12 (~72 мс), устраняющий ложные отсечки на 79-байтных кадрах\n3) Умный арбитраж таймаутов: порог защитного отката увеличен с 3 до 6 таймаутов, а переключение вкладок больше не провоцирует ложное снижение скорости\n4) Ручной сброс из плашки частоты: тап по плашке позволяет мгновенно перезапустить турбо-режим\n5) Синхронный микро-рендеринг: Dirty Checking (<0.3 мс) обеспечивает мгновенное обновление приборов");
       });
     }
 
     // Интеллектуальное автоскрытие нижнего дока при отсутствии взаимодействия (HUD режим в поездке)
     this.initDockAutoHide();
 
-    // Режим скорости опроса K-Line: Турбо v54.1
+    // Режим скорости опроса K-Line: Турбо v54.2
     const cadencePill = document.querySelector('.cadence-pill');
     if (cadencePill) {
-      cadencePill.title = 'Частота опроса K-Line: Турбо v54.1';
+      cadencePill.title = 'Частота опроса K-Line: Турбо v54.2';
       this.currentSpeedProfile = 'extreme';
 
-      cadencePill.addEventListener('click', () => {
+      cadencePill.addEventListener('click', async () => {
         const suffixInfo = this.m73 && this.m73.singleFrameSuffixSupported === true
           ? "Включен (21011 / 21031, закрытие кадра 0 мс)"
           : (this.m73 && this.m73.singleFrameSuffixSupported === false ? "Отключен адаптером (стандартный 2101)" : "Определяется...");
-        const stInfo = this.m73 && this.m73.fastStEnabled ? "AT ST 10 (~64 мс)" : "AT ST 20 (~128 мс, авто-откат)";
-        alert(`⚡ Режим опроса: Турбо (Релиз v54.1)\n\n• Адаптивный тайминг: AT AT 2\n• Таймаут шины: ${stInfo}\n• Турбо-суффикс кадра: ${suffixInfo}\n• Прямой микро-рендеринг с Dirty Checking\n• Частота опроса: 4.6–4.8 Гц (до 5.1 Гц на АЦП)`);
+        const isTurbo = this.m73 && this.m73.fastStEnabled;
+        const stInfo = isTurbo
+          ? "AT ST 12 (~72 мс, Турбо 4.6–4.8 Гц)"
+          : "AT ST 20 (~128 мс, защитный откат, авто-восстановление активно)";
+
+        if (!isTurbo && this.elm && this.elm.isConnected) {
+          const restore = confirm(
+            `⚡ Режим опроса: Защитный откат (Релиз v54.2)\n\n` +
+            `• Адаптивный тайминг: AT AT 2\n` +
+            `• Таймаут шины: ${stInfo}\n` +
+            `• Турбо-суффикс: ${suffixInfo}\n` +
+            `• Прямой микро-рендеринг: Dirty Checking (<0.3 мс)\n` +
+            `• Авто-восстановление: Включено (вернет Турбо через 12 кадров)\n\n` +
+            `Вернуть турбо-режим AT ST 12 (4.6–4.8 Гц) прямо сейчас?`
+          );
+          if (restore && this.m73) {
+            await this.m73.restoreTurboMode();
+          }
+        } else {
+          alert(
+            `⚡ Режим опроса: Турбо (Релиз v54.2)\n\n` +
+            `• Адаптивный тайминг: AT AT 2\n` +
+            `• Таймаут шины: ${stInfo}\n` +
+            `• Турбо-суффикс: ${suffixInfo}\n` +
+            `• Прямой микро-рендеринг: Dirty Checking (<0.3 мс)\n` +
+            `• Авто-восстановление шины: Включено\n` +
+            `• Частота опроса: 4.6–4.8 Гц (до 5.1 Гц на АЦП)`
+          );
+        }
       });
     }
 
@@ -897,7 +924,7 @@ class M73Application {
   }
 
   /**
-   * Отрисовка значений приборной панели (с поддержкой Dirty Checking v54.1)
+   * Отрисовка значений приборной панели (с поддержкой Dirty Checking v54.2)
    */
   updateDashboardUI(data) {
     if (!data) return;
@@ -1737,6 +1764,9 @@ class M73Application {
       }
     }
     this.currentTab = tabId;
+    if (this.m73) {
+      this.m73.consecutiveTimeouts = 0;
+    }
     if (tabId === 'tab-dashboard') {
       if (this.widgetManager) this.widgetManager.ensureOscLoop();
       if (this.m73 && this.m73.latestData) this.updateDashboardUI(this.m73.latestData);
