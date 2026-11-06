@@ -1221,7 +1221,10 @@ class DashboardWidgetManager {
     this.o2History = this.oscHistory;
 
     const valEl = document.getElementById('valO2Volt');
-    if (valEl) valEl.style.color = '';
+    if (valEl) {
+      valEl.style.color = '';
+      valEl._lastStyle_color = '';
+    }
 
     const tileSelect = document.getElementById('oscWidgetChannelSelect');
     if (tileSelect) tileSelect.value = chId;
@@ -1282,7 +1285,10 @@ class DashboardWidgetManager {
     this.o2History = this.oscHistory;
 
     const valEl = document.getElementById('valO2Volt');
-    if (valEl) valEl.style.color = '';
+    if (valEl) {
+      valEl.style.color = '';
+      valEl._lastStyle_color = '';
+    }
     const currEl = document.getElementById('oscHudCurr');
     const minEl = document.getElementById('oscHudMin');
     const maxEl = document.getElementById('oscHudMax');
@@ -1337,11 +1343,12 @@ class DashboardWidgetManager {
       const num = Number(val);
 
       // Обновляем мини-значение на плитке виджета (кэшированный элемент + dirty check)
-      if (!this._valO2VoltEl) this._valO2VoltEl = document.getElementById('valO2Volt');
+      if (!this._valO2VoltEl || !this._valO2VoltEl.isConnected) {
+        this._valO2VoltEl = document.getElementById('valO2Volt');
+      }
       if (this._valO2VoltEl) {
         const str = num.toFixed(ch.decimals);
-        if (this._valO2VoltEl._lastVal !== str) {
-          this._valO2VoltEl._lastVal = str;
+        if (this._valO2VoltEl.textContent !== str) {
           this._valO2VoltEl.textContent = str;
         }
       }
@@ -1373,7 +1380,7 @@ class DashboardWidgetManager {
         const curVal = this.oscHistory[this.oscHistory.length - 1];
         const delta = maxVal - minVal;
 
-        if (!this._hudElements) {
+        if (!this._hudElements || !this._hudElements.curr || !this._hudElements.curr.isConnected) {
           this._hudElements = {
             curr: document.getElementById('oscHudCurr'),
             min: document.getElementById('oscHudMin'),
@@ -1388,10 +1395,10 @@ class DashboardWidgetManager {
         const sMax = maxVal.toFixed(ch.decimals);
         const sDel = delta.toFixed(ch.decimals);
 
-        if (h.curr && h.curr._lastVal !== sCur) { h.curr._lastVal = sCur; h.curr.textContent = sCur; }
-        if (h.min && h.min._lastVal !== sMin) { h.min._lastVal = sMin; h.min.textContent = sMin; }
-        if (h.max && h.max._lastVal !== sMax) { h.max._lastVal = sMax; h.max.textContent = sMax; }
-        if (h.delta && h.delta._lastVal !== sDel) { h.delta._lastVal = sDel; h.delta.textContent = sDel; }
+        if (h.curr && h.curr.textContent !== sCur) h.curr.textContent = sCur;
+        if (h.min && h.min.textContent !== sMin) h.min.textContent = sMin;
+        if (h.max && h.max.textContent !== sMax) h.max.textContent = sMax;
+        if (h.delta && h.delta.textContent !== sDel) h.delta.textContent = sDel;
       }
 
       this.ensureOscLoop();

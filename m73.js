@@ -200,7 +200,7 @@ class ItelmaM73Protocol {
   }
 
   /**
-   * Профиль скорости опроса K-Line (Постоянный Турбо v54.3: AT AT 2, AT ST 10, ~64 мс)
+   * Профиль скорости опроса K-Line (Постоянный Турбо v54.4: AT AT 2, AT ST 10, ~64 мс)
    */
   async setSpeedProfile(profile = 'extreme') {
     if (!this.elm || !this.elm.isConnected) return false;
@@ -209,7 +209,7 @@ class ItelmaM73Protocol {
       await this.elm.send("AT ST 10"); // ~64 мс (чистый турбо таймаут тишины)
       this.currentSpeedProfile = 'extreme';
       this.fastStEnabled = true;
-      this.elm.log('info', 'Режим скорости: Турбо v54.3 (AT AT 2, AT ST 10, ~64мс)');
+      this.elm.log('info', 'Режим скорости: Турбо v54.4 (AT AT 2, AT ST 10, ~64мс)');
       return true;
     } catch (e) {
       this.elm.log('warn', 'Ошибка установки профиля скорости: ' + (e.message || e));
@@ -229,7 +229,8 @@ class ItelmaM73Protocol {
         const probeResp = await this.elm.send(baseCmd + "1", 1000);
         const cleanProbe = (probeResp || "").replace(/[\s\r\n]/g, '').toUpperCase();
         const expectedHeader = "61" + baseCmd.substring(2, 4);
-        if (cleanProbe.includes(expectedHeader) && cleanProbe.length >= 28) {
+        const minHexLen = baseCmd === "2101" ? 132 : 28;
+        if (cleanProbe.includes(expectedHeader) && cleanProbe.length >= minHexLen) {
           this.singleFrameSuffixSupported = true;
           this.elm.log('info', `Турбо-опрос активирован: адаптер поддерживает ${baseCmd}1 (закрытие кадра 0 мс)`);
           return probeResp;

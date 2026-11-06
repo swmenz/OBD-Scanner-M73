@@ -370,17 +370,17 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v54.3\n\nОбновления:\n1) Исправлена ошибка подключения: устранен сбой 'valPeakRpm is null' при удаленных виджетах приборной панели\n2) Чистый постоянный Турбо-режим AT ST 10 (~64 мс): медленный таймаут AT ST 20 полностью удален из кода\n3) Устранено замедление при сворачивании: сворачивание приложения или переключение на музыку/навигатор больше никогда не переключает адаптер в медленный режим\n4) Максимальная скорость K-Line: стабильные 4.6–4.8 Гц на приборной панели и до 5.1 Гц на вкладке АЦП");
+        alert("Диагностика М73 — Версия v54.4\n\nОбновления:\n1) Защита Auto-Probe: проверка полной длины HEX-кадра (132 символа) для исключения ложного включения урезанных кадров 21011 на клонах ELM327\n2) Надежный Dirty Checking: сверка textContent напрямую исключает рассинхронизацию, а проверка .isConnected защищает кэш DOM при перенастройке виджетов\n3) Защита K-Line сессии: диалоговые окна подтверждения вынесены ДО отправки тестового кадра, предотвращая сброс сессии по таймауту S3\n4) Сглаживание осциллографа: устранено 4-кратное дублирование точек на вкладке АЦП\n5) Очистка потокового декодера TextDecoder при сбросах буфера приема");
       });
     }
 
     // Интеллектуальное автоскрытие нижнего дока при отсутствии взаимодействия (HUD режим в поездке)
     this.initDockAutoHide();
 
-    // Режим скорости опроса K-Line: Постоянный Турбо v54.3
+    // Режим скорости опроса K-Line: Постоянный Турбо v54.4
     const cadencePill = document.querySelector('.cadence-pill');
     if (cadencePill) {
-      cadencePill.title = 'Частота опроса K-Line: Турбо v54.3';
+      cadencePill.title = 'Частота опроса K-Line: Турбо v54.4';
       this.currentSpeedProfile = 'extreme';
 
       cadencePill.addEventListener('click', () => {
@@ -388,7 +388,7 @@ class M73Application {
           ? "Включен (21011 / 21031, закрытие кадра 0 мс)"
           : (this.m73 && this.m73.singleFrameSuffixSupported === false ? "Отключен адаптером (стандартный 2101)" : "Определяется...");
         alert(
-          `⚡ Режим опроса: Постоянный Турбо (Релиз v54.3)\n\n` +
+          `⚡ Режим опроса: Постоянный Турбо (Релиз v54.4)\n\n` +
           `• Адаптивный тайминг: AT AT 2\n` +
           `• Таймаут шины: AT ST 10 (~64 мс, постоянный Турбо)\n` +
           `• Замедленный режим AT ST 20: Полностью отключен\n` +
@@ -573,7 +573,7 @@ class M73Application {
       this.connStateText.textContent = "Подключено к ЭБУ";
       this.btnToggleLog.disabled = false;
       this.peakRpm = 0;
-      if (this.valPeakRpm) this.valPeakRpm.textContent = "Пик: 0";
+      this._updateText(this.valPeakRpm, "Пик: 0");
 
       // Скрываем прошлый баннер о сохранённой поездке
       if (this.tripSavedAlert) this.tripSavedAlert.style.display = 'none';
@@ -828,8 +828,13 @@ class M73Application {
           if ((this.adcCycleCounter || 0) % 4 === 0) {
             try {
               const data2101 = await this.m73.readConfiguredCycle('2101');
-              if (data2101 && this.logger.isRecording) {
-                this.logger.addPoint(data2101);
+              if (data2101) {
+                if (this.logger.isRecording) {
+                  this.logger.addPoint(data2101);
+                }
+                if (this.widgetManager && this.widgetManager.oscChannel !== 'mafAdc') {
+                  this.widgetManager.updateDynamicWidgets(data2101);
+                }
               }
             } catch (e) {}
           }
@@ -837,7 +842,7 @@ class M73Application {
           const dataAdc = await this.m73.readConfiguredCycle('2103');
           if (dataAdc) {
             this.updateAdcUI(dataAdc);
-            if (this.widgetManager) {
+            if (this.widgetManager && this.widgetManager.oscChannel === 'mafAdc') {
               this.widgetManager.updateDynamicWidgets(dataAdc);
             }
             // Всегда обновляем частоту опроса (Гц / мс) и таймер кадра без записи пустых точек в лог
@@ -873,21 +878,20 @@ class M73Application {
   }
 
   /**
-   * Вспомогательные методы ультра-быстрого обновления DOM с Dirty Checking (v54):
+   * Вспомогательные методы ультра-быстрого обновления DOM с Dirty Checking (v54.4):
    * Исключают холостые мутации DOM (70-80% экономии процессорного времени)
    */
   _updateText(el, val) {
     if (!el || val === undefined || val === null) return;
     const str = typeof val === 'string' ? val : String(val);
-    if (el._lastVal !== str) {
-      el._lastVal = str;
+    if (el.textContent !== str) {
       el.textContent = str;
     }
   }
 
   _setStyle(el, prop, val) {
     if (!el) return;
-    if (el['_lastStyle_' + prop] !== val) {
+    if (el['_lastStyle_' + prop] !== val || el.style[prop] !== val) {
       el['_lastStyle_' + prop] = val;
       el.style[prop] = val;
     }
@@ -904,7 +908,7 @@ class M73Application {
   }
 
   /**
-   * Отрисовка значений приборной панели (с поддержкой Dirty Checking v54.3)
+   * Отрисовка значений приборной панели (с поддержкой Dirty Checking v54.4)
    */
   updateDashboardUI(data) {
     if (!data) return;
@@ -1251,8 +1255,7 @@ class M73Application {
   updateMisfireBox(el, val) {
     if (!el || val === undefined || val === null) return;
     const str = String(val);
-    if (el._lastVal !== str) {
-      el._lastVal = str;
+    if (el.textContent !== str) {
       el.textContent = str;
       if (Number(val) > 0) el.classList.add('has-misfires');
       else el.classList.remove('has-misfires');
@@ -1496,18 +1499,17 @@ class M73Application {
     await this.stopPolling();
 
     try {
-      // При первичном включении (!skipConfirm) опрашиваем свежий кадр 21 01 для проверки стоянки (speed == 0)
+      // При первичном включении (!skipConfirm) сначала запрашиваем подтверждение, затем опрашиваем свежий кадр 21 01
       if (!skipConfirm) {
+        if (!confirm("Внимание! Ручное управление уставками разрешено выполнять только на стоянке автомобиля. Применить выбранное значение?")) {
+          return;
+        }
         try {
           await this.m73.readConfiguredCycle('2101');
         } catch (e) {}
 
         if (this.m73.latestData && this.m73.latestData.speed > 0) {
           alert("Внимание! Ручное управление уставками разрешено только на стоянке (скорость 0 км/ч). При движении автомобиля управление блокируется в целях безопасности.");
-          return;
-        }
-
-        if (!confirm("Внимание! Ручное управление уставками разрешено выполнять только на стоянке автомобиля. Применить выбранное значение?")) {
           return;
         }
       } else if (this.m73.latestData && this.m73.latestData.speed > 0) {
@@ -1637,18 +1639,19 @@ class M73Application {
         try { await this.m73.releaseActuatorControl(prevIdHex); } catch (e) {}
       }
 
-      // 1. Опрашиваем актуальный статус перед тестом (проверка заглушен ли мотор)
+      // 1. Запрашиваем подтверждение пользователя ДО блокировки шины
+      if (!confirm("Внимание! Тест исполнительного механизма разрешено выполнять только на стоянке при заглушенном двигателе и включенном зажигании. Запустить тест?")) {
+        return;
+      }
+
+      // 2. Сразу после подтверждения опрашиваем свежий кадр 21 01 (пробуждает K-Line и проверяет условия безопасности)
       try {
         await this.m73.readConfiguredCycle('2101');
       } catch (e) {}
 
-      // 2. Проверка условий безопасности: дискретные тесты разрешены ТОЛЬКО при RPM == 0 и SPEED == 0
+      // 3. Проверка условий безопасности: дискретные тесты разрешены ТОЛЬКО при RPM == 0 и SPEED == 0
       if (this.m73.latestData && (this.m73.latestData.rpm > 0 || this.m73.latestData.speed > 0)) {
         alert("Внимание! Тесты реле, форсунок и катушек зажигания разрешены только на СТОЯНКЕ (скорость 0 км/ч) при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nЭБУ M73 аппаратно блокирует тесты при движении или заведённом моторе.");
-        return;
-      }
-
-      if (!confirm("Внимание! Тест исполнительного механизма разрешено выполнять только на стоянке при заглушенном двигателе и включенном зажигании. Запустить тест?")) {
         return;
       }
 
@@ -1697,18 +1700,19 @@ class M73Application {
 
     let sessionEnded = false;
     try {
-      // Опрашиваем актуальный статус перед сбросом (проверка заглушен ли мотор и стоит ли машина)
+      // 1. Запрашиваем подтверждение пользователя ДО остановки шины и проверок
+      if (!confirm("Внимание! Будут сброшены таблицы самообучения топлива и угла зажигания М73 к заводским значениям. Двигатель должен быть заглушен, зажигание включено. Продолжить?")) {
+        return;
+      }
+
+      // 2. Опрашиваем актуальный статус перед сбросом (проверка заглушен ли мотор и стоит ли машина)
       try {
         await this.m73.readConfiguredCycle('2101');
       } catch (e) {}
 
-      // Проверка условий безопасности: сброс ЭБУ разрешен ТОЛЬКО при RPM == 0 и SPEED == 0
+      // 3. Проверка условий безопасности: сброс ЭБУ разрешен ТОЛЬКО при RPM == 0 и SPEED == 0
       if (this.m73.latestData && (this.m73.latestData.rpm > 0 || this.m73.latestData.speed > 0)) {
         alert("Внимание! Сброс ЭБУ с инициализацией разрешен только на СТОЯНКЕ (скорость 0 км/ч) при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nПерезапуск контроллера при заведённом двигателе или во время движения строго запрещен.");
-        return;
-      }
-
-      if (!confirm("Внимание! Будут сброшены таблицы самообучения топлива и угла зажигания М73 к заводским значениям. Двигатель должен быть заглушен, зажигание включено. Продолжить?")) {
         return;
       }
 
@@ -1744,9 +1748,6 @@ class M73Application {
       }
     }
     this.currentTab = tabId;
-    if (this.m73) {
-      this.m73.consecutiveTimeouts = 0;
-    }
     if (tabId === 'tab-dashboard') {
       if (this.widgetManager) this.widgetManager.ensureOscLoop();
       if (this.m73 && this.m73.latestData) this.updateDashboardUI(this.m73.latestData);

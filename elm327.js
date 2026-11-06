@@ -13,6 +13,7 @@ class Elm327BLE {
     
     this.isConnected = false;
     this.rxBuffer = "";
+    if (this._decoder) this._decoder.decode();
     this.activeResolver = null;
     this.activeRejecter = null;
     this.commandTimeoutTimer = null;
@@ -42,6 +43,7 @@ class Elm327BLE {
     this.activeResolver = null;
     this.activeRejecter = null;
     this.rxBuffer = "";
+    if (this._decoder) this._decoder.decode();
     if (pendingReject) pendingReject(new Error("Связь с адаптером потеряна"));
     this.log('err', 'Связь с Bluetooth адаптером разорвана');
     if (this.onDisconnect) this.onDisconnect();
@@ -164,6 +166,7 @@ class Elm327BLE {
     this.activeResolver = null;
     this.activeRejecter = null;
     this.rxBuffer = "";
+    if (this._decoder) this._decoder.decode();
     if (pendingReject) {
       try { pendingReject(new Error("Переподключение")); } catch (e) {}
     }
@@ -259,6 +262,7 @@ class Elm327BLE {
 
       const fullResponse = this.rxBuffer.replace(/>/g, '').trim();
       this.rxBuffer = "";
+    if (this._decoder) this._decoder.decode();
 
       if (this.activeResolver) {
         const resolve = this.activeResolver;
@@ -278,6 +282,7 @@ class Elm327BLE {
     this._queue = this._queue.catch(() => {}).then(() => {
       return new Promise((resolve, reject) => {
         this.rxBuffer = "";
+    if (this._decoder) this._decoder.decode();
 
         const cleanCmd = command.trim() + "\r";
         const data = this._encoder.encode(cleanCmd);
@@ -293,6 +298,7 @@ class Elm327BLE {
         this.commandTimeoutTimer = setTimeout(() => {
           const partial = this.rxBuffer;
           this.rxBuffer = "";
+    if (this._decoder) this._decoder.decode();
           this.activeResolver = null;
           this.activeRejecter = null;
           this.log('err', `Таймаут команды ${command} (${timeoutMs}мс)`);
@@ -331,6 +337,7 @@ class Elm327BLE {
     this.activeResolver = null;
     this.activeRejecter = null;
     this.rxBuffer = "";
+    if (this._decoder) this._decoder.decode();
     if (pendingReject) {
       pendingReject(new Error("Соединение с адаптером разорвано"));
     }
