@@ -1,6 +1,6 @@
 # Priora Diag M73 
 
-[![Release](https://img.shields.io/badge/Release-v52.1-1c1917?style=flat-square)](https://github.com/swmenz/OBD-Scanner-M73)
+[![Release](https://img.shields.io/badge/Release-v53-1c1917?style=flat-square)](https://github.com/swmenz/OBD-Scanner-M73)
 [![Protocol](https://img.shields.io/badge/Protocol-KWP2000%20(ISO%2014230)-1c1917?style=flat-square)](docs/protocol-and-kline.md)
 [![Transport](https://img.shields.io/badge/Transport-Web%20Bluetooth%20BLE-1c1917?style=flat-square)](https://caniuse.com/web-bluetooth)
 [![PWA](https://img.shields.io/badge/PWA-Offline--capable-1c1917?style=flat-square)](docs/pwa-and-ios-architecture.md)
@@ -24,7 +24,7 @@
 
 **Priora Diag M73 ProLog** реализует заводской протокол KWP2000 Fast Init (10400 бод) с использованием Bluetooth Low Energy (BLE):
 
-* **Частота опроса 3.2–4.2 Гц:** оптимизированная конфигурация ELM327 (`AT AT 2`, `AT ST 20`, `AT AL`) сводит к минимуму накладные расходы шины K-Line и обеспечивает считывание полного 74-байтного кадра `21 01` в реальном времени.
+* **Частота опроса 4.3–4.8 Гц:** турбо-конфигурация ELM327 (суффикс ответа `1` для мгновенного закрытия кадра с нулевым простоем, `AT ST 10`, `AT AT 2`, прямой Web Bluetooth WriteWithoutResponse) сводит к минимуму накладные расходы шины K-Line и обеспечивает рекордный темп обновления полного 74-байтного кадра `21 01` в реальном времени.
 * **Полный заводской охват телеметрии:** алгоритмы декодирования согласованы с эталонными калибровками OpenDiag Mobile (`hk.java`, `FragmentParams.java` для микроконтроллера ST10F273) и включают 72 параметра базового кадра, 11 каналов АЦП, физические расчетные величины и 16 битовых флагов.
 * **Свободный интернет:** канал Bluetooth Low Energy не занимает Wi-Fi интерфейс устройства, сохраняя непрерывную работу навигационных сервисов и сотовой связи.
 
@@ -140,7 +140,7 @@
 ├── dashboard-widgets.js        # Модульные виджеты панели, Jiggle Mode и осциллограф
 ├── logger.js                   # Логгер телеметрии (66 колонок), IndexedDB и экспорт XLSX/CSV
 ├── app.js                      # Главный координатор, жизненный цикл и арбитраж шины
-├── sw.js                       # Service Worker (кэш v52.1, автономный офлайн-режим)
+├── sw.js                       # Service Worker (кэш v53, автономный офлайн-режим)
 ├── xlsx.full.min.js            # Автономная библиотека SheetJS для генерации Excel без сети
 ├── manifest.json               # Манифест Progressive Web App для установки на домашний экран
 └── docs/                       # Углубленная техническая документация

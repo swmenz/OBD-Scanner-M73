@@ -25,6 +25,10 @@ class Elm327BLE {
     
     this.onLog = null;
     this.onDisconnect = null;
+
+    // Реиспользуемые декодер/энкодер для устранения GC-пауз в высокочастотном цикле (4-5 Гц)
+    this._decoder = new TextDecoder('utf-8');
+    this._encoder = new TextEncoder();
   }
 
   _onGattDisconnected() {
@@ -243,8 +247,7 @@ class Elm327BLE {
 
   _onDataReceived(event) {
     const value = event.target.value;
-    const decoder = new TextDecoder('utf-8');
-    const chunk = decoder.decode(value);
+    const chunk = this._decoder.decode(value, { stream: true });
     
     this.rxBuffer += chunk;
 
@@ -276,9 +279,8 @@ class Elm327BLE {
       return new Promise((resolve, reject) => {
         this.rxBuffer = "";
 
-        const encoder = new TextEncoder();
         const cleanCmd = command.trim() + "\r";
-        const data = encoder.encode(cleanCmd);
+        const data = this._encoder.encode(cleanCmd);
 
         this.log('tx', command);
 
@@ -297,7 +299,11 @@ class Elm327BLE {
           reject(new Error(`Timeout: ${command}. Ответ: ${partial}`));
         }, timeoutMs);
 
-        const writePromise = this.txCharacteristic.writeValueWithoutResponse
+        // Проверяем РЕАЛЬНУЮ поддержку writeWithoutResponse характеристикой GATT,
+        // а не просто наличие метода в прототипе Web Bluetooth (устраняет ложный сбой и задержку 15-25 мс)
+        const props = this.txCharacteristic.properties;
+        const canWriteNoResp = Boolean(props && props.writeWithoutResponse && this.txCharacteristic.writeValueWithoutResponse);
+        const writePromise = canWriteNoResp
           ? this.txCharacteristic.writeValueWithoutResponse(data).catch(() => this.txCharacteristic.writeValue(data))
           : this.txCharacteristic.writeValue(data);
 

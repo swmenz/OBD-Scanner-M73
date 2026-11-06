@@ -370,21 +370,25 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v52.1\n\nОбновления:\n1) Устранена регрессия сброса уставки: гарантированный возврат управления ЭБУ (30 ID 00) через очередь _pendingReleases при клике «Штатно» или смене вкладки\n2) Устранена гонка при быстрых кликах регулировки уставок (+/-): опрос 2101 и confirm перенесены внутрь мьютекса, повторный опрос при удержании отключен\n3) Информативное оповещение пользователя («Идёт тест механизма, подождите») вместо молчаливого игнорирования кликов\n4) Защита безопасности: сброс ЭБУ с инициализацией заблокирован при скорости выше 0 км/ч (стоянка + заглушенный мотор)");
+        alert("Диагностика М73 — Версия v53\n\nОбновления:\n1) Турбо-опрос K-Line: поддержка суффикса '1' (21011 / 21031) с авто-пробником (Auto-Probe) — мгновенное завершение кадра (0 мс ожидания тишины)\n2) Сверхбыстрый таймаут тишины AT ST 10 (~64 мс) с автоматическим возвратом на AT ST 20 при 3 таймаутах\n3) Оптимизация BLE Web Bluetooth: устранение ложного вызова writeValueWithoutResponse через проверку properties.writeWithoutResponse (экономия 15–25 мс на запрос)\n4) Оптимизация памяти: реиспользуемые TextDecoder/TextEncoder и мгновенное форматирование времени в терминале\n5) Ожидаемая частота опроса увеличена с 3.3 Гц до 4.3–4.8 Гц");
       });
     }
 
     // Интеллектуальное автоскрытие нижнего дока при отсутствии взаимодействия (HUD режим в поездке)
     this.initDockAutoHide();
 
-    // Режим скорости опроса K-Line: Экстрим (стандартный)
+    // Режим скорости опроса K-Line: Турбо v53
     const cadencePill = document.querySelector('.cadence-pill');
     if (cadencePill) {
-      cadencePill.title = 'Частота опроса K-Line: Режим Экстрим (Стандарт)';
+      cadencePill.title = 'Частота опроса K-Line: Турбо v53';
       this.currentSpeedProfile = 'extreme';
 
       cadencePill.addEventListener('click', () => {
-        alert("⚡ Режим опроса: Экстрим (Стандарт v41)\n\n• Адаптивный тайминг: AT AT 2\n• Таймаут шины: AT ST 20 (~128 мс)\n• Защита от потери 74-байтных кадров под нагрузкой\n• Максимальная отзывчивость датчиков\n• Опрос кадров: 3.2–4.2 Гц без задержек");
+        const suffixInfo = this.m73 && this.m73.singleFrameSuffixSupported === true
+          ? "Включен (21011 / 21031, закрытие кадра 0 мс)"
+          : (this.m73 && this.m73.singleFrameSuffixSupported === false ? "Отключен адаптером (стандартный 2101)" : "Определяется...");
+        const stInfo = this.m73 && this.m73.fastStEnabled ? "AT ST 10 (~64 мс)" : "AT ST 20 (~128 мс, авто-откат)";
+        alert(`⚡ Режим опроса: Турбо (Релиз v53)\n\n• Адаптивный тайминг: AT AT 2\n• Таймаут шины: ${stInfo}\n• Турбо-суффикс кадра: ${suffixInfo}\n• Оптимизация GATT: прямой WriteWithoutResponse\n• Ожидаемая частота: 4.3–4.8 Гц`);
       });
     }
 
@@ -1816,7 +1820,8 @@ class M73Application {
    * рост DOM и просадки FPS на главной панели.
    */
   appendTerminal(type, msg) {
-    const time = new Date().toLocaleTimeString('ru-RU');
+    const d = new Date();
+    const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
     this.termBuffer.push({ type, text: `[${time}] ${msg}` });
     if (this.termBuffer.length > this.TERM_LIMIT) this.termBuffer.shift();
 

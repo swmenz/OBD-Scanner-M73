@@ -9,6 +9,11 @@ class ItelmaM73Protocol {
     this.elm = elm;
     this.isInitialized = false;
 
+    // Режим Турбо v53: суффикс 1 для мгновенного завершения кадра и адаптивный таймаут тишины
+    this.singleFrameSuffixSupported = null; // null = не проверено, true = '21011', false = '2101'
+    this.consecutiveTimeouts = 0;
+    this.fastStEnabled = true;
+
     // Кэш для объединения данных из всех параметров ЭБУ (Кадр 21 01 и 21 03)
     // Полный эталонный набор параметров OpenDiag Mobile и ReadLogs (83 канала)
     this.latestData = {
@@ -131,11 +136,16 @@ class ItelmaM73Protocol {
     await this.elm.send("AT AL");     // Разрешить длинные ответы (кадр 21 01 = 74 байта)
     await this.elm.send("AT AT 2");   // Агрессивный адаптивный тайминг (разгон)
     await this.elm.send("AT S0");     // Пробелы выкл
-    await this.elm.send("AT ST 20");  // Режим Экстрим (~128 мс таймаут, защита от NO DATA на 74 байтах)
+    await this.elm.send("AT ST 10");  // Турбо-таймаут тишины v53 (~64 мс, срезает 50-80 мс простоя шины)
     await this.elm.send("AT SH 81 10 F1");
     await this.elm.send("AT IIA 10"); // Адрес ЭБУ для Fast Init
     await this.elm.send("AT SP 5");
     await this.elm.send("AT SW 00");
+
+    // Сброс флагов автоопределения турбо-режима
+    this.singleFrameSuffixSupported = null;
+    this.consecutiveTimeouts = 0;
+    this.fastStEnabled = true;
 
     this.elm.log('info', 'Открытие диагностической сессии (AT FI)...');
 
@@ -192,19 +202,62 @@ class ItelmaM73Protocol {
   }
 
   /**
-   * Профиль скорости опроса K-Line (Режим Экстрим по умолчанию)
+   * Профиль скорости опроса K-Line (Режим Турбо v53 по умолчанию)
    */
   async setSpeedProfile(profile = 'extreme') {
     if (!this.elm || !this.elm.isConnected) return false;
     try {
       await this.elm.send("AT AT 2");
-      await this.elm.send("AT ST 20"); // ~128 мс (защита от ложных NO DATA при длинных пакетах)
+      await this.elm.send("AT ST 10"); // ~64 мс (турбо таймаут тишины)
       this.currentSpeedProfile = 'extreme';
-      this.elm.log('info', 'Режим скорости: Экстрим (AT AT 2, AT ST 20, ~128мс)');
+      this.fastStEnabled = true;
+      this.consecutiveTimeouts = 0;
+      this.elm.log('info', 'Режим скорости: Турбо v53 (AT AT 2, AT ST 10, ~64мс)');
       return true;
     } catch (e) {
       this.elm.log('warn', 'Ошибка установки профиля скорости: ' + (e.message || e));
       return false;
+    }
+  }
+
+  /**
+   * Сверхбыстрая отправка запроса кадра с автоматическим зондированием (Auto-Probe)
+   * суффикса '1' (21011 / 21031) для мгновенного закрытия кадра (0 мс ожидания тишины)
+   * и защитой от таймаутов (автоматический откат на AT ST 20 при 3 сбоях).
+   */
+  async _sendFastRead(baseCmd) {
+    // 1. Если поддержка суффикса '1' еще не проверена — тестируем один раз (Auto-Probe)
+    if (this.singleFrameSuffixSupported === null) {
+      try {
+        const probeResp = await this.elm.send(baseCmd + "1", 900);
+        const cleanProbe = (probeResp || "").replace(/[\s\r\n]/g, '').toUpperCase();
+        const expectedHeader = "61" + baseCmd.substring(2, 4);
+        if (cleanProbe.includes(expectedHeader) && cleanProbe.length >= 28) {
+          this.singleFrameSuffixSupported = true;
+          this.elm.log('info', `Турбо-опрос активирован: адаптер поддерживает ${baseCmd}1 (закрытие кадра 0 мс)`);
+          return probeResp;
+        }
+      } catch (e) {
+        // Ошибка или таймаут зонда — значит суффикс не поддерживается данным клоном
+      }
+      this.singleFrameSuffixSupported = false;
+      this.elm.log('info', `Адаптер не поддерживает суффикс 1 в режиме AT AL, используется стандартный ${baseCmd}`);
+    }
+
+    const cmdToSend = this.singleFrameSuffixSupported ? (baseCmd + "1") : baseCmd;
+    try {
+      const resp = await this.elm.send(cmdToSend, 1000);
+      this.consecutiveTimeouts = 0;
+      return resp;
+    } catch (err) {
+      this.consecutiveTimeouts++;
+      // Если при AT ST 10 случилось 3 таймаута подряд — мягко увеличиваем до AT ST 20
+      if (this.fastStEnabled && this.consecutiveTimeouts >= 3) {
+        this.fastStEnabled = false;
+        try { await this.elm.send("AT ST 20", 500); } catch (e) {}
+        this.elm.log('warn', 'Таймаут шины автоматически увеличен до AT ST 20 для стабильности');
+      }
+      throw err;
     }
   }
 
@@ -220,7 +273,7 @@ class ItelmaM73Protocol {
     }
 
     if (target === '2103') {
-      const rawAdc = await this.elm.send("2103", 1000);
+      const rawAdc = await this._sendFastRead("2103");
       if (this.parseFrame2103(rawAdc)) {
         this.latestData.timestamp = new Date();
         return this.latestData;
@@ -229,7 +282,7 @@ class ItelmaM73Protocol {
     }
 
     // По умолчанию — базовый скоростной Кадр 1 (21 01)
-    const raw1 = await this.elm.send("2101", 1000);
+    const raw1 = await this._sendFastRead("2101");
     if (!this.parseFrame2101(raw1)) return null;
 
     this.latestData.timestamp = new Date();
