@@ -704,6 +704,7 @@ class DashboardWidgetManager {
     widgetEl.classList.add('widget-leaving');
     setTimeout(() => {
       widgetEl.remove();
+      this._activeSensorsDirty = true;
       this._saveLayout();
       if (this.app && typeof this.app.initElements === 'function') {
         this.app.initElements();
@@ -886,6 +887,7 @@ class DashboardWidgetManager {
 
     this._attachWidgetControls(widgetEl);
     this.container.appendChild(widgetEl);
+    this._activeSensorsDirty = true;
     if (!skipSave) this._saveLayout();
 
     // Обновляем контекст canvas если вернули виджет осциллографа
@@ -1334,10 +1336,14 @@ class DashboardWidgetManager {
     if (val !== undefined && val !== null && !isNaN(val)) {
       const num = Number(val);
 
-      // Обновляем мини-значение на плитке виджета
-      const valEl = document.getElementById('valO2Volt');
-      if (valEl) {
-        valEl.textContent = num.toFixed(ch.decimals);
+      // Обновляем мини-значение на плитке виджета (кэшированный элемент + dirty check)
+      if (!this._valO2VoltEl) this._valO2VoltEl = document.getElementById('valO2Volt');
+      if (this._valO2VoltEl) {
+        const str = num.toFixed(ch.decimals);
+        if (this._valO2VoltEl._lastVal !== str) {
+          this._valO2VoltEl._lastVal = str;
+          this._valO2VoltEl.textContent = str;
+        }
       }
 
       // Добавляем точку в буфер
@@ -1355,22 +1361,37 @@ class DashboardWidgetManager {
         }
       }
 
-      // Обновляем телеметрию HUD
+      // Обновляем телеметрию HUD (быстрый цикл без spread-аллокаций и с кэшированными селекторами)
       if (this.oscHistory.length > 0) {
+        let minVal = this.oscHistory[0];
+        let maxVal = this.oscHistory[0];
+        for (let i = 1; i < this.oscHistory.length; i++) {
+          const v = this.oscHistory[i];
+          if (v < minVal) minVal = v;
+          if (v > maxVal) maxVal = v;
+        }
         const curVal = this.oscHistory[this.oscHistory.length - 1];
-        const minVal = Math.min(...this.oscHistory);
-        const maxVal = Math.max(...this.oscHistory);
         const delta = maxVal - minVal;
 
-        const hudCurr = document.getElementById('oscHudCurr');
-        const hudMin = document.getElementById('oscHudMin');
-        const hudMax = document.getElementById('oscHudMax');
-        const hudDelta = document.getElementById('oscHudDelta');
+        if (!this._hudElements) {
+          this._hudElements = {
+            curr: document.getElementById('oscHudCurr'),
+            min: document.getElementById('oscHudMin'),
+            max: document.getElementById('oscHudMax'),
+            delta: document.getElementById('oscHudDelta')
+          };
+        }
 
-        if (hudCurr) hudCurr.textContent = curVal.toFixed(ch.decimals);
-        if (hudMin) hudMin.textContent = minVal.toFixed(ch.decimals);
-        if (hudMax) hudMax.textContent = maxVal.toFixed(ch.decimals);
-        if (hudDelta) hudDelta.textContent = delta.toFixed(ch.decimals);
+        const h = this._hudElements;
+        const sCur = curVal.toFixed(ch.decimals);
+        const sMin = minVal.toFixed(ch.decimals);
+        const sMax = maxVal.toFixed(ch.decimals);
+        const sDel = delta.toFixed(ch.decimals);
+
+        if (h.curr && h.curr._lastVal !== sCur) { h.curr._lastVal = sCur; h.curr.textContent = sCur; }
+        if (h.min && h.min._lastVal !== sMin) { h.min._lastVal = sMin; h.min.textContent = sMin; }
+        if (h.max && h.max._lastVal !== sMax) { h.max._lastVal = sMax; h.max.textContent = sMax; }
+        if (h.delta && h.delta._lastVal !== sDel) { h.delta._lastVal = sDel; h.delta.textContent = sDel; }
       }
 
       this.ensureOscLoop();
@@ -1621,6 +1642,7 @@ class DashboardWidgetManager {
 
   /**
    * Обновление динамически добавленных датчиков из каталога и осциллографа
+   * Использует кэширование активных DOM-узлов и dirty-check для устранения фризов UI
    */
   updateDynamicWidgets(data) {
     if (!data) return;
@@ -1628,14 +1650,29 @@ class DashboardWidgetManager {
     // Подаем данные в универсальный осциллограф
     this.feedOscilloscope(data);
 
-    // Обновляем скрытые датчики, выведенные пользователем на экран
-    this.extraSensorsCatalog.forEach(s => {
-      const el = document.getElementById(`val_${s.id}`);
-      if (el && data[s.field] !== undefined && data[s.field] !== null) {
+    // Кэш только РЕАЛЬНО отображаемых на панели дополнительных датчиков
+    if (!this._cachedActiveSensors || this._activeSensorsDirty) {
+      this._cachedActiveSensors = [];
+      this.extraSensorsCatalog.forEach(s => {
+        const el = document.getElementById(`val_${s.id}`);
+        if (el) this._cachedActiveSensors.push({ s, el });
+      });
+      this._activeSensorsDirty = false;
+    }
+
+    for (let i = 0; i < this._cachedActiveSensors.length; i++) {
+      const item = this._cachedActiveSensors[i];
+      const s = item.s;
+      const el = item.el;
+      if (data[s.field] !== undefined && data[s.field] !== null) {
         const val = Number(data[s.field]);
-        el.textContent = isNaN(val) ? data[s.field] : val.toFixed(s.decimals);
+        const str = isNaN(val) ? String(data[s.field]) : val.toFixed(s.decimals);
+        if (el._lastVal !== str) {
+          el._lastVal = str;
+          el.textContent = str;
+        }
       }
-    });
+    }
   }
 }
 
