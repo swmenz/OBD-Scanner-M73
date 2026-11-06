@@ -9,10 +9,8 @@ class ItelmaM73Protocol {
     this.elm = elm;
     this.isInitialized = false;
 
-    // Режим Турбо v54.2: суффикс 1, таймаут шины AT ST 12 (~72 мс) и двусторонний Auto-Recovery
+    // Режим Турбо v54.3: суффикс 1, чистый постоянный таймаут шины AT ST 10 (~64 мс)
     this.singleFrameSuffixSupported = null; // null = не проверено, true = '21011', false = '2101'
-    this.consecutiveTimeouts = 0;
-    this.consecutiveSuccesses = 0;
     this.fastStEnabled = true;
 
     // Кэш для объединения данных из всех параметров ЭБУ (Кадр 21 01 и 21 03)
@@ -137,7 +135,7 @@ class ItelmaM73Protocol {
     await this.elm.send("AT AL");     // Разрешить длинные ответы (кадр 21 01 = 74 байта)
     await this.elm.send("AT AT 2");   // Агрессивный адаптивный тайминг (разгон)
     await this.elm.send("AT S0");     // Пробелы выкл
-    await this.elm.send("AT ST 12");  // Сбалансированный турбо-таймаут шины v54.2 (~72 мс: запас стабильности для 79 байт)
+    await this.elm.send("AT ST 10");  // Чистый турбо-таймаут шины v54.3 (~64 мс, максимум скорости)
     await this.elm.send("AT SH 81 10 F1");
     await this.elm.send("AT IIA 10"); // Адрес ЭБУ для Fast Init
     await this.elm.send("AT SP 5");
@@ -145,8 +143,6 @@ class ItelmaM73Protocol {
 
     // Сброс флагов автоопределения турбо-режима
     this.singleFrameSuffixSupported = null;
-    this.consecutiveTimeouts = 0;
-    this.consecutiveSuccesses = 0;
     this.fastStEnabled = true;
 
     this.elm.log('info', 'Открытие диагностической сессии (AT FI)...');
@@ -204,18 +200,16 @@ class ItelmaM73Protocol {
   }
 
   /**
-   * Профиль скорости опроса K-Line (Режим Турбо v54.2 по умолчанию)
+   * Профиль скорости опроса K-Line (Постоянный Турбо v54.3: AT AT 2, AT ST 10, ~64 мс)
    */
   async setSpeedProfile(profile = 'extreme') {
     if (!this.elm || !this.elm.isConnected) return false;
     try {
       await this.elm.send("AT AT 2");
-      await this.elm.send("AT ST 12"); // ~72 мс (турбо таймаут тишины v54.2)
+      await this.elm.send("AT ST 10"); // ~64 мс (чистый турбо таймаут тишины)
       this.currentSpeedProfile = 'extreme';
       this.fastStEnabled = true;
-      this.consecutiveTimeouts = 0;
-      this.consecutiveSuccesses = 0;
-      this.elm.log('info', 'Режим скорости: Турбо v54.2 (AT AT 2, AT ST 12, ~72мс)');
+      this.elm.log('info', 'Режим скорости: Турбо v54.3 (AT AT 2, AT ST 10, ~64мс)');
       return true;
     } catch (e) {
       this.elm.log('warn', 'Ошибка установки профиля скорости: ' + (e.message || e));
@@ -224,29 +218,9 @@ class ItelmaM73Protocol {
   }
 
   /**
-   * Принудительное восстановление Турбо-режима (вызывается из интерфейса или авто-восстановлением)
-   */
-  async restoreTurboMode() {
-    if (!this.elm || !this.elm.isConnected) return false;
-    try {
-      await this.elm.send("AT AT 2", 500);
-      await this.elm.send("AT ST 12", 500);
-      this.fastStEnabled = true;
-      this.consecutiveTimeouts = 0;
-      this.consecutiveSuccesses = 0;
-      this.elm.log('info', 'Турбо-режим успешно восстановлен (AT ST 12, ~72 мс, 4.6–4.8 Гц)');
-      return true;
-    } catch (e) {
-      this.elm.log('warn', 'Не удалось восстановить турбо-режим: ' + (e.message || e));
-      return false;
-    }
-  }
-
-  /**
    * Сверхбыстрая отправка запроса кадра с автоматическим зондированием (Auto-Probe)
    * суффикса '1' (21011 / 21031) для мгновенного закрытия кадра (0 мс ожидания тишины)
-   * и двунаправленным адаптивным контролем таймаутов (Auto-Fallback на AT ST 20 при 6 сбоях
-   * и Auto-Recovery обратно на AT ST 12 после 12 успешных кадров подряд).
+   * и железной фиксацией на AT ST 10 (без искусственных замедлений и откатов на AT ST 20).
    */
   async _sendFastRead(baseCmd) {
     // 1. Если поддержка суффикса '1' еще не проверена — тестируем один раз (Auto-Probe)
@@ -268,41 +242,7 @@ class ItelmaM73Protocol {
     }
 
     const cmdToSend = this.singleFrameSuffixSupported ? (baseCmd + "1") : baseCmd;
-    try {
-      const resp = await this.elm.send(cmdToSend, 1200);
-      this.consecutiveTimeouts = 0;
-      this.consecutiveSuccesses = (this.consecutiveSuccesses || 0) + 1;
-
-      // Авто-восстановление турбо-режима (Auto-Recovery):
-      // Если ранее произошел откат на AT ST 20 из-за единичного сбоя, но связь стабильна
-      // (12 успешных кадров подряд = ~3 секунды стабильности) —
-      // автоматически возвращаем максимальную скорость (AT ST 12)!
-      if (!this.fastStEnabled && this.consecutiveSuccesses >= 12) {
-        this.consecutiveSuccesses = 0;
-        this.fastStEnabled = true;
-        try {
-          await this.elm.send("AT ST 12", 500);
-          this.elm.log('info', 'Шина K-Line стабильна: таймаут автоматически возвращен в Турбо (AT ST 12, ~72 мс, 4.6–4.8 Гц)');
-        } catch (e) {
-          this.fastStEnabled = false;
-        }
-      }
-
-      return resp;
-    } catch (err) {
-      this.consecutiveTimeouts = (this.consecutiveTimeouts || 0) + 1;
-      this.consecutiveSuccesses = 0;
-
-      // Защитный откат: только при 6 серьезных таймаутах подряд (устраняет ложные срабатывания)
-      if (this.fastStEnabled && this.consecutiveTimeouts >= 6) {
-        this.fastStEnabled = false;
-        try {
-          await this.elm.send("AT ST 20", 500);
-          this.elm.log('warn', 'Временные помехи K-Line: таймаут переведен в защитный режим AT ST 20 (авто-восстановление активно)');
-        } catch (e) {}
-      }
-      throw err;
-    }
+    return await this.elm.send(cmdToSend, 1200);
   }
 
   /**
