@@ -1407,8 +1407,10 @@ class DashboardWidgetManager {
       const dashPane = document.getElementById('tab-dashboard');
       const isDashActive = dashPane && dashPane.classList.contains('active');
       const isModalOpen = this.modalOsc && (this.modalOsc.classList.contains('open') || this.modalOsc.style.display === 'flex');
+      const canvasEl = document.getElementById('canvasO2');
+      const hasVisibleCanvas = (isDashActive && Boolean(canvasEl && canvasEl.isConnected)) || isModalOpen;
 
-      if ((isDashActive || isModalOpen) && this.oscHistory.length >= 2 && !this.isOscPaused) {
+      if (hasVisibleCanvas && this.oscHistory.length >= 2 && !this.isOscPaused) {
         this.drawOscilloscope();
         this._oscAnimId = requestAnimationFrame(animate);
       } else {
@@ -1426,12 +1428,12 @@ class DashboardWidgetManager {
   }
 
   drawOscilloscope() {
-    // 1. Отрисовка на плитке дашборда
-    if (!this.o2Canvas) {
+    // 1. Отрисовка на плитке дашборда (только если канвас реально подключен к странице)
+    if (!this.o2Canvas || !this.o2Canvas.isConnected) {
       this.o2Canvas = document.getElementById('canvasO2');
       if (this.o2Canvas) this.o2Ctx = this.o2Canvas.getContext('2d');
     }
-    if (this.o2Canvas && this.o2Ctx) {
+    if (this.o2Canvas && this.o2Canvas.isConnected && this.o2Ctx) {
       this._drawCanvasWave(this.o2Canvas, this.o2Ctx, false);
     }
 

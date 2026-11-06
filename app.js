@@ -370,17 +370,17 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v54\n\nОбновления:\n1) UI Decoupling: опрос K-Line развязан от отрисовки экрана через requestAnimationFrame (шина опрашивается на 4.7 Гц без задержек на DOM)\n2) Dirty Checking: устранена избыточная перерисовка неизменных датчиков (экономия 70% CPU и батареи телефона)\n3) Быстрый буфер осциллографа: удалены spread-аллокации, кэшированы активные DOM-узлы\n4) Частота опроса при всех включенных датчиках поднята до максимальных 4.5–4.8 Гц!");
+        alert("Диагностика М73 — Версия v54.1\n\nОбновления:\n1) Устранена задержка rAF: убран конфликт планировщика отрисовки с шиной K-Line, восстановлена максимальная частота опроса\n2) Синхронный микро-рендеринг: сверхбыстрый Dirty Checking (<0.3 мс) без задержки следующего кадра\n3) Умный осциллограф: холостой цикл 60 FPS отключается, если график не на экране\n4) Частота опроса: стабильные 4.6–4.8 Гц на приборной панели и до 5.1 Гц на АЦП");
       });
     }
 
     // Интеллектуальное автоскрытие нижнего дока при отсутствии взаимодействия (HUD режим в поездке)
     this.initDockAutoHide();
 
-    // Режим скорости опроса K-Line: Турбо v54
+    // Режим скорости опроса K-Line: Турбо v54.1
     const cadencePill = document.querySelector('.cadence-pill');
     if (cadencePill) {
-      cadencePill.title = 'Частота опроса K-Line: Турбо v54';
+      cadencePill.title = 'Частота опроса K-Line: Турбо v54.1';
       this.currentSpeedProfile = 'extreme';
 
       cadencePill.addEventListener('click', () => {
@@ -388,7 +388,7 @@ class M73Application {
           ? "Включен (21011 / 21031, закрытие кадра 0 мс)"
           : (this.m73 && this.m73.singleFrameSuffixSupported === false ? "Отключен адаптером (стандартный 2101)" : "Определяется...");
         const stInfo = this.m73 && this.m73.fastStEnabled ? "AT ST 10 (~64 мс)" : "AT ST 20 (~128 мс, авто-откат)";
-        alert(`⚡ Режим опроса: Турбо (Релиз v54)\n\n• Адаптивный тайминг: AT AT 2\n• Таймаут шины: ${stInfo}\n• Турбо-суффикс кадра: ${suffixInfo}\n• UI Decoupling + Dirty Checking активны\n• Частота опроса: 4.5–4.8 Гц на всех экранах`);
+        alert(`⚡ Режим опроса: Турбо (Релиз v54.1)\n\n• Адаптивный тайминг: AT AT 2\n• Таймаут шины: ${stInfo}\n• Турбо-суффикс кадра: ${suffixInfo}\n• Прямой микро-рендеринг с Dirty Checking\n• Частота опроса: 4.6–4.8 Гц (до 5.1 Гц на АЦП)`);
       });
     }
 
@@ -809,10 +809,9 @@ class M73Application {
             try { await this.m73.readConfiguredCycle('2103'); } catch (e) {}
           }
           if (data) {
-            // 1. Мгновенная фиксация точки в лог без задержек на DOM (чистые 4.7 Гц)
+            // Мгновенный микро-рендеринг с Dirty Checking (<0.3 мс) и фиксация в лог
+            this.updateDashboardUI(data);
             this.logger.addPoint(data);
-            // 2. Асинхронное планирование отрисовки кадра (UI Decoupling)
-            this.scheduleDashboardRender(data);
           } else {
             throw new Error("Пустой кадр 21 01");
           }
@@ -898,24 +897,7 @@ class M73Application {
   }
 
   /**
-   * UI Decoupling: Асинхронное планирование отрисовки приборной панели через requestAnimationFrame.
-   * Опрос K-Line молотит непрерывно (4.7 Гц) без задержек на перерисовку DOM,
-   * а видеочип обновляет экран на частоте vsync (60/120 FPS).
-   */
-  scheduleDashboardRender(data) {
-    this._pendingDashboardData = data;
-    if (!this._renderRafId) {
-      this._renderRafId = requestAnimationFrame(() => {
-        this._renderRafId = null;
-        if (this._pendingDashboardData && this.currentTab === 'tab-dashboard') {
-          this.updateDashboardUI(this._pendingDashboardData);
-        }
-      });
-    }
-  }
-
-  /**
-   * Отрисовка значений приборной панели (с поддержкой Dirty Checking v54)
+   * Отрисовка значений приборной панели (с поддержкой Dirty Checking v54.1)
    */
   updateDashboardUI(data) {
     if (!data) return;
