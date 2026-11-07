@@ -9,7 +9,7 @@ class ItelmaM73Protocol {
     this.elm = elm;
     this.isInitialized = false;
 
-    // Режим Турбо v54.6: суффикс 1, чистый постоянный таймаут шины AT ST 10 (~64 мс)
+    // Режим Турбо v54.7: суффикс 1, чистый постоянный таймаут шины AT ST 10 (~64 мс)
     this.singleFrameSuffixSupported = null; // null = не проверено, true = '21011', false = '2101'
     this.fastStEnabled = true;
 

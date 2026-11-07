@@ -1574,35 +1574,67 @@ body {
   right: 14px;
   max-width: 520px;
   margin: 0 auto;
-  background: rgba(18, 18, 20, 0.78);
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-top: 1px solid rgba(255, 255, 255, 0.22);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.6);
+  background: rgba(18, 18, 22, 0.80);
+  backdrop-filter: blur(40px) saturate(190%);
+  -webkit-backdrop-filter: blur(40px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-top: 1px solid rgba(255, 255, 255, 0.24);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.65);
   border-radius: 26px;
   padding: 5px 6px;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   align-items: center;
-  justify-content: space-between;
-  gap: 4px;
+  gap: 0;
   box-shadow: 
-    0 16px 40px rgba(0, 0, 0, 0.85),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    0 18px 42px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
   z-index: 100;
-  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;
+  transition: transform 0.52s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.35s ease;
   will-change: transform, opacity;
 }
 
 .liquid-dock.dock-hidden {
-  transform: translateY(calc(100% + env(safe-area-inset-bottom) + 35px));
+  transform: translate3d(0, calc(100% + env(safe-area-inset-bottom) + 28px), 0) scale(0.92);
   opacity: 0;
   pointer-events: none;
 }
 
+/* Плавающая стеклянная капсула активной вкладки (Liquid Glider) */
+.dock-glider {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 6px;
+  width: calc((100% - 12px) / 5);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(10, 132, 255, 0.14) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 4px 12px rgba(0, 0, 0, 0.42);
+  transform: translate3d(calc(var(--dock-active-index, 0) * 100%), 0, 0);
+  transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+  z-index: 0;
+  will-change: transform;
+}
+
+.dock-glider::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 18px;
+  height: 2.5px;
+  border-radius: 3px;
+  background: var(--apple-blue);
+  box-shadow: 0 0 8px rgba(10, 132, 255, 0.9);
+}
+
 .dock-item {
   position: relative;
-  flex: 1;
+  z-index: 1;
   background: transparent;
   border: none;
   border-radius: 20px;
@@ -1611,33 +1643,32 @@ body {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(255, 255, 255, 0.46);
   cursor: pointer;
   padding: 6px 0;
   min-height: 50px;
-  transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+  transition: color 0.25s ease, transform 0.2s cubic-bezier(0.2, 0, 0, 1);
   -webkit-tap-highlight-color: transparent;
 }
 
 .dock-item:active {
-  transform: scale(0.95);
+  transform: scale(0.93);
 }
 
 .dock-item.active {
   color: #ffffff;
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: 
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 2px 8px rgba(0, 0, 0, 0.4);
+  background: transparent;
+  box-shadow: none;
 }
 
 .dock-icon {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 24px;
   height: 24px;
-  transition: transform 0.2s ease, color 0.2s ease, filter 0.2s ease;
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), color 0.25s ease, filter 0.25s ease;
 }
 
 .dock-svg {
@@ -1646,10 +1677,28 @@ body {
   display: block;
 }
 
+.dock-svg .svg-duotone {
+  opacity: 0.10;
+  transition: opacity 0.28s ease;
+}
+
+.dock-item.active .dock-svg .svg-duotone {
+  opacity: 0.26;
+}
+
+.dock-svg .dock-needle {
+  transform-origin: 12px 13px;
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dock-item.active .dock-svg .dock-needle {
+  transform: rotate(14deg);
+}
+
 .dock-item.active .dock-icon {
   color: var(--apple-blue);
-  transform: scale(1.08);
-  filter: drop-shadow(0 0 8px rgba(10, 132, 255, 0.5));
+  transform: translateY(-1px) scale(1.08);
+  filter: drop-shadow(0 0 8px rgba(10, 132, 255, 0.55));
 }
 
 .dock-label {
@@ -1662,6 +1711,70 @@ body {
 .dock-item.active .dock-label {
   color: #ffffff;
   font-weight: 600;
+}
+
+/* Бейдж количества ошибок DTC на иконке дока */
+.dock-badge {
+  position: absolute;
+  top: -4px;
+  right: -8px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--apple-rose);
+  color: #fff;
+  font-size: 0.58rem;
+  font-weight: 800;
+  line-height: 15px;
+  text-align: center;
+  box-shadow: 0 0 8px rgba(255, 69, 58, 0.7), 0 1px 3px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  pointer-events: none;
+}
+
+/* Мини-хэндл возврата скрытого дока (Glass Peek Pill) */
+.dock-peek-handle {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom) + 6px);
+  left: 50%;
+  transform: translate3d(-50%, 24px, 0);
+  width: 72px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  z-index: 99;
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dock-peek-bar {
+  width: 44px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.32);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.dock-peek-handle:active .dock-peek-bar {
+  background: var(--apple-blue);
+  transform: scaleX(1.15);
+}
+
+.liquid-dock.dock-hidden ~ .dock-peek-handle {
+  transform: translate3d(-50%, 0, 0);
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* ==========================================================================
@@ -3004,4 +3117,200 @@ body {
 }
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* ==========================================================================
+   V54.7 — ВИЗУАЛЬНОЕ УЛУЧШЕНИЕ КОКПИТА, АЦП, ТЕСТОВ И ОШИБОК DTC
+   ========================================================================== */
+
+/* 1. Реактивное фоновое свечение Тахометра + Shift-Light на высоких оборотах */
+#heroCardRpm {
+  transition: border-color 0.3s ease, box-shadow 0.35s ease, background 0.35s ease;
+}
+
+#heroCardRpm.rpm-zone-power {
+  border-color: rgba(10, 132, 255, 0.40);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.6),
+    0 0 24px rgba(10, 132, 255, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+#heroCardRpm.rpm-zone-redline {
+  border-color: rgba(255, 69, 58, 0.65);
+  background: linear-gradient(155deg, rgba(255, 69, 58, 0.16) 0%, rgba(28, 28, 32, 0.72) 70%);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.65),
+    0 0 28px rgba(255, 69, 58, 0.28),
+    inset 0 1px 0 rgba(255, 120, 110, 0.35);
+}
+
+/* 2. Сегментированная лазерная LED-маска шкал Тахометра и Температуры ОЖ */
+.glass-progress-track,
+.mini-glass-track {
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-progress-track::after,
+.mini-glass-track::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0px,
+    transparent 6px,
+    rgba(12, 12, 16, 0.62) 6px,
+    rgba(12, 12, 16, 0.62) 8px
+  );
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* 3. Вкладка АЦП — мини-шкалы диапазонов напряжения под цифрами */
+.adc-mini-track {
+  width: 68px;
+  height: 4px;
+  margin-top: 5px;
+  margin-left: auto;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  position: relative;
+}
+
+.adc-mini-fill {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--apple-blue);
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform 0.16s linear, background-color 0.25s ease;
+  will-change: transform;
+}
+
+.adc-mini-fill.fill-ok {
+  background: linear-gradient(90deg, #30D158, #34C759);
+  box-shadow: 0 0 6px rgba(48, 209, 88, 0.55);
+}
+
+.adc-mini-fill.fill-warn {
+  background: linear-gradient(90deg, #FF9F0A, #FFD60A);
+  box-shadow: 0 0 6px rgba(255, 159, 10, 0.55);
+}
+
+.adc-mini-fill.fill-danger {
+  background: linear-gradient(90deg, #FF453A, #FF375F);
+  box-shadow: 0 0 8px rgba(255, 69, 58, 0.65);
+}
+
+.adc-mini-fill.fill-info {
+  background: linear-gradient(90deg, #0A84FF, #64D2FF);
+}
+
+/* 4. Вкладка Тесты — живая мини-панель телеметрии сверху */
+.act-live-telemetry-bar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.act-live-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 2px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.22);
+  min-width: 0;
+}
+
+.act-live-lbl {
+  font-size: 0.60rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.act-live-val {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  margin-top: 1px;
+}
+
+/* Вращение крыльчатки вентилятора и подсветка карточки во время активного теста ИМ */
+.actuator-item-running {
+  border-color: rgba(255, 159, 10, 0.42) !important;
+  background: rgba(255, 159, 10, 0.06) !important;
+}
+
+.actuator-item-running .act-icon-fan1 svg {
+  animation: spin 1.1s linear infinite;
+}
+
+.actuator-item-running .act-icon-fan2 svg {
+  animation: spin 0.55s linear infinite;
+}
+
+.actuator-item-running .act-icon-box {
+  box-shadow: 0 0 12px rgba(255, 159, 10, 0.32);
+}
+
+/* 5. Вкладка Ошибки DTC — карточка чистой памяти и цветовые акценты статусов */
+.dtc-clean-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(48, 209, 88, 0.14) 0%, rgba(48, 209, 88, 0.04) 100%);
+  border: 1px solid rgba(48, 209, 88, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.dtc-clean-shield {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(48, 209, 88, 0.18);
+  border: 1px solid rgba(48, 209, 88, 0.4);
+  color: #30D158;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 14px rgba(48, 209, 88, 0.25);
+}
+
+.dtc-clean-body strong {
+  display: block;
+  font-size: 0.90rem;
+  color: #fff;
+  margin-bottom: 2px;
+}
+
+.dtc-clean-body span {
+  display: block;
+  font-size: 0.73rem;
+  color: var(--text-secondary);
+}
+
+.dtc-item.dtc-item-active {
+  border-left: 3px solid var(--apple-rose);
+}
+
+.dtc-item.dtc-item-stored {
+  border-left: 3px solid var(--apple-amber);
 }

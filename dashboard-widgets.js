@@ -926,7 +926,7 @@ class DashboardWidgetManager {
     if (id === 'hero-gauges') {
       return `
         <div class="hero-grid">
-          <div class="glass-card hero-card">
+          <div class="glass-card hero-card" id="heroCardRpm">
             <div class="card-top-row"><span class="micro-header">Обороты</span><span class="peak-badge" id="valPeakRpm">Пик: 0</span></div>
             <div class="hero-digital-row"><span class="hero-value" id="valRpm">0</span><span class="hero-unit">об/мин</span></div>
             <div class="glass-progress-track"><div class="glass-progress-bar" id="barRpm"></div></div>

@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" href="icon-192.png">
   <title>Диагностика М73 — Лада Приора</title>
   
-  <link rel="stylesheet" href="styles.css?v=54.6">
+  <link rel="stylesheet" href="styles.css?v=54.7">
   <script src="xlsx.full.min.js"></script>
   <link rel="manifest" href="manifest.json">
 </head>
@@ -25,7 +25,7 @@
     <header class="glass-navbar">
       <div class="navbar-brand">
         <span class="status-pulse" id="connIndicator"></span>
-        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v54.6</span></div>
+        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v54.7</span></div>
         <span class="status-text" id="connStateText">Не подключено</span>
       </div>
 
@@ -69,7 +69,7 @@
           <div class="dashboard-widget widget-wide" data-widget-id="hero-gauges" data-title="Спидометр и Тахометр">
             <div class="hero-grid">
               <!-- Обороты двигателя -->
-              <div class="glass-card hero-card">
+              <div class="glass-card hero-card" id="heroCardRpm">
                 <div class="card-top-row">
                   <span class="micro-header">Обороты</span>
                   <span class="peak-badge" id="valPeakRpm">Пик: 0</span>
@@ -582,6 +582,7 @@
               </div>
               <div class="adc-val-wrap">
                 <span class="adc-number" id="adcMaf">0.000 В</span>
+                <div class="adc-mini-track" aria-hidden="true"><div class="adc-mini-fill" id="barAdcMaf"></div></div>
               </div>
             </div>
 
@@ -596,6 +597,7 @@
               </div>
               <div class="adc-val-wrap">
                 <span class="adc-number" id="adcThrottle">0.000 В</span>
+                <div class="adc-mini-track" aria-hidden="true"><div class="adc-mini-fill" id="barAdcThrottle"></div></div>
               </div>
             </div>
 
@@ -610,6 +612,7 @@
               </div>
               <div class="adc-val-wrap">
                 <span class="adc-number" id="adcVolt">0.00 В</span>
+                <div class="adc-mini-track" aria-hidden="true"><div class="adc-mini-fill" id="barAdcVolt"></div></div>
               </div>
             </div>
 
@@ -624,6 +627,7 @@
               </div>
               <div class="adc-val-wrap">
                 <span class="adc-number" id="adcTemp">0.000 В</span>
+                <div class="adc-mini-track" aria-hidden="true"><div class="adc-mini-fill" id="barAdcTemp"></div></div>
               </div>
             </div>
 
@@ -638,6 +642,7 @@
               </div>
               <div class="adc-val-wrap">
                 <span class="adc-number" id="adcAirTemp">0.000 В</span>
+                <div class="adc-mini-track" aria-hidden="true"><div class="adc-mini-fill" id="barAdcAirTemp"></div></div>
               </div>
             </div>
 
@@ -652,6 +657,7 @@
               </div>
               <div class="adc-val-wrap">
                 <span class="adc-number" id="adcO2">0.000 В</span>
+                <div class="adc-mini-track" aria-hidden="true"><div class="adc-mini-fill" id="barAdcO2"></div></div>
               </div>
             </div>
 
@@ -666,6 +672,7 @@
               </div>
               <div class="adc-val-wrap">
                 <span class="adc-number" id="adcO2_2">0.000 В</span>
+                <div class="adc-mini-track" aria-hidden="true"><div class="adc-mini-fill" id="barAdcO2_2"></div></div>
               </div>
             </div>
 
@@ -680,6 +687,7 @@
               </div>
               <div class="adc-val-wrap">
                 <span class="adc-number" id="adcRoughRoad">0.000 В</span>
+                <div class="adc-mini-track" aria-hidden="true"><div class="adc-mini-fill" id="barAdcRoughRoad"></div></div>
               </div>
             </div>
 
@@ -689,6 +697,26 @@
       </section>
       <!-- ВКЛАДКА 4: ИСПОЛНИТЕЛЬНЫЕ МЕХАНИЗМЫ И УПРАВЛЕНИЕ М73 (17 ТЕСТОВ) -->
       <section id="tab-actuators" class="tab-pane">
+
+        <!-- ЖИВАЯ МИНИ-СВОДКА ТЕЛЕМЕТРИИ ДЛЯ КОНТРОЛЯ ИМ И УСТАВОК -->
+        <div class="act-live-telemetry-bar mb-3" aria-label="Текущие показатели двигателя">
+          <div class="act-live-pill">
+            <span class="act-live-lbl">Обороты</span>
+            <span class="act-live-val" id="actLiveRpm">— об/мин</span>
+          </div>
+          <div class="act-live-pill">
+            <span class="act-live-lbl">Темп. ОЖ</span>
+            <span class="act-live-val" id="actLiveTemp">— °C</span>
+          </div>
+          <div class="act-live-pill">
+            <span class="act-live-lbl">Шаги РХХ</span>
+            <span class="act-live-val" id="actLiveIac">— ш.</span>
+          </div>
+          <div class="act-live-pill">
+            <span class="act-live-lbl">Бортсеть</span>
+            <span class="act-live-val" id="actLiveVolt">— В</span>
+          </div>
+        </div>
         
         <!-- БЛОК 1: ПЛАВНОЕ УПРАВЛЕНИЕ УСТАВКАМИ (ХХ, РХХ, КПА) -->
         <div class="glass-card mb-3">
@@ -735,17 +763,12 @@
             <div class="regulator-card" id="regCardRxx">
               <div class="regulator-header">
                 <div class="regulator-title-group">
-                  <div class="act-icon-box act-icon-rxx" title="РХХ">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <line x1="4" y1="21" x2="4" y2="14"/>
-                      <line x1="4" y1="10" x2="4" y2="3"/>
-                      <line x1="12" y1="21" x2="12" y2="12"/>
-                      <line x1="12" y1="8" x2="12" y2="3"/>
-                      <line x1="20" y1="21" x2="20" y2="16"/>
-                      <line x1="20" y1="12" x2="20" y2="3"/>
-                      <line x1="1" y1="14" x2="7" y2="14"/>
-                      <line x1="9" y1="8" x2="15" y2="8"/>
-                      <line x1="17" y1="16" x2="23" y2="16"/>
+                  <div class="act-icon-box act-icon-rxx" title="Шаговый клапан РХХ">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="6" width="8" height="12" rx="2" fill="currentColor" fill-opacity="0.18"/>
+                      <path d="M11 10h5l4 2-4 2h-5"/>
+                      <path d="M20 7v10" stroke-opacity="0.45"/>
+                      <path d="M6 9.5h2M6 12h2M6 14.5h2"/>
                     </svg>
                   </div>
                   <div>
@@ -772,9 +795,12 @@
             <div class="regulator-card" id="regCardPurge">
               <div class="regulator-header">
                 <div class="regulator-title-group">
-                  <div class="act-icon-box act-icon-purge" title="Клапан КПА">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M12 2v20M5 7l7 5 7-5M5 17l7-5 7 5"/>
+                  <div class="act-icon-box act-icon-purge" title="Электромагнитный клапан КПА">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M4 8v8l8-4-8-4z" fill="currentColor" fill-opacity="0.18"/>
+                      <path d="M20 8v8l-8-4 8-4z" fill="currentColor" fill-opacity="0.18"/>
+                      <line x1="12" y1="12" x2="12" y2="6"/>
+                      <rect x="8.5" y="3" width="7" height="3.5" rx="1"/>
                     </svg>
                   </div>
                   <div>
@@ -935,66 +961,106 @@
           <div class="actuator-grid-2col">
             <!-- Форсунки -->
             <div class="actuator-card-compact">
-              <div class="act-compact-info">
-                <strong>Форсунка 1</strong>
-                <span>ID 01 (2.5 сек)</span>
+              <div class="act-compact-left">
+                <div class="act-icon-box sm act-icon-inj" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v4l-1.5 2v5h-3V9L9 7V3z"/><path d="M12 14v3M9 18l-2 3M12 18v3M15 18l2 3"/></svg>
+                </div>
+                <div class="act-compact-info">
+                  <strong>Форсунка 1</strong>
+                  <span>ID 01 (2.5 сек)</span>
+                </div>
               </div>
               <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('inj1_test', this)">Тест</button>
             </div>
 
             <div class="actuator-card-compact">
-              <div class="act-compact-info">
-                <strong>Форсунка 2</strong>
-                <span>ID 02 (2.5 сек)</span>
+              <div class="act-compact-left">
+                <div class="act-icon-box sm act-icon-inj" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v4l-1.5 2v5h-3V9L9 7V3z"/><path d="M12 14v3M9 18l-2 3M12 18v3M15 18l2 3"/></svg>
+                </div>
+                <div class="act-compact-info">
+                  <strong>Форсунка 2</strong>
+                  <span>ID 02 (2.5 сек)</span>
+                </div>
               </div>
               <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('inj2_test', this)">Тест</button>
             </div>
 
             <div class="actuator-card-compact">
-              <div class="act-compact-info">
-                <strong>Форсунка 3</strong>
-                <span>ID 03 (2.5 сек)</span>
+              <div class="act-compact-left">
+                <div class="act-icon-box sm act-icon-inj" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v4l-1.5 2v5h-3V9L9 7V3z"/><path d="M12 14v3M9 18l-2 3M12 18v3M15 18l2 3"/></svg>
+                </div>
+                <div class="act-compact-info">
+                  <strong>Форсунка 3</strong>
+                  <span>ID 03 (2.5 сек)</span>
+                </div>
               </div>
               <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('inj3_test', this)">Тест</button>
             </div>
 
             <div class="actuator-card-compact">
-              <div class="act-compact-info">
-                <strong>Форсунка 4</strong>
-                <span>ID 04 (2.5 сек)</span>
+              <div class="act-compact-left">
+                <div class="act-icon-box sm act-icon-inj" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v4l-1.5 2v5h-3V9L9 7V3z"/><path d="M12 14v3M9 18l-2 3M12 18v3M15 18l2 3"/></svg>
+                </div>
+                <div class="act-compact-info">
+                  <strong>Форсунка 4</strong>
+                  <span>ID 04 (2.5 сек)</span>
+                </div>
               </div>
               <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('inj4_test', this)">Тест</button>
             </div>
 
             <!-- Катушки зажигания -->
             <div class="actuator-card-compact">
-              <div class="act-compact-info">
-                <strong>Катушка 1</strong>
-                <span>Цил. 1–4 (ID 05)</span>
+              <div class="act-compact-left">
+                <div class="act-icon-box sm act-icon-coil" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>
+                </div>
+                <div class="act-compact-info">
+                  <strong>Катушка 1</strong>
+                  <span>Цил. 1–4 (ID 05)</span>
+                </div>
               </div>
               <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('coil1_test', this)">Тест</button>
             </div>
 
             <div class="actuator-card-compact">
-              <div class="act-compact-info">
-                <strong>Катушка 2</strong>
-                <span>Цил. 2 (ID 06)</span>
+              <div class="act-compact-left">
+                <div class="act-icon-box sm act-icon-coil" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>
+                </div>
+                <div class="act-compact-info">
+                  <strong>Катушка 2</strong>
+                  <span>Цил. 2 (ID 06)</span>
+                </div>
               </div>
               <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('coil2_test', this)">Тест</button>
             </div>
 
             <div class="actuator-card-compact">
-              <div class="act-compact-info">
-                <strong>Катушка 3</strong>
-                <span>Цил. 2–3 (ID 07)</span>
+              <div class="act-compact-left">
+                <div class="act-icon-box sm act-icon-coil" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>
+                </div>
+                <div class="act-compact-info">
+                  <strong>Катушка 3</strong>
+                  <span>Цил. 2–3 (ID 07)</span>
+                </div>
               </div>
               <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('coil3_test', this)">Тест</button>
             </div>
 
             <div class="actuator-card-compact">
-              <div class="act-compact-info">
-                <strong>Катушка 4</strong>
-                <span>Цил. 4 (ID 08)</span>
+              <div class="act-compact-left">
+                <div class="act-icon-box sm act-icon-coil" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>
+                </div>
+                <div class="act-compact-info">
+                  <strong>Катушка 4</strong>
+                  <span>Цил. 4 (ID 08)</span>
+                </div>
               </div>
               <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('coil4_test', this)">Тест</button>
             </div>
@@ -1038,66 +1104,81 @@
 
     </main>
 
-    <!-- ПАРЯЩИЙ СТЕКЛЯННЫЙ ТАБ-БАР (APPLE FLOATING LIQUID DOCK) -->
-    <nav class="liquid-dock" aria-label="Основная навигация">
-      <button class="dock-item active" data-tab="tab-dashboard">
+    <!-- ПАРЯЩИЙ СТЕКЛЯННЫЙ ТАБ-БАР (APPLE FLOATING LIQUID DOCK + DUOTONE SF SYMBOLS 6) -->
+    <nav class="liquid-dock" aria-label="Основная навигация" style="--dock-active-index: 0;">
+      <div class="dock-glider" id="dockGlider" aria-hidden="true"></div>
+
+      <button class="dock-item active" data-tab="tab-dashboard" type="button">
         <span class="dock-icon">
-          <svg class="dock-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4.93 19.07A10 10 0 1 1 19.07 19.07" />
-            <path d="M12 12l4.5-3.5" />
-            <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
-            <path d="M12 4.5v1.5M6.7 6.7l1.1 1.1M17.3 6.7l-1.1 1.1" stroke-width="1.7" />
+          <svg class="dock-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">
+            <path class="svg-duotone" d="M5.2 18.2a9.5 9.5 0 1 1 13.6 0Z" fill="currentColor" stroke="none"/>
+            <path d="M4.93 18.5A9.8 9.8 0 1 1 19.07 18.5" />
+            <path d="M16.8 6.8A7.2 7.2 0 0 1 19.2 12" stroke-opacity="0.55" stroke-width="2.2" />
+            <path class="dock-needle" d="M12 13l4.6-4.2" stroke-width="2.1" />
+            <circle cx="12" cy="13" r="2.1" fill="currentColor" stroke="none" />
+            <path d="M12 4.4v1.4M6.8 6.8l1 1" stroke-width="1.6" stroke-opacity="0.7" />
           </svg>
         </span>
         <span class="dock-label">Панель</span>
       </button>
 
-      <button class="dock-item" data-tab="tab-dtc">
+      <button class="dock-item" data-tab="tab-dtc" type="button">
         <span class="dock-icon">
-          <svg class="dock-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13.5"/>
-            <circle cx="12" cy="17" r="1.1" fill="currentColor" stroke="none"/>
+          <svg class="dock-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path class="svg-duotone" d="M6 9.5h3l1.5-2h5l1.5 2h1.5a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H16l-1.5 1.5h-5L8 17.5H6a1.5 1.5 0 0 1-1.5-1.5v-5A1.5 1.5 0 0 1 6 9.5Z" fill="currentColor" stroke="none"/>
+            <path d="M6 9.5h3l1.5-2h5l1.5 2h1.5a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H16l-1.5 1.5h-5L8 17.5H6a1.5 1.5 0 0 1-1.5-1.5v-5A1.5 1.5 0 0 1 6 9.5Z"/>
+            <path d="M2.5 11v4.5M4.5 13.2h-2M10.5 5.5h5M13 5.5v2"/>
+            <path d="M13.2 10.8l-1.7 2.5h2.2l-1.5 2.6" stroke-width="1.75"/>
           </svg>
+          <span class="dock-badge" id="dockDtcBadge" style="display: none;">0</span>
         </span>
         <span class="dock-label">Ошибки</span>
       </button>
 
-      <button class="dock-item" data-tab="tab-adc">
+      <button class="dock-item" data-tab="tab-adc" type="button">
         <span class="dock-icon">
-          <svg class="dock-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="5" y1="20" x2="5" y2="4" />
-            <circle cx="5" cy="14" r="2.2" fill="currentColor" stroke="none" />
-            <line x1="12" y1="20" x2="12" y2="4" />
-            <circle cx="12" cy="8" r="2.2" fill="currentColor" stroke="none" />
-            <line x1="19" y1="20" x2="19" y2="4" />
-            <circle cx="19" cy="13" r="2.2" fill="currentColor" stroke="none" />
+          <svg class="dock-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">
+            <rect class="svg-duotone" x="2.5" y="4.5" width="19" height="15" rx="3.5" fill="currentColor" stroke="none"/>
+            <path d="M3 12h2.5l2.2-5.5 3.1 11 2.8-8.2 2.1 2.7H21" stroke-width="2"/>
+            <circle cx="7.7" cy="6.5" r="1.4" fill="currentColor" stroke="none"/>
+            <circle cx="10.8" cy="17.5" r="1.4" fill="currentColor" stroke="none"/>
+            <circle cx="13.6" cy="9.3" r="1.4" fill="currentColor" stroke="none"/>
           </svg>
         </span>
         <span class="dock-label">АЦП</span>
       </button>
 
-      <button class="dock-item" data-tab="tab-actuators">
+      <button class="dock-item" data-tab="tab-actuators" type="button">
         <span class="dock-icon">
-          <svg class="dock-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3.2" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          <svg class="dock-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">
+            <rect class="svg-duotone" x="5" y="3.5" width="14" height="8.5" rx="2.2" fill="currentColor" stroke="none"/>
+            <rect x="5" y="3.5" width="14" height="8.5" rx="2.2"/>
+            <line x1="8" y1="7" x2="16" y2="7" stroke-opacity="0.65"/>
+            <path d="M10.2 12l-1.4 5.2M13.8 12l1.4 5.2"/>
+            <circle cx="12" cy="18.5" r="2.5"/>
+            <circle cx="12" cy="18.5" r="0.9" fill="currentColor" stroke="none"/>
           </svg>
         </span>
         <span class="dock-label">Тесты</span>
       </button>
 
-      <button class="dock-item" data-tab="tab-terminal">
+      <button class="dock-item" data-tab="tab-terminal" type="button">
         <span class="dock-icon">
-          <svg class="dock-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <svg class="dock-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">
+            <rect class="svg-duotone" x="2.5" y="4.5" width="19" height="15" rx="3.5" fill="currentColor" stroke="none" />
             <rect x="2.5" y="4.5" width="19" height="15" rx="3.5" />
-            <path d="M7 9.5l3 2.5-3 2.5" />
-            <line x1="12.5" y1="14.5" x2="16.5" y2="14.5" />
+            <path d="M7 9.5l3 2.5-3 2.5" stroke-width="2.1" />
+            <line x1="12.5" y1="14.5" x2="16.8" y2="14.5" stroke-width="2.1" />
           </svg>
         </span>
         <span class="dock-label">Терминал</span>
       </button>
     </nav>
+
+    <!-- МИНИ-ХЭНДЛ ВОЗВРАТА СПРЯТАННОГО ДОКА -->
+    <button id="dockPeekHandle" class="dock-peek-handle" type="button" aria-label="Показать панель навигации" title="Показать меню">
+      <span class="dock-peek-bar"></span>
+    </button>
 
   </div>
 
@@ -1315,10 +1396,10 @@
     </div>
   </div>
 
-  <script src="elm327.js?v=54.6"></script>
-  <script src="m73.js?v=54.6"></script>
-  <script src="logger.js?v=54.6"></script>
-  <script src="dashboard-widgets.js?v=54.6"></script>
-  <script src="app.js?v=54.6"></script>
+  <script src="elm327.js?v=54.7"></script>
+  <script src="m73.js?v=54.7"></script>
+  <script src="logger.js?v=54.7"></script>
+  <script src="dashboard-widgets.js?v=54.7"></script>
+  <script src="app.js?v=54.7"></script>
 </body>
 </html>
