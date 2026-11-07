@@ -390,17 +390,17 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v54.8\n\nОбновления:\n1) Вкладка Тесты: вынесены групповые заголовки с иконками для Топливных форсунок и Катушек зажигания на всю ширину сетки, чтобы названия «Форсунка 1–4» и «Катушка 1–4» полностью помещались в карточки без обрезки номеров\n2) Нижний док: скользящая стеклянная капсула Liquid Glider, пружинная физика скрытия по направлению скролла, мини-хэндл возврата и Duotone SVG-иконки Apple SF Symbols 6\n3) Главная панель: реактивное свечение карточки оборотов (Shift-Light на отсечке), сегментированные лазерные LED-шкалы и живая цветовая индикация здоровья температуры ОЖ, бортсети и форсунок\n4) Вкладка АЦП: графические микро-шкалы напряжения под каждым из 8 каналов с сохранением жёсткой фиксации высоты строк\n5) Вкладка Ошибки DTC: карточка чистой памяти ЭБУ со счётчиком моточасов после сброса и бейдж активных ошибок на иконке дока");
+        alert("Диагностика М73 — Версия v54.9\n\nОбновления:\n1) Вкладка АЦП: отключён периодический подмес длинного кадра 21011 — теперь на вкладке АЦП опрашивается строго короткий кадр 21031 без просадок частоты (стабильные ~5.0 Гц), а статус двигателя (Покой / Работа) мгновенно определяется по порогам АЦП ДМРВ и генератора\n2) Честная индикация частоты в справке: 3.6–4.1 Гц на полном 79-байтном кадре Главной панели (21011) и ~5.0 Гц на коротком 27-байтном кадре АЦП (21031)\n3) Вкладка Тесты: групповые заголовки с иконками для Топливных форсунок и Катушек зажигания на всю ширину сетки и живая мини-панель телеметрии\n4) Нижний док: скользящая стеклянная капсула Liquid Glider, пружинная физика скрытия по скроллу, мини-хэндл возврата и Duotone SVG-иконки Apple SF Symbols 6");
       });
     }
 
     // Интеллектуальное автоскрытие нижнего дока при отсутствии взаимодействия и скролле вниз
     this.initDockAutoHide();
 
-    // Режим скорости опроса K-Line: Постоянный Турбо v54.8
+    // Режим скорости опроса K-Line: Постоянный Турбо v54.9
     const cadencePill = document.querySelector('.cadence-pill');
     if (cadencePill) {
-      cadencePill.title = 'Частота опроса K-Line: Турбо v54.8';
+      cadencePill.title = 'Частота опроса K-Line: Турбо v54.9';
       this.currentSpeedProfile = 'extreme';
 
       cadencePill.addEventListener('click', () => {
@@ -408,13 +408,12 @@ class M73Application {
           ? "Включен (21011 / 21031, закрытие кадра 0 мс)"
           : (this.m73 && this.m73.singleFrameSuffixSupported === false ? "Отключен адаптером (стандартный 2101)" : "Определяется...");
         alert(
-          `⚡ Режим опроса: Постоянный Турбо (Релиз v54.8)\n\n` +
+          `⚡ Режим опроса: Постоянный Турбо (Релиз v54.9)\n\n` +
           `• Адаптивный тайминг: AT AT 2\n` +
           `• Таймаут шины: AT ST 10 (~64 мс, постоянный Турбо)\n` +
-          `• Замедленный режим AT ST 20: Полностью отключен\n` +
           `• Турбо-суффикс кадра: ${suffixInfo}\n` +
-          `• Прямой микро-рендеринг: Dirty Checking (<0.3 мс)\n` +
-          `• Частота опроса: 4.6–4.8 Гц (до 5.1 Гц на АЦП)`
+          `• Главная панель (только 21011, 79 байт): 3.6–4.1 Гц (~250 мс)\n` +
+          `• Вкладка АЦП (только 21031, 27 байт): ~5.0 Гц (~195 мс)`
         );
       });
     }
@@ -896,24 +895,8 @@ class M73Application {
             throw new Error("Пустой кадр 21 01");
           }
         } else if (this.currentTab === 'tab-adc') {
-          // Вкладка АЦП: опрашиваем Кадр 3 (21 03) для оценки напряжений датчиков
-          // Каждые 4 цикла также быстро считываем 21 01, чтобы обновить RPM и записать полную точку в лог
-          if ((this.adcCycleCounter || 0) % 4 === 0) {
-            try {
-              const data2101 = await this.m73.readConfiguredCycle('2101');
-              if (data2101) {
-                if (this.logger.isRecording) {
-                  this.logger.addPoint(data2101);
-                } else {
-                  this.logger.updateCadenceOnly();
-                }
-                if (this.widgetManager && this.widgetManager.oscChannel !== 'mafAdc') {
-                  this.widgetManager.updateDynamicWidgets(data2101);
-                }
-              }
-            } catch (e) {}
-          }
-          this.adcCycleCounter = (this.adcCycleCounter || 0) + 1;
+          // Вкладка АЦП: опрашиваем СТРОГО короткий Кадр 3 (21 03 / 21031) без подмеса длинного 21 01,
+          // чтобы исключить просадки частоты с 5.0 Гц до 4.1 Гц
           const dataAdc = await this.m73.readConfiguredCycle('2103');
           if (dataAdc) {
             this.updateAdcUI(dataAdc);
@@ -1220,8 +1203,12 @@ class M73Application {
   evaluateAdcHealth(data) {
     if (!data || !data.adc) return;
     const adc = data.adc;
-    const rpm = (this.m73.latestData && this.m73.latestData.rpm) || 0;
-    const isRunning = rpm > 300;
+    const mafV = Number(adc.maf);
+    const voltV = Number(adc.volt);
+    const lastRpm = (this.m73.latestData && this.m73.latestData.rpm) || 0;
+    // Мгновенное определение работающего двигателя прямо по физике кадра 21 03 (без лишних запросов 21 01):
+    // при запуске мотора поток воздуха сразу поднимает АЦП ДМРВ >= 1.20 В, а генератор даёт >= 13.45 В
+    const isRunning = mafV >= 1.20 || voltV >= 13.45 || (lastRpm > 300 && mafV > 1.16);
 
     let countOk = 0;
     let countWarn = 0;
@@ -1245,7 +1232,6 @@ class M73Application {
     };
 
     // 1. ДМРВ (Bosch HFM5 0 280 218 116)
-    const mafV = Number(adc.maf);
     const mafRatio = isRunning ? (mafV / 5.0) : Math.min(1, Math.max(0, (mafV - 0.95) / 0.15));
     if (!isRunning) {
       if (mafV >= 0.996 && mafV <= 1.020) {
@@ -1291,7 +1277,6 @@ class M73Application {
     }
 
     // 3. Бортовая сеть (АКБ / Генератор)
-    const voltV = Number(adc.volt);
     const voltRatio = Math.max(0, Math.min(1, (voltV - 10.0) / 5.5));
     if (!isRunning) {
       if (voltV >= 12.4) {
