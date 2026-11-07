@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" href="icon-192.png">
   <title>Диагностика М73 — Лада Приора</title>
   
-  <link rel="stylesheet" href="styles.css?v=54.7">
+  <link rel="stylesheet" href="styles.css?v=54.8">
   <script src="xlsx.full.min.js"></script>
   <link rel="manifest" href="manifest.json">
 </head>
@@ -25,7 +25,7 @@
     <header class="glass-navbar">
       <div class="navbar-brand">
         <span class="status-pulse" id="connIndicator"></span>
-        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v54.7</span></div>
+        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v54.8</span></div>
         <span class="status-text" id="connStateText">Не подключено</span>
       </div>
 
@@ -959,108 +959,84 @@
           </div>
 
           <div class="actuator-grid-2col">
+            <!-- Подзаголовок группы: Форсунки -->
+            <div class="actuator-group-label">
+              <span class="act-group-icon act-icon-inj" aria-hidden="true">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v4l-1.5 2v5h-3V9L9 7V3z"/><path d="M12 14v3M9 18l-2 3M12 18v3M15 18l2 3"/></svg>
+              </span>
+              <span>Топливные форсунки</span>
+            </div>
+
             <!-- Форсунки -->
             <div class="actuator-card-compact">
-              <div class="act-compact-left">
-                <div class="act-icon-box sm act-icon-inj" aria-hidden="true">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v4l-1.5 2v5h-3V9L9 7V3z"/><path d="M12 14v3M9 18l-2 3M12 18v3M15 18l2 3"/></svg>
-                </div>
-                <div class="act-compact-info">
-                  <strong>Форсунка 1</strong>
-                  <span>ID 01 (2.5 сек)</span>
-                </div>
+              <div class="act-compact-info">
+                <strong>Форсунка 1</strong>
+                <span>ID 01 (2.5 сек)</span>
               </div>
               <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('inj1_test', this)">Тест</button>
             </div>
 
             <div class="actuator-card-compact">
-              <div class="act-compact-left">
-                <div class="act-icon-box sm act-icon-inj" aria-hidden="true">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v4l-1.5 2v5h-3V9L9 7V3z"/><path d="M12 14v3M9 18l-2 3M12 18v3M15 18l2 3"/></svg>
-                </div>
-                <div class="act-compact-info">
-                  <strong>Форсунка 2</strong>
-                  <span>ID 02 (2.5 сек)</span>
-                </div>
+              <div class="act-compact-info">
+                <strong>Форсунка 2</strong>
+                <span>ID 02 (2.5 сек)</span>
               </div>
               <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('inj2_test', this)">Тест</button>
             </div>
 
             <div class="actuator-card-compact">
-              <div class="act-compact-left">
-                <div class="act-icon-box sm act-icon-inj" aria-hidden="true">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v4l-1.5 2v5h-3V9L9 7V3z"/><path d="M12 14v3M9 18l-2 3M12 18v3M15 18l2 3"/></svg>
-                </div>
-                <div class="act-compact-info">
-                  <strong>Форсунка 3</strong>
-                  <span>ID 03 (2.5 сек)</span>
-                </div>
+              <div class="act-compact-info">
+                <strong>Форсунка 3</strong>
+                <span>ID 03 (2.5 сек)</span>
               </div>
               <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('inj3_test', this)">Тест</button>
             </div>
 
             <div class="actuator-card-compact">
-              <div class="act-compact-left">
-                <div class="act-icon-box sm act-icon-inj" aria-hidden="true">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v4l-1.5 2v5h-3V9L9 7V3z"/><path d="M12 14v3M9 18l-2 3M12 18v3M15 18l2 3"/></svg>
-                </div>
-                <div class="act-compact-info">
-                  <strong>Форсунка 4</strong>
-                  <span>ID 04 (2.5 сек)</span>
-                </div>
+              <div class="act-compact-info">
+                <strong>Форсунка 4</strong>
+                <span>ID 04 (2.5 сек)</span>
               </div>
               <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('inj4_test', this)">Тест</button>
             </div>
 
+            <!-- Подзаголовок группы: Катушки зажигания -->
+            <div class="actuator-group-label" style="margin-top: 4px;">
+              <span class="act-group-icon act-icon-coil" aria-hidden="true">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>
+              </span>
+              <span>Катушки зажигания</span>
+            </div>
+
             <!-- Катушки зажигания -->
             <div class="actuator-card-compact">
-              <div class="act-compact-left">
-                <div class="act-icon-box sm act-icon-coil" aria-hidden="true">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>
-                </div>
-                <div class="act-compact-info">
-                  <strong>Катушка 1</strong>
-                  <span>Цил. 1–4 (ID 05)</span>
-                </div>
+              <div class="act-compact-info">
+                <strong>Катушка 1</strong>
+                <span>Цил. 1–4 (ID 05)</span>
               </div>
               <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('coil1_test', this)">Тест</button>
             </div>
 
             <div class="actuator-card-compact">
-              <div class="act-compact-left">
-                <div class="act-icon-box sm act-icon-coil" aria-hidden="true">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>
-                </div>
-                <div class="act-compact-info">
-                  <strong>Катушка 2</strong>
-                  <span>Цил. 2 (ID 06)</span>
-                </div>
+              <div class="act-compact-info">
+                <strong>Катушка 2</strong>
+                <span>Цил. 2 (ID 06)</span>
               </div>
               <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('coil2_test', this)">Тест</button>
             </div>
 
             <div class="actuator-card-compact">
-              <div class="act-compact-left">
-                <div class="act-icon-box sm act-icon-coil" aria-hidden="true">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>
-                </div>
-                <div class="act-compact-info">
-                  <strong>Катушка 3</strong>
-                  <span>Цил. 2–3 (ID 07)</span>
-                </div>
+              <div class="act-compact-info">
+                <strong>Катушка 3</strong>
+                <span>Цил. 2–3 (ID 07)</span>
               </div>
               <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('coil3_test', this)">Тест</button>
             </div>
 
             <div class="actuator-card-compact">
-              <div class="act-compact-left">
-                <div class="act-icon-box sm act-icon-coil" aria-hidden="true">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>
-                </div>
-                <div class="act-compact-info">
-                  <strong>Катушка 4</strong>
-                  <span>Цил. 4 (ID 08)</span>
-                </div>
+              <div class="act-compact-info">
+                <strong>Катушка 4</strong>
+                <span>Цил. 4 (ID 08)</span>
               </div>
               <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('coil4_test', this)">Тест</button>
             </div>
@@ -1396,10 +1372,10 @@
     </div>
   </div>
 
-  <script src="elm327.js?v=54.7"></script>
-  <script src="m73.js?v=54.7"></script>
-  <script src="logger.js?v=54.7"></script>
-  <script src="dashboard-widgets.js?v=54.7"></script>
-  <script src="app.js?v=54.7"></script>
+  <script src="elm327.js?v=54.8"></script>
+  <script src="m73.js?v=54.8"></script>
+  <script src="logger.js?v=54.8"></script>
+  <script src="dashboard-widgets.js?v=54.8"></script>
+  <script src="app.js?v=54.8"></script>
 </body>
 </html>

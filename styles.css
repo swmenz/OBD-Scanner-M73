@@ -3250,6 +3250,29 @@ body {
   margin-top: 1px;
 }
 
+/* Подзаголовки групп Форсунок и Катушек зажигания на всю ширину 2 колонок */
+.actuator-group-label {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 2px 2px 0;
+}
+
+.act-group-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
 /* Вращение крыльчатки вентилятора и подсветка карточки во время активного теста ИМ */
 .actuator-item-running {
   border-color: rgba(255, 159, 10, 0.42) !important;
