@@ -28,15 +28,16 @@ class TripStorage {
     });
   }
 
-  async saveTrip(records, maxRpm = 0) {
+  async saveTrip(records, maxRpm = 0, existingId = null) {
     if (!records || records.length === 0) return null;
     const db = await this._openDb();
-    const now = new Date();
+    const tripId = existingId || Date.now();
+    const now = new Date(tripId);
     const dateFormatted = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const fileDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
     
     const trip = {
-      id: Date.now(),
+      id: tripId,
       dateStr: dateFormatted,
       fileName: `Приора_М73_Лог_${fileDateStr}.csv`,
       pointCount: records.length,
@@ -47,12 +48,15 @@ class TripStorage {
     return new Promise((resolve, reject) => {
       const tx = db.transaction(this.storeName, 'readwrite');
       const store = tx.objectStore(this.storeName);
-      store.add(trip);
+      store.put(trip);
       tx.oncomplete = async () => {
-        await this._pruneOldTrips();
+        try {
+          await this._pruneOldTrips();
+        } catch (e) {}
         resolve(trip);
       };
       tx.onerror = (e) => reject(e.target.error);
+      tx.onabort = (e) => reject(tx.error || (e && e.target && e.target.error) || new Error('IndexedDB transaction aborted'));
     });
   }
 
@@ -62,11 +66,16 @@ class TripStorage {
       trips.sort((a, b) => b.id - a.id);
       const toDelete = trips.slice(maxCount);
       const db = await this._openDb();
-      const tx = db.transaction(this.storeName, 'readwrite');
-      const store = tx.objectStore(this.storeName);
-      for (const t of toDelete) {
-        store.delete(t.id);
-      }
+      return new Promise((resolve) => {
+        const tx = db.transaction(this.storeName, 'readwrite');
+        const store = tx.objectStore(this.storeName);
+        for (const t of toDelete) {
+          store.delete(t.id);
+        }
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+        tx.onabort = () => resolve(false);
+      });
     }
   }
 
@@ -75,17 +84,24 @@ class TripStorage {
     return new Promise((resolve, reject) => {
       const tx = db.transaction(this.storeName, 'readonly');
       const store = tx.objectStore(this.storeName);
-      const req = store.getAll();
-      req.onsuccess = () => {
-        const all = req.result || [];
-        const meta = all.map(t => ({
-          id: t.id,
-          dateStr: t.dateStr,
-          fileName: t.fileName,
-          pointCount: t.pointCount,
-          maxRpm: t.maxRpm
-        })).sort((a, b) => b.id - a.id);
-        resolve(meta);
+      const meta = [];
+      const req = store.openCursor();
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) {
+          const t = cursor.value;
+          meta.push({
+            id: t.id,
+            dateStr: t.dateStr,
+            fileName: t.fileName,
+            pointCount: t.pointCount,
+            maxRpm: t.maxRpm
+          });
+          cursor.continue();
+        } else {
+          meta.sort((a, b) => b.id - a.id);
+          resolve(meta);
+        }
       };
       req.onerror = (e) => reject(e.target.error);
     });
@@ -201,6 +217,7 @@ class TripLogger {
 
   start() {
     this.records = [];
+    this.currentTripId = Date.now();
     this.startTime = performance.now();
     this.isRecording = true;
     this.lastFrameTime = performance.now();
@@ -208,12 +225,25 @@ class TripLogger {
     this._enableBackgroundMode();
   }
 
+  async saveCheckpoint(maxRpm = 0) {
+    if (this.records && this.records.length >= 5) {
+      try {
+        const saved = await this.storage.saveTrip(this.records, maxRpm, this.currentTripId);
+        this.lastSavedTrip = saved;
+        return saved;
+      } catch (err) {
+        console.warn("Ошибка контрольной точки лога:", err);
+      }
+    }
+    return null;
+  }
+
   async stop(maxRpm = 0) {
     this.isRecording = false;
     this._disableBackgroundMode();
     if (this.records && this.records.length >= 5) {
       try {
-        const saved = await this.storage.saveTrip(this.records, maxRpm);
+        const saved = await this.storage.saveTrip(this.records, maxRpm, this.currentTripId);
         this.lastSavedTrip = saved;
         return saved;
       } catch (err) {
@@ -433,7 +463,7 @@ class TripLogger {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
 
   /**
@@ -490,7 +520,7 @@ class TripLogger {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
 }
 

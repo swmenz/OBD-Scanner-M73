@@ -1,5 +1,5 @@
-// Сервис-воркер для 100% оффлайн работы приложения в машине без интернета (v54.5)
-const CACHE_NAME = 'm73-diag-cache-v54.5';
+// Сервис-воркер для 100% оффлайн работы приложения в машине без интернета (v54.6)
+const CACHE_NAME = 'm73-diag-cache-v54.6';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -61,7 +61,13 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith(
       Promise.race([
-        fetch(request),
+        fetch(request).then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put('./index.html', clone));
+          }
+          return networkResponse;
+        }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
       ]).catch(async () => {
         const cached = (await caches.match('./index.html')) || (await caches.match('./'));

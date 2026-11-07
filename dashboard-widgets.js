@@ -199,10 +199,18 @@ class DashboardWidgetManager {
     
     // Универсальный осциллограф
     this.oscChannels = OSC_CHANNELS;
-    this.oscChannel = localStorage.getItem('priora_osc_channel') || 'o2Volt';
-    this.maxOscPoints = parseInt(localStorage.getItem('priora_osc_points') || '90', 10);
+    let savedChannel = 'o2Volt';
+    let savedPoints = 90;
+    let savedAutoScale = true;
+    try {
+      savedChannel = localStorage.getItem('priora_osc_channel') || 'o2Volt';
+      savedPoints = parseInt(localStorage.getItem('priora_osc_points') || '90', 10) || 90;
+      savedAutoScale = localStorage.getItem('priora_osc_autoscale') !== 'false';
+    } catch (e) {}
+    this.oscChannel = savedChannel;
+    this.maxOscPoints = savedPoints;
     this.isOscPaused = false;
-    this.isOscAutoScale = localStorage.getItem('priora_osc_autoscale') !== 'false';
+    this.isOscAutoScale = savedAutoScale;
     this.oscHistory = [];
     
     // Совместимость с предыдущим O2

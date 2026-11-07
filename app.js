@@ -201,9 +201,10 @@ class M73Application {
     this.shouldBeConnected = false;
     this.needsReconnectOnVisible = false;
 
-    // Состояние управления исполнительными механизмами и уставками (v51.3 Mutex)
+    // Состояние управления исполнительными механизмами и уставками (v54.6 Mutex)
     this.isActuatorBusy = false;
     this._cancelRegulatorRequested = false;
+    this._forceRegulatorSend = false;
     this._pendingReleases = new Set(); // ID регуляторов, которые надо вернуть ЭБУ, когда канал освободится
     this.activeRegulator = null; // { key: 'rxx'|'idleRpm'|'purge', idHex: '41'|'42'|'43', rawByte: 0 }
     this.regulatorValues = {
@@ -211,6 +212,7 @@ class M73Application {
       rxx: 60,      // шагов (ID 41, шаг 5, диапазон 10..200)
       purge: 20     // % (ID 43, шаг 10, диапазон 0..100)
     };
+    this.lastAutoSavedTrip = null;
 
     this.initElements();
     this.bindEvents();
@@ -246,7 +248,6 @@ class M73Application {
     this.historyList = document.getElementById('historyList');
     this.btnCloseHistory = document.getElementById('btnCloseHistory');
     this.btnClearHistory = document.getElementById('btnClearHistory');
-    this.lastAutoSavedTrip = null;
 
     // Главные приборы
     this.valRpm = document.getElementById('valRpm');
@@ -370,17 +371,17 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v54.5\n\nОбновления:\n1) Полная верификация Auto-Probe (21011/21031) по срезу от заголовка 61xx + валидация парсером + авто-откат при обрезке длинного кадра\n2) Надежный Dirty Checking во всех вкладках (Панель, АЦП, шапка) со сверкой напрямую с DOM и проверкой .isConnected\n3) Точный расчет частоты (Гц/мс) на вкладке АЦП при выключенной записи лога\n4) Защита K-Line сессии (диалоги подтверждения вынесены ДО опроса ЭБУ) и очереди BLE-команд при дисконнекте\n5) Оптимизация осциллографа без spread-аллокаций в цикле отрисовки 120 FPS");
+        alert("Диагностика М73 — Версия v54.6\n\nОбновления:\n1) Вкладка АЦП: жёсткая фиксация геометрии карточек датчиков (без скачков высоты при смене статусов)\n2) Вкладка Тесты: мгновенный возврат в режим «Штатно (ЭБУ)» без задержек и разрешение тестов Вентиляторов 1/2 и Лампы Check на заведённом двигателе\n3) Контроль безопасности: авто-сброс удержания регулятора при начале движения (Speed > 0) или отказе ЭБУ, вынос диалогов confirm() до остановки опроса\n4) Автосохранение контрольной точки лога поездки в IndexedDB при выключении зажигания (постоянные +12В OBD)\n5) Расширенный словарь кодов DTC М73 со статусом ошибки (Текущая / Сохранённая) и фильтрация точных диапазонов АЦП");
       });
     }
 
     // Интеллектуальное автоскрытие нижнего дока при отсутствии взаимодействия (HUD режим в поездке)
     this.initDockAutoHide();
 
-    // Режим скорости опроса K-Line: Постоянный Турбо v54.5
+    // Режим скорости опроса K-Line: Постоянный Турбо v54.6
     const cadencePill = document.querySelector('.cadence-pill');
     if (cadencePill) {
-      cadencePill.title = 'Частота опроса K-Line: Турбо v54.5';
+      cadencePill.title = 'Частота опроса K-Line: Турбо v54.6';
       this.currentSpeedProfile = 'extreme';
 
       cadencePill.addEventListener('click', () => {
@@ -388,7 +389,7 @@ class M73Application {
           ? "Включен (21011 / 21031, закрытие кадра 0 мс)"
           : (this.m73 && this.m73.singleFrameSuffixSupported === false ? "Отключен адаптером (стандартный 2101)" : "Определяется...");
         alert(
-          `⚡ Режим опроса: Постоянный Турбо (Релиз v54.5)\n\n` +
+          `⚡ Режим опроса: Постоянный Турбо (Релиз v54.6)\n\n` +
           `• Адаптивный тайминг: AT AT 2\n` +
           `• Таймаут шины: AT ST 10 (~64 мс, постоянный Турбо)\n` +
           `• Замедленный режим AT ST 20: Полностью отключен\n` +
@@ -435,14 +436,19 @@ class M73Application {
 
     // Автозапись и история поездок
     if (this.chkAutoRecord) {
-      const savedAutoRec = localStorage.getItem('m73_autorecord');
+      let savedAutoRec = null;
+      try {
+        savedAutoRec = localStorage.getItem('m73_autorecord');
+      } catch (e) {}
       this.chkAutoRecord.checked = savedAutoRec !== 'false' && savedAutoRec !== '0';
     }
 
     document.addEventListener('change', (e) => {
       const chk = e.target.closest('#chkAutoRecord');
       if (chk) {
-        localStorage.setItem('m73_autorecord', String(chk.checked));
+        try {
+          localStorage.setItem('m73_autorecord', String(chk.checked));
+        } catch (err) {}
         if (chk.checked && this.elm.isConnected && !this.logger.isRecording) {
           this.startLogging();
         }
@@ -762,7 +768,7 @@ class M73Application {
   }
 
   startContinuousPolling() {
-    if (this.isPolling) return this.pollPromise;
+    if (this.isPolling || this.pollPromise) return this.pollPromise;
     this.isPolling = true;
     this.pollPromise = this._pollLoop().finally(() => { this.pollPromise = null; });
     return this.pollPromise;
@@ -783,6 +789,7 @@ class M73Application {
     let failures = 0;
     let lastTesterPresent = Date.now();
     this.adcCycleCounter = 0;
+    this.regHoldCounter = 0;
 
     while (this.isPolling && this.elm.isConnected) {
       try {
@@ -791,12 +798,56 @@ class M73Application {
         // чтобы не занимать шину K-Line и исключить коллизии с ручными сервисными запросами.
         if (this.currentTab === 'tab-dtc' || this.currentTab === 'tab-actuators' || this.currentTab === 'tab-terminal') {
           if (this.currentTab === 'tab-actuators' && this.activeRegulator) {
-            // Удержание активной уставки регулятора (обороты ХХ, РХХ, адсорбер) каждые 700 мс
-            if (Date.now() - lastTesterPresent > 700) {
+            // Удержание активной уставки регулятора (обороты ХХ, РХХ, адсорбер) каждые 650 мс или мгновенно по кнопкам +/-
+            if (this._forceRegulatorSend || Date.now() - lastTesterPresent > 650) {
+              const forceNow = this._forceRegulatorSend;
+              this._forceRegulatorSend = false;
+              this.regHoldCounter = (this.regHoldCounter || 0) + 1;
+
+              // Каждые 4 цикла удержания проверяем скорость по кадру 21 01 для защиты при начале движения
+              if (!forceNow && this.regHoldCounter % 4 === 0 && this.activeRegulator) {
+                try {
+                  const checkData = await this.m73.readConfiguredCycle('2101');
+                  if (checkData && checkData.speed > 0 && this.activeRegulator) {
+                    const movingReg = this.activeRegulator;
+                    this.activeRegulator = null;
+                    this._updateRegulatorUI(movingReg.key, false);
+                    await this.m73.releaseActuatorControl(movingReg.idHex);
+                    this.elm.log('warn', 'Движение автомобиля (Speed > 0): удержание регулятора автоматически отключено');
+                    lastTesterPresent = Date.now();
+                    await this.delay(120);
+                    continue;
+                  }
+                } catch (e) {}
+              }
+
+              if (this.activeRegulator) {
+                try {
+                  await this.m73.setActuatorSetpoint(this.activeRegulator.idHex, this.activeRegulator.rawByte);
+                  lastTesterPresent = Date.now();
+                } catch (e) {
+                  // Если ЭБУ отклонил удержание (например, 7F 30 22 при нажатии на педаль газа) — снимаем статус «Удерживается»
+                  if (this.activeRegulator) {
+                    const failedReg = this.activeRegulator;
+                    this.activeRegulator = null;
+                    this._updateRegulatorUI(failedReg.key, false);
+                    try { await this.m73.releaseActuatorControl(failedReg.idHex); } catch (e2) {}
+                    this.elm.log('warn', 'ЭБУ прекратил удержание регулятора: ' + (e.message || e));
+                  }
+                }
+              }
+            }
+          } else if (this.currentTab === 'tab-actuators' && Date.now() - lastTesterPresent > 1500) {
+            // На вкладке Тесты (когда регулятор в режиме «Штатно (ЭБУ)») раз в 1.5 сек опрашиваем 21 01:
+            // обновляет актуальные обороты/скорость и гарантирует выход М73 из режима 0x30 IOControl
+            try {
+              await this.m73.readConfiguredCycle('2101');
+              lastTesterPresent = Date.now();
+            } catch (e) {
               try {
-                await this.m73.setActuatorSetpoint(this.activeRegulator.idHex, this.activeRegulator.rawByte);
+                await this.elm.send("3E", 500);
                 lastTesterPresent = Date.now();
-              } catch (e) {}
+              } catch (e2) {}
             }
           } else if (Date.now() - lastTesterPresent > 2000) {
             // Раз в 2 секунды отправляем легкий Tester Present (3E), чтобы сессия ЭБУ не закрылась по таймауту
@@ -805,7 +856,7 @@ class M73Application {
               lastTesterPresent = Date.now();
             } catch (e) {}
           }
-          await this.delay(200);
+          await this.delay(120);
           continue;
         }
 
@@ -861,6 +912,18 @@ class M73Application {
       } catch (err) {
         failures++;
         if (failures === 5) this.connStateText.textContent = "ЭБУ не отвечает";
+
+        // В Ладе Приоре разъём OBD-II запитан от постоянных +12В АКБ, поэтому при выключении зажигания
+        // Bluetooth-адаптер остаётся подключённым, а ЭБУ перестаёт отвечать. Сохраняем контрольную точку лога поездки!
+        if (failures === 8 && this.logger.isRecording && this.logger.records.length >= 5) {
+          try {
+            const saved = await this.logger.saveCheckpoint(this.peakRpm || 0);
+            if (saved) {
+              this.lastAutoSavedTrip = saved;
+              this.refreshHistoryCount();
+            }
+          } catch (e) {}
+        }
 
         // Автовосстановление K-Line сессии при серии сбоев:
         if (failures === 6) {
@@ -1083,7 +1146,6 @@ class M73Application {
     if (!data || !data.adc) return;
     const adc = data.adc;
     const rpm = (this.m73.latestData && this.m73.latestData.rpm) || 0;
-    const volt = Number(adc.volt) || 0;
     const isRunning = rpm > 300;
 
     let countOk = 0;
@@ -1132,11 +1194,11 @@ class M73Application {
 
     // 2. ДПДЗ (Датчик положения дроссельной заслонки)
     const tpsV = Number(adc.tps);
-    if (tpsV >= 0.45 && tpsV <= 0.65) {
-      setBadge(this.healthAdcThrottle, this.descAdcThrottle, 'ok', '🟢 Закрыта (0%)', 'Калибровка нуля заслонки в норме (0.45 ... 0.65 В)');
+    if (tpsV >= 0.35 && tpsV <= 0.65) {
+      setBadge(this.healthAdcThrottle, this.descAdcThrottle, 'ok', '🟢 Закрыта (0%)', 'Калибровка нуля заслонки в норме (0.35 ... 0.65 В)');
     } else if (tpsV > 0.65 && tpsV <= 0.75) {
       setBadge(this.healthAdcThrottle, this.descAdcThrottle, 'warn', '🟡 Смещение нуля', 'Возможен перетяг троса газа или нагар на упоре дросселя');
-    } else if (tpsV > 0.75 && tpsV <= 4.60) {
+    } else if (tpsV > 0.75 && tpsV <= 4.70) {
       const openPct = Math.min(100, Math.max(0, ((tpsV - 0.5) / 4.0) * 100)).toFixed(0);
       setBadge(this.healthAdcThrottle, this.descAdcThrottle, 'info', `🔵 Открыта (~${openPct}%)`, 'Дроссельная заслонка открыта, сигнал изменяется плавно');
     } else if (tpsV < 0.35) {
@@ -1156,8 +1218,8 @@ class M73Application {
         setBadge(this.healthAdcVolt, this.descAdcVolt, 'danger', '🔴 Глубокий разряд', 'Покой: Напряжение АКБ < 12.0 В. Риск отказа запуска');
       }
     } else {
-      if (voltV >= 13.8 && voltV <= 14.6) {
-        setBadge(this.healthAdcVolt, this.descAdcVolt, 'ok', '🟢 Зарядка ОК', 'Работа: Генератор выдает стабильные 13.8 ... 14.6 В');
+      if (voltV >= 13.8 && voltV <= 14.7) {
+        setBadge(this.healthAdcVolt, this.descAdcVolt, 'ok', '🟢 Зарядка ОК', 'Работа: Генератор выдает стабильные 13.8 ... 14.7 В');
       } else if (voltV >= 13.2 && voltV < 13.8) {
         setBadge(this.healthAdcVolt, this.descAdcVolt, 'warn', '🟡 Под нагрузкой', 'Работа: Небольшая просадка напряжения генератора');
       } else if (voltV < 13.2) {
@@ -1369,7 +1431,12 @@ class M73Application {
       `).join('');
     } catch (e) {
       if (this.historyList) {
-        this.historyList.innerHTML = `<div class="empty-state-card" style="color: var(--apple-rose)">Ошибка: ${e.message}</div>`;
+        const errDiv = document.createElement('div');
+        errDiv.className = 'empty-state-card';
+        errDiv.style.color = 'var(--apple-rose)';
+        errDiv.textContent = 'Ошибка: ' + (e && e.message ? e.message : e);
+        this.historyList.innerHTML = '';
+        this.historyList.appendChild(errDiv);
       }
     }
   }
@@ -1417,15 +1484,27 @@ class M73Application {
       if (errors.length === 0) {
         this.dtcList.innerHTML = '<div class="empty-state-card" style="color: var(--apple-green)">Ошибок в памяти контроллера не обнаружено. Система исправна.</div>';
       } else {
-        this.dtcList.innerHTML = errors.map(e => `
+        this.dtcList.innerHTML = errors.map(e => {
+          const badgeClass = e.isActive ? 'badge-health-danger' : 'badge-health-warn';
+          const statusLabel = e.statusText || 'Сохранённая';
+          return `
           <div class="dtc-item">
-            <div class="dtc-code">${e.code}</div>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
+              <div class="dtc-code" style="margin-bottom: 0;">${e.code}</div>
+              <span class="badge-health ${badgeClass}">${statusLabel}</span>
+            </div>
             <div class="dtc-desc">${e.desc}</div>
           </div>
-        `).join('');
+        `;
+        }).join('');
       }
     } catch (err) {
-      this.dtcList.innerHTML = `<div class="empty-state-card" style="color: var(--apple-rose)">Ошибка чтения: ${err.message}</div>`;
+      const errDiv = document.createElement('div');
+      errDiv.className = 'empty-state-card';
+      errDiv.style.color = 'var(--apple-rose)';
+      errDiv.textContent = 'Ошибка чтения: ' + (err && err.message ? err.message : err);
+      this.dtcList.innerHTML = '';
+      this.dtcList.appendChild(errDiv);
     } finally {
       await this._finishBusy(prevPolling);
     }
@@ -1478,13 +1557,11 @@ class M73Application {
     const el = document.getElementById(cfg.elId);
     if (el) el.textContent = `${this.regulatorValues[key]} ${cfg.unit}`;
 
-    // Если этот регулятор уже удерживается — сразу обновляем целевой байт для цикла _pollLoop
-    // и отправляем команду в ЭБУ только если канал сейчас не занят
+    // Если этот регулятор уже удерживается — сразу обновляем целевой байт и взводим флаг мгновенной отправки в _pollLoop
+    // без блокировки isActuatorBusy, чтобы кнопка «Штатно (ЭБУ)» срабатывала мгновенно в любую долю секунды!
     if (this.activeRegulator && this.activeRegulator.key === key) {
       this.activeRegulator.rawByte = cfg.toRaw(this.regulatorValues[key]);
-      if (!this.isActuatorBusy) {
-        this.applyRegulator(key, true);
-      }
+      this._forceRegulatorSend = true;
     }
   }
 
@@ -1500,22 +1577,33 @@ class M73Application {
     const cfg = map[key];
     if (!cfg) return;
 
+    // 1. Запрашиваем подтверждение пользователя ДО остановки опроса и блокировки канала,
+    // чтобы пока открыт системный диалог confirm(), цикл продолжал поддерживать K-Line сессию!
+    if (!skipConfirm) {
+      if (!confirm("Внимание! Ручное управление уставками разрешено выполнять только на стоянке автомобиля. Применить выбранное значение?")) {
+        return;
+      }
+      if (!this.elm.isConnected || this.isActuatorBusy) return;
+    }
+
     this.isActuatorBusy = true;
     this._cancelRegulatorRequested = false;
     const prevPolling = this.isPolling || this.shouldBeConnected;
     await this.stopPolling();
 
     try {
-      // При первичном включении (!skipConfirm) сначала запрашиваем подтверждение, затем опрашиваем свежий кадр 21 01
+      // 2. Опрашиваем свежий кадр 21 01 и убеждаемся, что автомобиль стоит на месте
       if (!skipConfirm) {
-        if (!confirm("Внимание! Ручное управление уставками разрешено выполнять только на стоянке автомобиля. Применить выбранное значение?")) {
-          return;
-        }
+        let freshData = null;
         try {
-          await this.m73.readConfiguredCycle('2101');
+          freshData = await this.m73.readConfiguredCycle('2101');
         } catch (e) {}
 
-        if (this.m73.latestData && this.m73.latestData.speed > 0) {
+        if (!freshData) {
+          alert("Не удалось проверить текущую скорость автомобиля (ЭБУ не ответил на запрос 21 01). Проверьте зажигание.");
+          return;
+        }
+        if (freshData.speed > 0) {
           alert("Внимание! Ручное управление уставками разрешено только на стоянке (скорость 0 км/ч). При движении автомобиля управление блокируется в целях безопасности.");
           return;
         }
@@ -1523,7 +1611,7 @@ class M73Application {
         return;
       }
 
-      // Если во время подтверждения пользователь переключил вкладку или нажал сброс — выходим
+      // Если во время проверки пользователь переключил вкладку или нажал «Штатно (ЭБУ)» — выходим
       if (this._cancelRegulatorRequested) {
         this.activeRegulator = null;
         this._updateRegulatorUI(key, false);
@@ -1582,12 +1670,13 @@ class M73Application {
 
     // Взводим флаг отмены на случай, если applyRegulator сейчас находится в процессе отправки
     this._cancelRegulatorRequested = true;
+    this._forceRegulatorSend = false;
     if (this.activeRegulator && this.activeRegulator.key === key) {
       this.activeRegulator = null;
     }
     this._updateRegulatorUI(key, false);
 
-    // Канал занят: запоминаем возврат управления, его отправит _finishBusy() владельца канала
+    // Канал занят: запоминаем возврат управления, его гарантированно отправит _finishBusy() владельца канала
     if (this.isActuatorBusy) {
       this._pendingReleases.add(idHex);
       return;
@@ -1632,6 +1721,19 @@ class M73Application {
       return;
     }
 
+    // Вентиляторы 1 и 2 скорости и лампа Check Engine безопасны и разрешены в том числе на заведённом двигателе (на стоянке)
+    const ALLOWED_ON_RUNNING_ENGINE = new Set(['fan1_on', 'fan2_on', 'mil_test']);
+    const allowRunning = ALLOWED_ON_RUNNING_ENGINE.has(testType);
+
+    // 1. Запрашиваем подтверждение пользователя ДО остановки опроса и блокировки шины
+    const confirmMsg = allowRunning
+      ? "Внимание! Тест механизма разрешено выполнять на стоянке автомобиля (скорость 0 км/ч). Запустить проверку?"
+      : "Внимание! Тест этого механизма разрешено выполнять только на стоянке при заглушенном двигателе (0 об/мин) и включенном зажигании. Запустить тест?";
+    if (!confirm(confirmMsg)) {
+      return;
+    }
+    if (!this.elm.isConnected || this.isActuatorBusy) return;
+
     this.isActuatorBusy = true;
     const prevPolling = this.isPolling || this.shouldBeConnected;
     await this.stopPolling();
@@ -1646,23 +1748,30 @@ class M73Application {
         try { await this.m73.releaseActuatorControl(prevIdHex); } catch (e) {}
       }
 
-      // 1. Запрашиваем подтверждение пользователя ДО блокировки шины
-      if (!confirm("Внимание! Тест исполнительного механизма разрешено выполнять только на стоянке при заглушенном двигателе и включенном зажигании. Запустить тест?")) {
-        return;
-      }
-
-      // 2. Сразу после подтверждения опрашиваем свежий кадр 21 01 (пробуждает K-Line и проверяет условия безопасности)
+      // 2. Сразу после подтверждения опрашиваем свежий кадр 21 01 (обязательная проверка реальных оборотов и скорости)
+      let freshData = null;
       try {
-        await this.m73.readConfiguredCycle('2101');
+        freshData = await this.m73.readConfiguredCycle('2101');
       } catch (e) {}
 
-      // 3. Проверка условий безопасности: дискретные тесты разрешены ТОЛЬКО при RPM == 0 и SPEED == 0
-      if (this.m73.latestData && (this.m73.latestData.rpm > 0 || this.m73.latestData.speed > 0)) {
-        alert("Внимание! Тесты реле, форсунок и катушек зажигания разрешены только на СТОЯНКЕ (скорость 0 км/ч) при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nЭБУ M73 аппаратно блокирует тесты при движении или заведённом моторе.");
+      if (!freshData) {
+        alert("Не удалось считать текущее состояние двигателя (ЭБУ не ответил на запрос 21 01). Проверьте, включено ли зажигание.");
         return;
       }
 
-      // 3. Даем шине 150 мс тишины для исключения коллизий пакетов
+      // 3. Проверка условий безопасности:
+      // - Для всех тестов обязательна стоянка автомобиля (speed === 0)
+      // - Для форсунок, катушек, бензонасоса, кондиционера и стартера двигатель должен быть заглушен (rpm === 0)
+      if (freshData.speed > 0) {
+        alert("Внимание! Любые тесты исполнительных механизмов разрешены только на СТОЯНКЕ автомобиля (скорость 0 км/ч)!");
+        return;
+      }
+      if (!allowRunning && freshData.rpm > 0) {
+        alert("Внимание! Тесты форсунок, катушек зажигания, бензонасоса, кондиционера и стартера разрешены только при ЗАГЛУШЕННОМ двигателе (0 об/мин) и включенном зажигании!\n\nНа заведённом моторе разрешены тесты Вентиляторов 1/2 и Лампы Check Engine.");
+        return;
+      }
+
+      // 4. Даем шине 150 мс тишины для исключения коллизий пакетов
       await this.delay(150);
 
       const origBtnHtml = btnEl ? btnEl.innerHTML : '';
@@ -1701,24 +1810,31 @@ class M73Application {
       return;
     }
 
+    // 1. Запрашиваем подтверждение пользователя ДО остановки шины и блокировки канала
+    if (!confirm("Внимание! Будут сброшены таблицы самообучения топлива и угла зажигания М73 к заводским значениям. Двигатель должен быть заглушен, зажигание включено. Продолжить?")) {
+      return;
+    }
+    if (!this.elm.isConnected || this.isActuatorBusy) return;
+
     this.isActuatorBusy = true;
     const prevPolling = this.isPolling || this.shouldBeConnected;
     await this.stopPolling();
 
     let sessionEnded = false;
     try {
-      // 1. Запрашиваем подтверждение пользователя ДО остановки шины и проверок
-      if (!confirm("Внимание! Будут сброшены таблицы самообучения топлива и угла зажигания М73 к заводским значениям. Двигатель должен быть заглушен, зажигание включено. Продолжить?")) {
+      // 2. Опрашиваем актуальный статус перед сбросом (проверка заглушен ли мотор и стоит ли машина)
+      let freshData = null;
+      try {
+        freshData = await this.m73.readConfiguredCycle('2101');
+      } catch (e) {}
+
+      if (!freshData) {
+        alert("Не удалось проверить состояние двигателя (нет ответа от ЭБУ). Проверьте, включено ли зажигание.");
         return;
       }
 
-      // 2. Опрашиваем актуальный статус перед сбросом (проверка заглушен ли мотор и стоит ли машина)
-      try {
-        await this.m73.readConfiguredCycle('2101');
-      } catch (e) {}
-
       // 3. Проверка условий безопасности: сброс ЭБУ разрешен ТОЛЬКО при RPM == 0 и SPEED == 0
-      if (this.m73.latestData && (this.m73.latestData.rpm > 0 || this.m73.latestData.speed > 0)) {
+      if (freshData.rpm > 0 || freshData.speed > 0) {
         alert("Внимание! Сброс ЭБУ с инициализацией разрешен только на СТОЯНКЕ (скорость 0 км/ч) при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nПерезапуск контроллера при заведённом двигателе или во время движения строго запрещен.");
         return;
       }

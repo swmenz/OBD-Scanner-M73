@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" href="icon-192.png">
   <title>Диагностика М73 — Лада Приора</title>
   
-  <link rel="stylesheet" href="styles.css?v=54.5">
+  <link rel="stylesheet" href="styles.css?v=54.6">
   <script src="xlsx.full.min.js"></script>
   <link rel="manifest" href="manifest.json">
 </head>
@@ -25,7 +25,7 @@
     <header class="glass-navbar">
       <div class="navbar-brand">
         <span class="status-pulse" id="connIndicator"></span>
-        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v54.5</span></div>
+        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v54.6</span></div>
         <span class="status-text" id="connStateText">Не подключено</span>
       </div>
 
@@ -804,7 +804,7 @@
           <div class="panel-header">
             <div>
               <h2 class="panel-heading">Реле и индикация</h2>
-              <p class="panel-sub">Проводить на заглушенном двигателе при включенном зажигании</p>
+              <p class="panel-sub">Вентиляторы 1/2 и Check доступны на заведённом моторе (на стоянке)</p>
             </div>
           </div>
 
@@ -821,7 +821,7 @@
                 </div>
                 <div class="act-details">
                   <strong>Вентилятор охлаждения (1 скорость)</strong>
-                  <span>Реле низкой скорости (ID 0A, 4 сек)</span>
+                  <span>Реле низкой скорости (ID 0A, 4 сек • можно на заведённом)</span>
                 </div>
               </div>
               <button class="glass-btn btn-glass-secondary" type="button" onclick="M73App.testActuator('fan1_on', this)">Тест</button>
@@ -842,7 +842,7 @@
                 </div>
                 <div class="act-details">
                   <strong>Вентилятор охлаждения (2 скорость)</strong>
-                  <span>Реле высокой скорости (ID 0D, 4 сек)</span>
+                  <span>Реле высокой скорости (ID 0D, 4 сек • можно на заведённом)</span>
                 </div>
               </div>
               <button class="glass-btn btn-glass-secondary" type="button" onclick="M73App.testActuator('fan2_on', this)">Тест</button>
@@ -899,7 +899,7 @@
                 </div>
                 <div class="act-details">
                   <strong>Лампа «Check Engine» (MIL)</strong>
-                  <span>Проверка контрольной лампы на панели (ID 0C, 3.5 сек)</span>
+                  <span>Проверка контрольной лампы (ID 0C, 3.5 сек • можно на заведённом)</span>
                 </div>
               </div>
               <button class="glass-btn btn-glass-secondary" type="button" onclick="M73App.testActuator('mil_test', this)">Тест</button>
@@ -1315,10 +1315,10 @@
     </div>
   </div>
 
-  <script src="elm327.js?v=54.5"></script>
-  <script src="m73.js?v=54.5"></script>
-  <script src="logger.js?v=54.5"></script>
-  <script src="dashboard-widgets.js?v=54.5"></script>
-  <script src="app.js?v=54.5"></script>
+  <script src="elm327.js?v=54.6"></script>
+  <script src="m73.js?v=54.6"></script>
+  <script src="logger.js?v=54.6"></script>
+  <script src="dashboard-widgets.js?v=54.6"></script>
+  <script src="app.js?v=54.6"></script>
 </body>
 </html>

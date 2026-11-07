@@ -110,20 +110,33 @@ class Elm327BLE {
         filters: [
           { name: "OBD BLE" },
           { namePrefix: "OBD" },
+          { namePrefix: "OBDII" },
           { namePrefix: "IOS" },
           { namePrefix: "Viecar" },
           { namePrefix: "V-LINK" },
+          { namePrefix: "vLinker" },
+          { namePrefix: "Veepeak" },
+          { namePrefix: "Vgate" },
           { namePrefix: "ELM" },
           { namePrefix: "iCar" },
+          { namePrefix: "KONNWEI" },
+          { namePrefix: "CARISTA" },
+          { namePrefix: "Android" },
           { namePrefix: "K-Line" }
         ],
         optionalServices: optionalServices
       });
     } catch (err) {
-      this.log('info', 'Окно выбора адаптера закрыто');
-      const cancelErr = new Error("Поиск устройства отменен пользователем");
-      cancelErr.isCancelled = true;
-      throw cancelErr;
+      const msg = (err && err.message) ? String(err.message) : '';
+      const isUserCancel = !err || err.name === 'NotFoundError' || err.name === 'AbortError' || /cancel|dismiss|closed|user|chosen/i.test(msg);
+      if (isUserCancel) {
+        this.log('info', 'Окно выбора адаптера закрыто');
+        const cancelErr = new Error("Поиск устройства отменен пользователем");
+        cancelErr.isCancelled = true;
+        throw cancelErr;
+      }
+      this.log('err', 'Ошибка Bluetooth: ' + (msg || err));
+      throw err;
     }
 
     if (!this.device) {
@@ -248,6 +261,10 @@ class Elm327BLE {
   }
 
   _onDataReceived(event) {
+    if (!this.activeResolver) {
+      this.rxBuffer = "";
+      return;
+    }
     const value = event.target.value;
     const chunk = this._decoder.decode(value, { stream: true });
     
@@ -346,8 +363,15 @@ class Elm327BLE {
     }
     this._queue = Promise.resolve();
 
-    if (this.device && this.device.gatt.connected) {
-      await this.device.gatt.disconnect();
+    if (this.device) {
+      try {
+        this.device.removeEventListener('gattserverdisconnected', this._gattHandler);
+      } catch (e) {}
+      if (this.device.gatt && this.device.gatt.connected) {
+        try {
+          await this.device.gatt.disconnect();
+        } catch (e) {}
+      }
     }
     this.isConnected = false;
   }
