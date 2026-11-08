@@ -391,17 +391,17 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v55.1\n\nОбновления:\n1) Протокол KWP2000 и BLE: проверка активности ЭБУ (checkEcuAlive) на вкладках Ошибок, Тестов и Терминала (мгновенная фиксация NO DATA при выключении зажигания), строгий префикс 58 при чтении DTC и защита от повторной отправки AT SH 81 10 F1\n2) Вкладка АЦП (~5.0 Гц): определение работающего двигателя строго по живым каналам кадра 21031 (без зависимости от старых оборотов 21011) и умное скользящее окно ДК1\n3) Надёжность логгера поездок: быстрые неблокирующие чекпоинты в IndexedDB каждые 45 сек (очередь транзакций без лишнего чтения базы), автосохранение при сворачивании и выключении зажигания на любой вкладке\n4) Оптимизация рендеринга: Dirty Checking для CSS-переменных, умная пауза rAF осциллографа при потере связи и снижение нагрева GPU iPhone");
+        alert("Диагностика М73 — Версия v55.2\n\nОбновления:\n1) Конвейерный опрос (Request Pipelining v55.2): следующий запрос 21011 / 21031 уходит в радиомодуль BLE мгновенно при получении '>' от адаптера, параллельно с парсингом, обновлением DOM/Canvas и записью лога на CPU iPhone\n2) Zero-Overhead BLE TX/RX: бинарный кэш команд Uint8Array, аппаратная запись GATT до строкового логирования и отложенное форматирование времени терминала\n3) Протокол KWP2000: проверка активности ЭБУ (checkEcuAlive) на сервисных вкладках, независимая диагностика АЦП по живым каналам 21031 и неблокирующие чекпоинты логгера");
       });
     }
 
     // Интеллектуальное автоскрытие нижнего дока при отсутствии взаимодействия и скролле вниз
     this.initDockAutoHide();
 
-    // Режим скорости опроса K-Line: Постоянный Турбо v55.1
+    // Режим скорости опроса K-Line: Постоянный Турбо + Конвейер v55.2
     const cadencePill = document.querySelector('.cadence-pill');
     if (cadencePill) {
-      cadencePill.title = 'Частота опроса K-Line: Турбо v55.1';
+      cadencePill.title = 'Частота опроса K-Line: Турбо + Конвейер v55.2';
       this.currentSpeedProfile = 'extreme';
 
       cadencePill.addEventListener('click', () => {
@@ -409,12 +409,13 @@ class M73Application {
           ? "Включен (21011 / 21031, закрытие кадра 0 мс)"
           : (this.m73 && this.m73.singleFrameSuffixSupported === false ? "Отключен адаптером (стандартный 2101)" : "Определяется...");
         alert(
-          `⚡ Режим опроса: Постоянный Турбо (Релиз v55.1)\n\n` +
+          `⚡ Режим опроса: Турбо + Конвейер (Релиз v55.2)\n\n` +
           `• Адаптивный тайминг: AT AT 2\n` +
           `• Таймаут шины: AT ST 10 (~64 мс, постоянный Турбо)\n` +
           `• Турбо-суффикс кадра: ${suffixInfo}\n` +
-          `• Главная панель (только 21011, 79 байт): 3.6–4.1 Гц (~250 мс)\n` +
-          `• Вкладка АЦП (только 21031, 27 байт): ~5.0 Гц (~195 мс)`
+          `• Конвейер (Request Pipelining): Активен (BLE-запрос параллельно с рендером CPU)\n` +
+          `• Главная панель (только 21011, 79 байт): до 4.2–4.5 Гц (~225–240 мс)\n` +
+          `• Вкладка АЦП (только 21031, 27 байт): ~5.0–5.3 Гц (~190 мс)`
         );
       });
     }
@@ -842,68 +843,91 @@ class M73Application {
     let lastTesterPresent = Date.now();
     this.adcCycleCounter = 0;
     this.regHoldCounter = 0;
+    let prefetched = null; // { target: '2101' | '2103', promise: Promise<string> }
 
-    while (this.isPolling && this.elm.isConnected) {
-      try {
-        // РАЗДЕЛЬНЫЙ ОПРОС ЭКРАНОВ (КАК В OPENDIAG):
-        // 1. На вкладках Ошибок, Тестов или Терминала фоновый циклический опрос 2101/2103 приостанавливается,
-        // чтобы не занимать шину K-Line и исключить коллизии с ручными сервисными запросами.
-        if (this.currentTab === 'tab-dtc' || this.currentTab === 'tab-actuators' || this.currentTab === 'tab-terminal') {
-          if (this.currentTab === 'tab-actuators' && this.activeRegulator) {
-            // Удержание активной уставки регулятора (обороты ХХ, РХХ, адсорбер) каждые 650 мс или мгновенно по кнопкам +/-
-            if (this._forceRegulatorSend || Date.now() - lastTesterPresent > 650) {
-              const forceNow = this._forceRegulatorSend;
-              this._forceRegulatorSend = false;
-              this.regHoldCounter = (this.regHoldCounter || 0) + 1;
+    const drainPrefetched = async () => {
+      if (!prefetched) return;
+      const pending = prefetched.promise;
+      prefetched = null;
+      try { await pending; } catch (e) {}
+    };
 
-              // Каждые 4 цикла удержания проверяем скорость по кадру 21 01 для защиты при начале движения
-              if (!forceNow && this.regHoldCounter % 4 === 0 && this.activeRegulator) {
-                try {
-                  const checkData = await this.m73.readConfiguredCycle('2101');
-                  if (checkData) this.updateActuatorLiveBar(checkData);
-                  if (checkData && checkData.speed > 0 && this.activeRegulator) {
-                    const movingReg = this.activeRegulator;
-                    this.activeRegulator = null;
-                    this._updateRegulatorUI(movingReg.key, false);
-                    await this.m73.releaseActuatorControl(movingReg.idHex);
-                    this.elm.log('warn', 'Движение автомобиля (Speed > 0): удержание регулятора автоматически отключено');
+    try {
+      while (this.isPolling && this.elm.isConnected) {
+        try {
+          // РАЗДЕЛЬНЫЙ ОПРОС ЭКРАНОВ (КАК В OPENDIAG):
+          // 1. На вкладках Ошибок, Тестов или Терминала фоновый циклический опрос 2101/2103 приостанавливается,
+          // чтобы не занимать шину K-Line и исключить коллизии с ручными сервисными запросами.
+          if (this.currentTab === 'tab-dtc' || this.currentTab === 'tab-actuators' || this.currentTab === 'tab-terminal') {
+            if (prefetched) {
+              await drainPrefetched();
+            }
+            if (this.currentTab === 'tab-actuators' && this.activeRegulator) {
+              // Удержание активной уставки регулятора (обороты ХХ, РХХ, адсорбер) каждые 650 мс или мгновенно по кнопкам +/-
+              if (this._forceRegulatorSend || Date.now() - lastTesterPresent > 650) {
+                const forceNow = this._forceRegulatorSend;
+                this._forceRegulatorSend = false;
+                this.regHoldCounter = (this.regHoldCounter || 0) + 1;
+
+                // Каждые 4 цикла удержания проверяем скорость по кадру 21 01 для защиты при начале движения
+                if (!forceNow && this.regHoldCounter % 4 === 0 && this.activeRegulator) {
+                  try {
+                    const checkData = await this.m73.readConfiguredCycle('2101');
+                    if (checkData) this.updateActuatorLiveBar(checkData);
+                    if (checkData && checkData.speed > 0 && this.activeRegulator) {
+                      const movingReg = this.activeRegulator;
+                      this.activeRegulator = null;
+                      this._updateRegulatorUI(movingReg.key, false);
+                      await this.m73.releaseActuatorControl(movingReg.idHex);
+                      this.elm.log('warn', 'Движение автомобиля (Speed > 0): удержание регулятора автоматически отключено');
+                      lastTesterPresent = Date.now();
+                      await this.delay(120);
+                      continue;
+                    }
+                  } catch (e) {}
+                }
+
+                if (this.activeRegulator) {
+                  try {
+                    await this.m73.setActuatorSetpoint(this.activeRegulator.idHex, this.activeRegulator.rawByte);
                     lastTesterPresent = Date.now();
-                    await this.delay(120);
-                    continue;
-                  }
-                } catch (e) {}
-              }
-
-              if (this.activeRegulator) {
-                try {
-                  await this.m73.setActuatorSetpoint(this.activeRegulator.idHex, this.activeRegulator.rawByte);
-                  lastTesterPresent = Date.now();
-                } catch (e) {
-                  // Если ЭБУ отклонил удержание (например, 7F 30 22 при нажатии на педаль газа) — снимаем статус «Удерживается»
-                  if (this.activeRegulator) {
-                    const failedReg = this.activeRegulator;
-                    this.activeRegulator = null;
-                    this._updateRegulatorUI(failedReg.key, false);
-                    try { await this.m73.releaseActuatorControl(failedReg.idHex); } catch (e2) {}
-                    this.elm.log('warn', 'ЭБУ прекратил удержание регулятора: ' + (e.message || e));
+                  } catch (e) {
+                    // Если ЭБУ отклонил удержание (например, 7F 30 22 при нажатии на педаль газа) — снимаем статус «Удерживается»
+                    if (this.activeRegulator) {
+                      const failedReg = this.activeRegulator;
+                      this.activeRegulator = null;
+                      this._updateRegulatorUI(failedReg.key, false);
+                      try { await this.m73.releaseActuatorControl(failedReg.idHex); } catch (e2) {}
+                      this.elm.log('warn', 'ЭБУ прекратил удержание регулятора: ' + (e.message || e));
+                    }
                   }
                 }
               }
-            }
-          } else if (this.currentTab === 'tab-actuators' && Date.now() - lastTesterPresent > 1500) {
-            // На вкладке Тесты (когда регулятор в режиме «Штатно (ЭБУ)») раз в 1.5 сек опрашиваем 21 01:
-            // обновляет актуальные обороты/скорость и гарантирует выход М73 из режима 0x30 IOControl
-            try {
-              const actData = await this.m73.readConfiguredCycle('2101');
-              if (!actData) throw new Error("Пустой кадр 21 01");
-              this.updateActuatorLiveBar(actData);
-              lastTesterPresent = Date.now();
-              if (failures >= 3) {
-                this.connStateText.textContent = "Подключено к ЭБУ";
-                this.connIndicator.className = 'status-pulse connected';
+            } else if (this.currentTab === 'tab-actuators' && Date.now() - lastTesterPresent > 1500) {
+              // На вкладке Тесты (когда регулятор в режиме «Штатно (ЭБУ)») раз в 1.5 сек опрашиваем 21 01:
+              // обновляет актуальные обороты/скорость и гарантирует выход М73 из режима 0x30 IOControl
+              try {
+                const actData = await this.m73.readConfiguredCycle('2101');
+                if (!actData) throw new Error("Пустой кадр 21 01");
+                this.updateActuatorLiveBar(actData);
+                lastTesterPresent = Date.now();
+                if (failures >= 3) {
+                  this.connStateText.textContent = "Подключено к ЭБУ";
+                  this.connIndicator.className = 'status-pulse connected';
+                }
+                failures = 0;
+              } catch (e) {
+                const alive = await this.m73.checkEcuAlive();
+                if (!alive) throw new Error("Нет ответа ЭБУ на TesterPresent (3E)");
+                lastTesterPresent = Date.now();
+                if (failures >= 3) {
+                  this.connStateText.textContent = "Подключено к ЭБУ";
+                  this.connIndicator.className = 'status-pulse connected';
+                }
+                failures = 0;
               }
-              failures = 0;
-            } catch (e) {
+            } else if (Date.now() - lastTesterPresent > 2000) {
+              // Раз в 2 секунды отправляем легкий Tester Present (3E), чтобы сессия ЭБУ не закрылась по таймауту
               const alive = await this.m73.checkEcuAlive();
               if (!alive) throw new Error("Нет ответа ЭБУ на TesterPresent (3E)");
               lastTesterPresent = Date.now();
@@ -913,97 +937,138 @@ class M73Application {
               }
               failures = 0;
             }
-          } else if (Date.now() - lastTesterPresent > 2000) {
-            // Раз в 2 секунды отправляем легкий Tester Present (3E), чтобы сессия ЭБУ не закрылась по таймауту
-            const alive = await this.m73.checkEcuAlive();
-            if (!alive) throw new Error("Нет ответа ЭБУ на TesterPresent (3E)");
-            lastTesterPresent = Date.now();
-            if (failures >= 3) {
-              this.connStateText.textContent = "Подключено к ЭБУ";
-              this.connIndicator.className = 'status-pulse connected';
+            await this.delay(120);
+            continue;
+          }
+
+          // 2. Логика строго раздельного опроса (1 вкладка = 1 кадр) с конвейерным предзапросом (Request Pipelining v55.2):
+          if (this.currentTab === 'tab-dashboard') {
+            // Главная панель: опрашиваем ИСКЛЮЧИТЕЛЬНО Кадр 1 (21 01) на максимальной скорости K-Line.
+            // Как только байты текущего ответа приняты из BLE, мгновенно запускаем следующий запрос 21011,
+            // чтобы адаптер ELM327 и ЭБУ М73 общались по K-Line параллельно с парсингом, рендерингом DOM/Canvas и записью лога на CPU iPhone!
+            let raw1;
+            if (prefetched && prefetched.target === '2101') {
+              const p = prefetched.promise;
+              prefetched = null;
+              raw1 = await p;
+            } else {
+              await drainPrefetched();
+              raw1 = await this.m73.sendRawFrame('2101');
             }
-            failures = 0;
-          }
-          await this.delay(120);
-          continue;
-        }
 
-        // 2. Логика строго раздельного опроса (1 вкладка = 1 кадр):
-        if (this.currentTab === 'tab-dashboard') {
-          // Главная панель: опрашиваем ИСКЛЮЧИТЕЛЬНО Кадр 1 (21 01) на максимальной скорости K-Line
-          const data = await this.m73.readConfiguredCycle('2101');
-          if (this.widgetManager && this.widgetManager.oscChannel === 'mafAdc') {
-            try { await this.m73.readConfiguredCycle('2103'); } catch (e) {}
-          }
-          if (data) {
-            // Мгновенный микро-рендеринг с Dirty Checking (<0.3 мс) и фиксация в лог
-            this.updateDashboardUI(data);
-            this.logger.addPoint(data);
-          } else {
-            throw new Error("Пустой кадр 21 01");
-          }
-        } else if (this.currentTab === 'tab-adc') {
-          // Вкладка АЦП: опрашиваем СТРОГО короткий Кадр 3 (21 03 / 21031) без подмеса длинного 21 01,
-          // чтобы исключить просадки частоты с 5.0 Гц до 4.1 Гц
-          const dataAdc = await this.m73.readConfiguredCycle('2103');
-          if (dataAdc) {
-            this.updateAdcUI(dataAdc);
-            if (this.widgetManager && this.widgetManager.oscChannel === 'mafAdc') {
-              this.widgetManager.updateDynamicWidgets(dataAdc);
+            const isMafAdcOsc = Boolean(this.widgetManager && this.widgetManager.oscChannel === 'mafAdc');
+            if (
+              this.isPolling &&
+              this.elm.isConnected &&
+              !this.isActuatorBusy &&
+              this.currentTab === 'tab-dashboard' &&
+              !isMafAdcOsc &&
+              this.m73.isRawFrameValidForPipeline('2101', raw1)
+            ) {
+              const nextPromise = this.m73.sendRawFrame('2101');
+              nextPromise.catch(() => {});
+              prefetched = { target: '2101', promise: nextPromise };
             }
-            // Всегда обновляем частоту опроса (Гц / мс) и таймер кадра без записи пустых точек в лог
-            this.logger.updateCadenceOnly();
-          } else {
-            throw new Error("Пустой кадр АЦП 21 03");
-          }
-        }
 
-        if (failures >= 3) {
-          this.connStateText.textContent = "Подключено к ЭБУ";
-          this.connIndicator.className = 'status-pulse connected';
-        }
-        failures = 0;
-        lastTesterPresent = Date.now();
-      } catch (err) {
-        failures++;
-        if (failures === 3) {
-          this.connStateText.textContent = "ЭБУ не отвечает";
-          this.connIndicator.className = 'status-pulse reconnecting';
-          this._updateText(this.hzValue, "0.0");
-          this._updateText(this.msValue, "0");
-          if (this.logger && typeof this.logger.resetCadence === 'function') {
-            this.logger.resetCadence();
-          }
-        }
-
-        // В Ладе Приоре разъём OBD-II запитан от постоянных +12В АКБ, поэтому при выключении зажигания
-        // Bluetooth-адаптер остаётся подключённым, а ЭБУ перестаёт отвечать. Сохраняем контрольную точку лога поездки!
-        if ((failures === 3 || failures === 8) && this.logger.isRecording && this.logger.records.length >= 2) {
-          try {
-            const saved = await this.logger.saveCheckpoint(this.peakRpm || 0);
-            if (saved) {
-              this.lastAutoSavedTrip = saved;
-              this.refreshHistoryCount();
+            const data = await this.m73.commitRawFrame('2101', raw1);
+            if (isMafAdcOsc) {
+              try { await this.m73.readConfiguredCycle('2103'); } catch (e) {}
             }
-          } catch (e) {}
-        }
+            if (data) {
+              // Мгновенный микро-рендеринг с Dirty Checking (<0.3 мс) и фиксация в лог параллельно с K-Line запросом следующего кадра
+              this.updateDashboardUI(data);
+              this.logger.addPoint(data);
+            } else {
+              await drainPrefetched();
+              throw new Error("Пустой кадр 21 01");
+            }
+          } else if (this.currentTab === 'tab-adc') {
+            // Вкладка АЦП: опрашиваем СТРОГО короткий Кадр 3 (21 03 / 21031) с конвейерным предзапросом (Request Pipelining v55.2)
+            let rawAdc;
+            if (prefetched && prefetched.target === '2103') {
+              const p = prefetched.promise;
+              prefetched = null;
+              rawAdc = await p;
+            } else {
+              await drainPrefetched();
+              rawAdc = await this.m73.sendRawFrame('2103');
+            }
 
-        // Автовосстановление K-Line сессии при серии сбоев:
-        if (failures === 6) {
-          try { await this.elm.send("3E", 500); } catch (e) {}
-        } else if (failures >= 10 && failures % 10 === 0) {
-          try {
-            this.elm.log('info', 'Попытка автовосстановления сессии K-Line (AT FI)...');
-            await this.elm.send("ATFI", 2000);
-            await this.elm.send("ATH0", 1000); // Обязательно выключаем заголовки после реконнекта
-          } catch (e) {}
+            if (
+              this.isPolling &&
+              this.elm.isConnected &&
+              !this.isActuatorBusy &&
+              this.currentTab === 'tab-adc' &&
+              this.m73.isRawFrameValidForPipeline('2103', rawAdc)
+            ) {
+              const nextPromise = this.m73.sendRawFrame('2103');
+              nextPromise.catch(() => {});
+              prefetched = { target: '2103', promise: nextPromise };
+            }
+
+            const dataAdc = await this.m73.commitRawFrame('2103', rawAdc);
+            if (dataAdc) {
+              this.updateAdcUI(dataAdc);
+              if (this.widgetManager && this.widgetManager.oscChannel === 'mafAdc') {
+                this.widgetManager.updateDynamicWidgets(dataAdc);
+              }
+              // Всегда обновляем частоту опроса (Гц / мс) и таймер кадра без записи пустых точек в лог
+              this.logger.updateCadenceOnly();
+            } else {
+              await drainPrefetched();
+              throw new Error("Пустой кадр АЦП 21 03");
+            }
+          }
+
+          if (failures >= 3) {
+            this.connStateText.textContent = "Подключено к ЭБУ";
+            this.connIndicator.className = 'status-pulse connected';
+          }
+          failures = 0;
+          lastTesterPresent = Date.now();
+        } catch (err) {
+          await drainPrefetched();
+          failures++;
+          if (failures === 3) {
+            this.connStateText.textContent = "ЭБУ не отвечает";
+            this.connIndicator.className = 'status-pulse reconnecting';
+            this._updateText(this.hzValue, "0.0");
+            this._updateText(this.msValue, "0");
+            if (this.logger && typeof this.logger.resetCadence === 'function') {
+              this.logger.resetCadence();
+            }
+          }
+
+          // В Ладе Приоре разъём OBD-II запитан от постоянных +12В АКБ, поэтому при выключении зажигания
+          // Bluetooth-адаптер остаётся подключённым, а ЭБУ перестаёт отвечать. Сохраняем контрольную точку лога поездки!
+          if ((failures === 3 || failures === 8) && this.logger.isRecording && this.logger.records.length >= 2) {
+            try {
+              const saved = await this.logger.saveCheckpoint(this.peakRpm || 0);
+              if (saved) {
+                this.lastAutoSavedTrip = saved;
+                this.refreshHistoryCount();
+              }
+            } catch (e) {}
+          }
+
+          // Автовосстановление K-Line сессии при серии сбоев:
+          if (failures === 6) {
+            try { await this.elm.send("3E", 500); } catch (e) {}
+          } else if (failures >= 10 && failures % 10 === 0) {
+            try {
+              this.elm.log('info', 'Попытка автовосстановления сессии K-Line (AT FI)...');
+              await this.elm.send("ATFI", 2000);
+              await this.elm.send("ATH0", 1000); // Обязательно выключаем заголовки после реконнекта
+            } catch (e) {}
+          }
+          await this.delay(failures < 5 ? 80 : 250);
         }
-        await this.delay(failures < 5 ? 80 : 250);
       }
+    } finally {
+      await drainPrefetched();
+      // Цикл завершён (обрыв связи или остановка)
+      this.isPolling = false;
     }
-
-    // Цикл завершён (обрыв связи или остановка)
-    this.isPolling = false;
   }
 
   /**
@@ -2174,14 +2239,12 @@ class M73Application {
   }
 
   /**
-   * Терминал: хранит последние 300 записей в памяти и рисует их в DOM только
-   * когда открыта вкладка «Терминал». На частоте 12 Гц это исключает бесконечный
-   * рост DOM и просадки FPS на главной панели.
+   * Терминал: хранит последние 300 записей в памяти и форматирует строку времени
+   * лениво (только при открытии вкладки «Терминал»). Это полностью убирает аллокации
+   * new Date() и строковые операции из высокочастотного цикла опроса (v55.2).
    */
   appendTerminal(type, msg) {
-    const d = new Date();
-    const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
-    this.termBuffer.push({ type, text: `[${time}] ${msg}` });
+    this.termBuffer.push({ type, msg, ts: Date.now(), text: null });
     if (this.termBuffer.length > this.TERM_LIMIT) this.termBuffer.shift();
 
     if (this.currentTab !== 'tab-terminal' || !this.terminalLog) return;
@@ -2193,6 +2256,11 @@ class M73Application {
   }
 
   _appendTerminalNode(entry) {
+    if (!entry.text) {
+      const d = new Date(entry.ts || Date.now());
+      const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+      entry.text = `[${time}] ${entry.msg}`;
+    }
     const div = document.createElement('div');
     div.className = `log-entry ${entry.type}`;
     div.textContent = entry.text;

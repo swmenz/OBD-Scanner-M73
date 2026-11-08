@@ -27,9 +27,10 @@ class Elm327BLE {
     this.onLog = null;
     this.onDisconnect = null;
 
-    // Реиспользуемые декодер/энкодер для устранения GC-пауз в высокочастотном цикле (4-5 Гц)
+    // Реиспользуемые декодер/энкодер и кэш бинарных команд (Uint8Array) для устранения GC-пауз и микро-задержек TX/RX (v55.2)
     this._decoder = new TextDecoder('utf-8');
     this._encoder = new TextEncoder();
+    this._encodedCmdCache = new Map();
   }
 
   _onGattDisconnected() {
@@ -273,7 +274,7 @@ class Elm327BLE {
     
     this.rxBuffer += chunk;
 
-    if (this.rxBuffer.includes('>')) {
+    if (chunk.includes('>') || this.rxBuffer.includes('>')) {
       if (this.commandTimeoutTimer) {
         clearTimeout(this.commandTimeoutTimer);
         this.commandTimeoutTimer = null;
@@ -297,8 +298,8 @@ class Elm327BLE {
       return Promise.reject(new Error("Адаптер не подключен"));
     }
 
-    // Последовательная очередь (Mutex) — исключает наложение и гонки команд
-    this._queue = this._queue.catch(() => {}).then(async () => {
+    // Последовательная очередь (Mutex) без промежуточного .catch()-микротаска на входе (v55.2)
+    const run = async () => {
       if (!this.isConnected || !this.txCharacteristic) {
         throw new Error("Адаптер не подключен");
       }
@@ -324,14 +325,19 @@ class Elm327BLE {
         this.rxBuffer = "";
         if (this._decoder) this._decoder.decode();
 
-        const cleanCmd = command.trim() + "\r";
-        const data = this._encoder.encode(cleanCmd);
-
-        this.log('tx', command);
+        const trimmed = typeof command === 'string' ? command.trim() : String(command).trim();
+        let data = this._encodedCmdCache.get(trimmed);
+        if (!data) {
+          data = this._encoder.encode(trimmed + "\r");
+          if (this._encodedCmdCache.size < 64) {
+            this._encodedCmdCache.set(trimmed, data);
+          }
+        }
 
         this.activeResolver = (resp) => {
-          this.log('rx', resp);
+          // Сначала пробуждаем конвейер опроса (Request Pipelining), затем логируем в терминал
           resolve(resp);
+          this.log('rx', resp);
         };
         this.activeRejecter = reject;
 
@@ -347,12 +353,15 @@ class Elm327BLE {
         }, timeoutMs);
 
         // Проверяем РЕАЛЬНУЮ поддержку writeWithoutResponse характеристикой GATT,
-        // а не просто наличие метода в прототипе Web Bluetooth (устраняет ложный сбой и задержку 15-25 мс)
+        // а не просто наличие метода в прототипе Web Bluetooth (устраняет ложный сбой и задержку 15-25 мс).
+        // Инициируем аппаратную передачу пакета в радиомодуль BLE ДО строкового логирования (Zero-Overhead TX v55.2).
         const props = this.txCharacteristic.properties;
         const canWriteNoResp = Boolean(props && props.writeWithoutResponse && this.txCharacteristic.writeValueWithoutResponse);
         const writePromise = canWriteNoResp
           ? this.txCharacteristic.writeValueWithoutResponse(data).catch(() => this.txCharacteristic.writeValue(data))
           : this.txCharacteristic.writeValue(data);
+
+        this.log('tx', command);
 
         writePromise.catch((err) => {
           if (this.commandTimeoutTimer) {
@@ -365,9 +374,11 @@ class Elm327BLE {
           reject(err);
         });
       });
-    });
+    };
 
-    return this._queue;
+    const taskPromise = this._queue.then(run, run);
+    this._queue = taskPromise.catch(() => {});
+    return taskPromise;
   }
 
   async disconnect() {

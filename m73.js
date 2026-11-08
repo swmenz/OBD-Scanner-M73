@@ -9,7 +9,7 @@ class ItelmaM73Protocol {
     this.elm = elm;
     this.isInitialized = false;
 
-    // Режим Турбо v55.1: суффикс 1, чистый постоянный таймаут шины AT ST 10 (~64 мс)
+    // Режим Турбо v55.2: суффикс 1, конвейерный предзапрос (Request Pipelining), чистый таймаут шины AT ST 10 (~64 мс)
     this.singleFrameSuffixSupported = null; // null = не проверено, true = '21011', false = '2101'
     this.fastStEnabled = true;
     this._lastParsedProbe = null;
@@ -268,25 +268,42 @@ class ItelmaM73Protocol {
     }
 
     const cmdToSend = this.singleFrameSuffixSupported ? (baseCmd + "1") : baseCmd;
-    return await this.elm.send(cmdToSend, 1200);
+    return this.elm.send(cmdToSend, 1200);
   }
 
   /**
-   * ДИНАМИЧЕСКИЙ ОПРОС КАДРОВ (РАЗДЕЛЬНЫЙ ОПРОС КАК В OPENDIAG)
+   * Отправка сырого запроса кадра KWP2000 (2101 / 2103) в шину BLE/K-Line без ожидания парсинга.
+   * Используется для конвейерного опроса (Request Pipelining v55.2): пока CPU iPhone парсит предыдущий кадр,
+   * обновляет DOM/Canvas и пишет лог, адаптер ELM327 уже запрашивает следующий кадр у ЭБУ М73.
    */
-  async readConfiguredCycle(configOrFrame = '2101') {
-    let target = '2101';
-    if (typeof configOrFrame === 'string') {
-      target = configOrFrame;
-    } else if (configOrFrame && typeof configOrFrame === 'object') {
-      target = configOrFrame.targetFrame || (configOrFrame.frame2 ? '2103' : '2101');
-    }
+  sendRawFrame(target = '2101') {
+    const baseCmd = target === '2103' ? '2103' : '2101';
+    return this._sendFastRead(baseCmd);
+  }
 
+  /**
+   * Быстрая проверка валидности сырого ответа кадра перед запуском конвейерного предзапроса (Request Pipelining v55.2).
+   * Гарантирует, что предзапрос следующего кадра отправляется только тогда, когда ЭБУ ответил полным валидным пакетом.
+   */
+  isRawFrameValidForPipeline(target = '2101', raw = '') {
+    if (this.singleFrameSuffixSupported === null || !raw || typeof raw !== 'string') return false;
+    const clean = raw.replace(/[\s\r\n]/g, '').toUpperCase();
     if (target === '2103') {
-      const rawAdc = await this._sendFastRead("2103");
-      const alreadyParsedAdc = this._lastParsedProbe && this._lastParsedProbe.cmd === "2103" && this._lastParsedProbe.raw === rawAdc;
+      const idx = clean.indexOf("6103");
+      return idx !== -1 && (clean.length - idx) >= 34;
+    }
+    const idx = clean.indexOf("6101");
+    return idx !== -1 && (clean.length - idx) >= 132;
+  }
+
+  /**
+   * Разбор и фиксация полученного сырого ответа кадра (2101 / 2103) с защитой от обрезки длинного кадра суффиксом '1'.
+   */
+  async commitRawFrame(target = '2101', raw) {
+    if (target === '2103') {
+      const alreadyParsedAdc = this._lastParsedProbe && this._lastParsedProbe.cmd === "2103" && this._lastParsedProbe.raw === raw;
       this._lastParsedProbe = null;
-      if (alreadyParsedAdc || this.parseFrame2103(rawAdc)) {
+      if (alreadyParsedAdc || this.parseFrame2103(raw)) {
         this.latestData.timestamp = new Date();
         return this.latestData;
       }
@@ -294,7 +311,7 @@ class ItelmaM73Protocol {
     }
 
     // По умолчанию — базовый скоростной Кадр 1 (21 01)
-    let raw1 = await this._sendFastRead("2101");
+    let raw1 = raw;
     const alreadyParsed2101 = this._lastParsedProbe && this._lastParsedProbe.cmd === "2101" && this._lastParsedProbe.raw === raw1;
     this._lastParsedProbe = null;
     if (!alreadyParsed2101 && !this.parseFrame2101(raw1)) {
@@ -311,6 +328,21 @@ class ItelmaM73Protocol {
 
     this.latestData.timestamp = new Date();
     return this.latestData;
+  }
+
+  /**
+   * ДИНАМИЧЕСКИЙ ОПРОС КАДРОВ (РАЗДЕЛЬНЫЙ ОПРОС КАК В OPENDIAG)
+   */
+  async readConfiguredCycle(configOrFrame = '2101') {
+    let target = '2101';
+    if (typeof configOrFrame === 'string') {
+      target = configOrFrame;
+    } else if (configOrFrame && typeof configOrFrame === 'object') {
+      target = configOrFrame.targetFrame || (configOrFrame.frame2 ? '2103' : '2101');
+    }
+
+    const raw = await this.sendRawFrame(target);
+    return await this.commitRawFrame(target, raw);
   }
 
   /**
