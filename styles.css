@@ -327,8 +327,6 @@ body {
 
 .btn-glass-secondary {
   background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   color: var(--text-primary);
   border: 1px solid var(--glass-border);
   border-top: 1px solid var(--glass-bevel-top);
@@ -387,8 +385,6 @@ body {
    ========================================================================== */
 .glass-card {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.015) 100%);
-  backdrop-filter: blur(35px) saturate(190%);
-  -webkit-backdrop-filter: blur(35px) saturate(190%);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-top: 1px solid rgba(255, 255, 255, 0.22); /* Фаска ловит верхний свет */
   border-bottom: 1px solid rgba(0, 0, 0, 0.5);
@@ -1270,9 +1266,9 @@ body {
 }
 
 .badge-health-neutral {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.14);
-  color: var(--text-tertiary);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: var(--text-secondary);
 }
 
 .adc-val-wrap {
@@ -1333,13 +1329,6 @@ body {
 /* Вспомогательные отступы */
 .mb-3 {
   margin-bottom: 12px;
-}
-
-/* Нейтральный статус */
-.badge-health-neutral {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-secondary);
-  border-color: rgba(255, 255, 255, 0.15);
 }
 
 /* Плавные регуляторы уставки (Block 1) */

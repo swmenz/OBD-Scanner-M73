@@ -16,6 +16,7 @@ class Elm327BLE {
     this.activeResolver = null;
     this.activeRejecter = null;
     this.commandTimeoutTimer = null;
+    this._needsResync = false;
     this._queue = Promise.resolve(); // Последовательная очередь команд (Mutex)
 
     // Единые ссылки на обработчики: повторная регистрация одной и той же функции
@@ -42,6 +43,7 @@ class Elm327BLE {
     this.activeResolver = null;
     this.activeRejecter = null;
     this.rxBuffer = "";
+    this._needsResync = false;
     if (this._decoder) this._decoder.decode();
     if (pendingReject) pendingReject(new Error("Связь с адаптером потеряна"));
     this.log('err', 'Связь с Bluetooth адаптером разорвана');
@@ -178,6 +180,7 @@ class Elm327BLE {
     this.activeResolver = null;
     this.activeRejecter = null;
     this.rxBuffer = "";
+    this._needsResync = false;
     if (this._decoder) this._decoder.decode();
     if (pendingReject) {
       try { pendingReject(new Error("Переподключение")); } catch (e) {}
@@ -295,7 +298,24 @@ class Elm327BLE {
     }
 
     // Последовательная очередь (Mutex) — исключает наложение и гонки команд
-    this._queue = this._queue.catch(() => {}).then(() => {
+    this._queue = this._queue.catch(() => {}).then(async () => {
+      if (!this.isConnected || !this.txCharacteristic) {
+        throw new Error("Адаптер не подключен");
+      }
+
+      // Если предыдущая команда завершилась по таймауту или сбою записи —
+      // выдерживаем короткую паузу тишины (140 мс) при закрытом activeResolver,
+      // чтобы запоздавшие пакеты BLE от старой команды были отброшены и не сдвинули очередь
+      if (this._needsResync) {
+        this._needsResync = false;
+        this.rxBuffer = "";
+        if (this._decoder) this._decoder.decode();
+        await new Promise(r => setTimeout(r, 140));
+        if (!this.isConnected || !this.txCharacteristic) {
+          throw new Error("Адаптер не подключен");
+        }
+      }
+
       return new Promise((resolve, reject) => {
         if (!this.isConnected || !this.txCharacteristic) {
           return reject(new Error("Адаптер не подключен"));
@@ -318,6 +338,7 @@ class Elm327BLE {
         this.commandTimeoutTimer = setTimeout(() => {
           const partial = this.rxBuffer;
           this.rxBuffer = "";
+          this._needsResync = true;
           if (this._decoder) this._decoder.decode();
           this.activeResolver = null;
           this.activeRejecter = null;
@@ -338,6 +359,7 @@ class Elm327BLE {
             clearTimeout(this.commandTimeoutTimer);
             this.commandTimeoutTimer = null;
           }
+          this._needsResync = true;
           this.activeResolver = null;
           this.activeRejecter = null;
           reject(err);
@@ -357,6 +379,7 @@ class Elm327BLE {
     this.activeResolver = null;
     this.activeRejecter = null;
     this.rxBuffer = "";
+    this._needsResync = false;
     if (this._decoder) this._decoder.decode();
     if (pendingReject) {
       pendingReject(new Error("Соединение с адаптером разорвано"));

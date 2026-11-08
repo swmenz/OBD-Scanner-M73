@@ -9,7 +9,7 @@ class ItelmaM73Protocol {
     this.elm = elm;
     this.isInitialized = false;
 
-    // Режим Турбо v54.9: суффикс 1, чистый постоянный таймаут шины AT ST 10 (~64 мс)
+    // Режим Турбо v55.0: суффикс 1, чистый постоянный таймаут шины AT ST 10 (~64 мс)
     this.singleFrameSuffixSupported = null; // null = не проверено, true = '21011', false = '2101'
     this.fastStEnabled = true;
 
@@ -231,7 +231,7 @@ class ItelmaM73Protocol {
           const cleanProbe = (probeResp || "").replace(/[\s\r\n]/g, '').toUpperCase();
           const expectedHeader = "61" + baseCmd.substring(2, 4);
           const idx = cleanProbe.indexOf(expectedHeader);
-          const minHexLen = baseCmd === "2101" ? 132 : 28;
+          const minHexLen = baseCmd === "2101" ? 132 : 34;
           const parsedOk = baseCmd === "2101"
             ? Boolean(this.parseFrame2101(probeResp))
             : Boolean(this.parseFrame2103(probeResp));
@@ -551,7 +551,7 @@ class ItelmaM73Protocol {
     for (let i = 0; i < frameHex.length - 1; i += 2) {
       bytes.push(parseInt(frameHex.substr(i, 2), 16));
     }
-    if (bytes.length < 14 || bytes.some(Number.isNaN)) return null;
+    if (bytes.length < 17 || bytes.some(Number.isNaN)) return null;
 
     const u8 = (i) => bytes[i] !== undefined ? bytes[i] : 0;
     const u16 = (i) => (bytes[i] !== undefined && bytes[i + 1] !== undefined) ? ((bytes[i] << 8) | bytes[i + 1]) : 0;
@@ -660,7 +660,8 @@ class ItelmaM73Protocol {
     try {
       await this.elm.send("AT SH 83 10 F1", 500);
       const resp = (await this.elm.send("14FF00", 1500)).replace(/\s+/g, '').toUpperCase();
-      return resp.startsWith("54") || resp.includes("OK");
+      if (resp.startsWith("7F") || resp.includes("7F14")) return false;
+      return resp.startsWith("54") || resp.includes("54FF");
     } finally {
       try { await this.elm.send("AT SH 81 10 F1", 500); } catch (e) {}
     }
@@ -708,17 +709,18 @@ class ItelmaM73Protocol {
     this.elm.log('info', `[Тест ИМ] Подготовка теста: ${target.name} (ID ${target.id})`);
     await this.delay(120);
 
+    const idUpper = String(target.id).toUpperCase();
     const checkNegativeResponse = (resp, name) => {
-      if (resp.includes("7F3022") || resp.includes("7F22")) {
-        throw new Error("ЭБУ отклонил тест (код 7F 30 22: условия не соблюдены). Двигатель должен быть заглушен (0 об/мин), зажигание включено.");
+      if (resp.includes("7F3022") || resp.startsWith("7F22")) {
+        throw new Error("ЭБУ отклонил тест (код 7F 30 22: условия не соблюдены). Проверьте условия безопасности (стоянка / обороты двигателя).");
       }
       if (resp.includes("7F3011") || resp.includes("7F3012") || resp.includes("7F3031") || resp.includes("7F3080")) {
         throw new Error(`Механизм «${name}» не поддерживается в комплектации данной прошивки ЭБУ (${resp})`);
       }
-      if (resp.includes("7F")) {
+      if (resp.startsWith("7F") || resp.includes("7F30")) {
         throw new Error(`ЭБУ отклонил команду управления (код: ${resp})`);
       }
-      if (!resp.includes("70") && !resp.includes("OK")) {
+      if (!resp.startsWith("70") && !resp.includes("70" + idUpper)) {
         throw new Error(`Нет подтверждения от ЭБУ (${resp || "пустой ответ"}). Проверьте зажигание.`);
       }
     };
@@ -789,13 +791,14 @@ class ItelmaM73Protocol {
       const rawResp = await this.elm.send(cmd, 1500);
       const resp = (rawResp || "").replace(/\s+/g, '').toUpperCase();
 
-      if (resp.includes("7F3022") || resp.includes("7F22")) {
+      const idUpper = String(idHex).toUpperCase();
+      if (resp.includes("7F3022") || resp.startsWith("7F22")) {
         throw new Error("Условия не соблюдены (7F 30 22). Для управления оборотами ХХ двигатель должен работать на холостом ходу.");
       }
-      if (resp.includes("7F")) {
+      if (resp.startsWith("7F") || resp.includes("7F30")) {
         throw new Error(`ЭБУ отклонил уставку (ответ: ${resp})`);
       }
-      if (!resp.includes("70") && !resp.includes("OK")) {
+      if (!resp.startsWith("70") && !resp.includes("70" + idUpper)) {
         throw new Error(`Нет ответа от ЭБУ (${resp || "пусто"})`);
       }
       return true;
@@ -812,7 +815,7 @@ class ItelmaM73Protocol {
       await this.elm.send("AT SH 83 10 F1", 1000);
       const rawResp = await this.elm.send(`30${idHex}00`, 1000);
       const cleanResp = (rawResp || "").replace(/\s+/g, '').toUpperCase();
-      if (cleanResp.includes("7F")) {
+      if (cleanResp.startsWith("7F") || cleanResp.includes("7F30")) {
         // Некоторые ревизии прошивок М73 требуют 4-байтный формат освобождения 30 <ID> 00 00
         await this.elm.send("AT SH 84 10 F1", 1000);
         await this.elm.send(`30${idHex}0000`, 1000);
@@ -835,38 +838,41 @@ class ItelmaM73Protocol {
 
   async resetWithInit() {
     this.elm.log('info', 'Выполнение сброса ЭБУ с инициализацией (KWP2000 Reset 11 01)...');
-    let rejectedBy7F = false;
+    let resetLikelyDroppedSession = false;
     try {
       try {
         await this.elm.send("AT SH 82 10 F1", 500);
         const resp = await this.elm.send("1101", 2000);
         const clean = (resp || "").replace(/\s+/g, '').toUpperCase();
-        if (clean.startsWith("5101") || clean.includes("5101") || clean.includes("OK")) {
+        if (clean.startsWith("5101") || clean.includes("5101")) {
           return true;
         }
-        if (clean.includes("7F")) {
-          rejectedBy7F = true;
-        } else {
-          // Если ЭБУ ушёл в перезагрузку мгновенно без ответа (NO DATA) — повторный сброс не требуется
-          return true;
+        const hasAdapterErr = /ERROR|UNABLE|\?|BUSBUSY|FBERROR|DATAERROR/.test(clean);
+        const isNegative = clean.startsWith("7F") || clean.includes("7F11");
+        if (!hasAdapterErr && !isNegative && this.isInitialized && clean.includes("NODATA")) {
+          resetLikelyDroppedSession = true;
         }
       } catch (e) {
-        // Таймаут при 11 01 означает, что контроллер уже перезагрузился
-        return true;
-      }
-
-      if (rejectedBy7F) {
-        // Резервная попытка через старт процедуры 31 01 00 только при явном отказе 7F на 11 01
-        this.elm.log('info', 'Резервная попытка сброса через 31 01 00...');
-        try {
-          await this.elm.send("AT SH 83 10 F1", 500);
-          const resp2 = (await this.elm.send("310100", 2000)).replace(/\s+/g, '').toUpperCase();
-          return resp2.startsWith("71") || resp2.includes("71") || resp2.includes("OK");
-        } catch (e) {
-          return false;
+        if (this.isInitialized && this.elm && this.elm.isConnected) {
+          resetLikelyDroppedSession = true;
         }
       }
-      return false;
+
+      // Резервная попытка через старт процедуры 31 01 00 (если 11 01 вернул 7F или NO DATA)
+      this.elm.log('info', 'Резервная попытка сброса через 31 01 00...');
+      try {
+        await this.elm.send("AT SH 83 10 F1", 500);
+        const resp2 = (await this.elm.send("310100", 2000)).replace(/\s+/g, '').toUpperCase();
+        if (resp2.startsWith("71") || resp2.includes("7101")) {
+          return true;
+        }
+        if (resetLikelyDroppedSession && resp2.includes("NODATA")) {
+          return true;
+        }
+        return false;
+      } catch (e) {
+        return resetLikelyDroppedSession;
+      }
     } finally {
       try { await this.elm.send("AT SH 81 10 F1", 500); } catch (e) {}
     }

@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" href="icon-192.png">
   <title>Диагностика М73 — Лада Приора</title>
   
-  <link rel="stylesheet" href="styles.css?v=54.9">
+  <link rel="stylesheet" href="styles.css?v=55.0">
   <script src="xlsx.full.min.js"></script>
   <link rel="manifest" href="manifest.json">
 </head>
@@ -25,7 +25,7 @@
     <header class="glass-navbar">
       <div class="navbar-brand">
         <span class="status-pulse" id="connIndicator"></span>
-        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v54.9</span></div>
+        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v55.0</span></div>
         <span class="status-text" id="connStateText">Не подключено</span>
       </div>
 
@@ -593,7 +593,7 @@
                   <strong>ДПДЗ (Положение дроссельной заслонки)</strong>
                   <span class="badge-health badge-health-neutral" id="healthAdcThrottle">Ожидание</span>
                 </div>
-                <span class="adc-subtext" id="descAdcThrottle">Потенциометр заслонки (покой: 0.45 ... 0.65 В)</span>
+                <span class="adc-subtext" id="descAdcThrottle">Потенциометр заслонки (покой: 0.35 ... 0.65 В)</span>
               </div>
               <div class="adc-val-wrap">
                 <span class="adc-number" id="adcThrottle">0.000 В</span>
@@ -608,7 +608,7 @@
                   <strong>Бортовая сеть (Канал АЦП ЭБУ)</strong>
                   <span class="badge-health badge-health-neutral" id="healthAdcVolt">Ожидание</span>
                 </div>
-                <span class="adc-subtext" id="descAdcVolt">АКБ: 12.4-12.8В | Генератор: 13.8-14.4В</span>
+                <span class="adc-subtext" id="descAdcVolt">АКБ: 12.4-12.8В | Генератор: 13.8-14.7В</span>
               </div>
               <div class="adc-val-wrap">
                 <span class="adc-number" id="adcVolt">0.00 В</span>
@@ -668,7 +668,7 @@
                   <strong>ДК2 (Диагностический зонд после ката)</strong>
                   <span class="badge-health badge-health-neutral" id="healthAdcO2_2">Ожидание</span>
                 </div>
-                <span class="adc-subtext" id="descAdcO2_2">Контроль катализатора (0.55 ... 0.75 В)</span>
+                <span class="adc-subtext" id="descAdcO2_2">Контроль катализатора (0.55 ... 0.78 В)</span>
               </div>
               <div class="adc-val-wrap">
                 <span class="adc-number" id="adcO2_2">0.000 В</span>
@@ -1227,7 +1227,7 @@
           <div class="adc-ref-hint">Потенциометр с питанием 5.0 В:</div>
           <div class="adc-ref-table">
             <div class="adc-ref-row">
-              <span class="badge-health badge-health-ok">0.45 ... 0.65 В</span>
+              <span class="badge-health badge-health-ok">0.35 ... 0.65 В</span>
               <span><b>Закрыт (0%):</b> Заводская калибровка упора заслонки</span>
             </div>
             <div class="adc-ref-row">
@@ -1235,7 +1235,7 @@
               <span><b>Внимание:</b> Перетянут трос газа или нагар в дроссельном узле</span>
             </div>
             <div class="adc-ref-row">
-              <span class="badge-health badge-health-info">до 4.50 В</span>
+              <span class="badge-health badge-health-info">до 4.70 В</span>
               <span><b>100% газ:</b> Полное открытие дроссельной заслонки</span>
             </div>
           </div>
@@ -1249,7 +1249,7 @@
               <span><b>Покой (АКБ):</b> Нормальный заряд батареи</span>
             </div>
             <div class="adc-ref-row">
-              <span class="badge-health badge-health-ok">13.8 ... 14.5 В</span>
+              <span class="badge-health badge-health-ok">13.8 ... 14.7 В</span>
               <span><b>Работа (Генератор):</b> Нормальный цикл зарядки под нагрузкой</span>
             </div>
             <div class="adc-ref-row">
@@ -1257,7 +1257,7 @@
               <span><b>Недозаряд:</b> Износ щеток генератора, диодного моста или ремня</span>
             </div>
             <div class="adc-ref-row">
-              <span class="badge-health badge-health-danger">&gt; 14.8 В</span>
+              <span class="badge-health badge-health-danger">&gt; 14.7 В</span>
               <span><b>Перезаряд:</b> Пробит регулятор напряжения генератора</span>
             </div>
           </div>
@@ -1272,11 +1272,11 @@
               <span><b>Норма:</b> Рабочий диапазон от -40°C до +130°C</span>
             </div>
             <div class="adc-ref-row">
-              <span class="badge-health badge-health-danger">&gt; 4.85 В</span>
+              <span class="badge-health badge-health-danger">&gt; 4.80 В</span>
               <span><b>Обрыв цепи:</b> Опорные 5.0 В (обрыв провода датчика)</span>
             </div>
             <div class="adc-ref-row">
-              <span class="badge-health badge-health-danger">&lt; 0.15 В</span>
+              <span class="badge-health badge-health-danger">&lt; 0.20 В</span>
               <span><b>КЗ на массу:</b> Замыкание сигнального провода на корпус</span>
             </div>
           </div>
@@ -1372,10 +1372,10 @@
     </div>
   </div>
 
-  <script src="elm327.js?v=54.9"></script>
-  <script src="m73.js?v=54.9"></script>
-  <script src="logger.js?v=54.9"></script>
-  <script src="dashboard-widgets.js?v=54.9"></script>
-  <script src="app.js?v=54.9"></script>
+  <script src="elm327.js?v=55.0"></script>
+  <script src="m73.js?v=55.0"></script>
+  <script src="logger.js?v=55.0"></script>
+  <script src="dashboard-widgets.js?v=55.0"></script>
+  <script src="app.js?v=55.0"></script>
 </body>
 </html>

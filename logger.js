@@ -219,6 +219,8 @@ class TripLogger {
     this.records = [];
     this.currentTripId = Date.now();
     this.startTime = performance.now();
+    this._lastCheckpointTime = performance.now();
+    this._checkpointBusy = false;
     this.isRecording = true;
     this.lastFrameTime = performance.now();
     this.hzHistory = [];
@@ -290,7 +292,7 @@ class TripLogger {
     if (this.lastFrameTime > 0) {
       const deltaMs = now - this.lastFrameTime;
       this.currentMs = Math.round(deltaMs);
-      const instantHz = 1000 / deltaMs;
+      const instantHz = 1000 / Math.max(1, deltaMs);
       
       this.hzHistory.push(instantHz);
       if (this.hzHistory.length > 10) this.hzHistory.shift();
@@ -378,6 +380,16 @@ class TripLogger {
       };
 
       this.records.push(record);
+
+      // Периодическая контрольная точка в IndexedDB каждые 45 секунд во время поездки
+      if (this.records.length >= 10 && !this._checkpointBusy && (now - (this._lastCheckpointTime || 0) >= 45000)) {
+        this._lastCheckpointTime = now;
+        this._checkpointBusy = true;
+        const maxRpm = (window.M73App && window.M73App.peakRpm) || 0;
+        this.saveCheckpoint(maxRpm).catch(() => {}).finally(() => {
+          this._checkpointBusy = false;
+        });
+      }
     }
 
     if (this.onStatsUpdate) {

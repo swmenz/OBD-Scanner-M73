@@ -903,6 +903,7 @@ class DashboardWidgetManager {
       this.o2Canvas = document.getElementById('canvasO2');
       if (this.o2Canvas) this.o2Ctx = this.o2Canvas.getContext('2d');
       this._bindOscWidgetEvents(widgetEl);
+      this._updateOscUIElements();
       setTimeout(() => this.drawOscilloscope(), 50);
     }
 
@@ -1055,11 +1056,13 @@ class DashboardWidgetManager {
   }
 
   _saveLayout() {
-    const widgets = Array.from(this.container.querySelectorAll('.dashboard-widget'));
-    const layout = widgets.map(w => ({
-      id: w.getAttribute('data-widget-id'),
-      size: w.classList.contains('widget-wide') ? 'wide' : 'compact'
-    }));
+    const widgets = Array.from(this.container.querySelectorAll('.dashboard-widget:not(.widget-leaving)'));
+    const layout = widgets
+      .map(w => ({
+        id: w.getAttribute('data-widget-id'),
+        size: w.classList.contains('widget-wide') ? 'wide' : 'compact'
+      }))
+      .filter(item => Boolean(item.id));
     try {
       localStorage.setItem(this.storageKey, JSON.stringify(layout));
     } catch (e) {}
@@ -1105,6 +1108,7 @@ class DashboardWidgetManager {
     existingMap.forEach(widget => {
       widget.remove();
     });
+    this._activeSensorsDirty = true;
 
     // Однократная инициализация элементов после полной сборки сохраненной раскладки
     if (this.app && typeof this.app.initElements === 'function') {
@@ -1427,7 +1431,13 @@ class DashboardWidgetManager {
 
       if (hasVisibleCanvas && this.oscHistory.length >= 2 && !this.isOscPaused) {
         this.drawOscilloscope();
-        this._oscAnimId = requestAnimationFrame(animate);
+        const elapsed = this._lastPointTime > 0 ? (performance.now() - this._lastPointTime) : 0;
+        const maxInterval = (this._pointInterval || 240) + 25;
+        if (elapsed <= maxInterval) {
+          this._oscAnimId = requestAnimationFrame(animate);
+        } else {
+          this._oscAnimId = null;
+        }
       } else {
         this._oscAnimId = null;
       }

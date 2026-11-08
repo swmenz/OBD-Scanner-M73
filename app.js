@@ -213,6 +213,7 @@ class M73Application {
       purge: 20     // % (ID 43, шаг 10, диапазон 0..100)
     };
     this.lastAutoSavedTrip = null;
+    this._o2AdcWindow = [];
 
     this.initElements();
     this.bindEvents();
@@ -390,17 +391,17 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v54.9\n\nОбновления:\n1) Вкладка АЦП: отключён периодический подмес длинного кадра 21011 — теперь на вкладке АЦП опрашивается строго короткий кадр 21031 без просадок частоты (стабильные ~5.0 Гц), а статус двигателя (Покой / Работа) мгновенно определяется по порогам АЦП ДМРВ и генератора\n2) Честная индикация частоты в справке: 3.6–4.1 Гц на полном 79-байтном кадре Главной панели (21011) и ~5.0 Гц на коротком 27-байтном кадре АЦП (21031)\n3) Вкладка Тесты: групповые заголовки с иконками для Топливных форсунок и Катушек зажигания на всю ширину сетки и живая мини-панель телеметрии\n4) Нижний док: скользящая стеклянная капсула Liquid Glider, пружинная физика скрытия по скроллу, мини-хэндл возврата и Duotone SVG-иконки Apple SF Symbols 6");
+        alert("Диагностика М73 — Версия v55.0\n\nОбновления:\n1) Протокол KWP2000 и BLE: ресинхронизация буфера ELM327 после таймаутов (140 мс тишины без дублирования команд), строгая проверка 17 байт кадра АЦП 21031 (защита ДНД от обнуления) и точный разбор ответов 0x70/0x7F при уставке РХХ = 127 шагов\n2) Вкладка АЦП (~5.0 Гц): умное окно лямбда-зонда ДК1 (без ложного «Прогрева» при переходе синусоиды через 0.45 В), защита диагностики обрыва ДМРВ на заглушенном моторе и синхронизация справочника допусков\n3) Надёжность логгера поездок: автосохранение контрольных точек в IndexedDB каждые 45 сек, при сворачивании приложения (visibilitychange / pagehide) и при выключении зажигания на любой вкладке\n4) Оптимизация 120 FPS: исправлен Dirty Checking для CSS-переменных (var(--...)), умная пауза rAF осциллографа при потере связи и снижение нагрева GPU iPhone");
       });
     }
 
     // Интеллектуальное автоскрытие нижнего дока при отсутствии взаимодействия и скролле вниз
     this.initDockAutoHide();
 
-    // Режим скорости опроса K-Line: Постоянный Турбо v54.9
+    // Режим скорости опроса K-Line: Постоянный Турбо v55.0
     const cadencePill = document.querySelector('.cadence-pill');
     if (cadencePill) {
-      cadencePill.title = 'Частота опроса K-Line: Турбо v54.9';
+      cadencePill.title = 'Частота опроса K-Line: Турбо v55.0';
       this.currentSpeedProfile = 'extreme';
 
       cadencePill.addEventListener('click', () => {
@@ -408,7 +409,7 @@ class M73Application {
           ? "Включен (21011 / 21031, закрытие кадра 0 мс)"
           : (this.m73 && this.m73.singleFrameSuffixSupported === false ? "Отключен адаптером (стандартный 2101)" : "Определяется...");
         alert(
-          `⚡ Режим опроса: Постоянный Турбо (Релиз v54.9)\n\n` +
+          `⚡ Режим опроса: Постоянный Турбо (Релиз v55.0)\n\n` +
           `• Адаптивный тайминг: AT AT 2\n` +
           `• Таймаут шины: AT ST 10 (~64 мс, постоянный Турбо)\n` +
           `• Турбо-суффикс кадра: ${suffixInfo}\n` +
@@ -432,6 +433,20 @@ class M73Application {
     // Защита связи при сворачивании и переключении приложений (музыка, навигатор)
     document.addEventListener('visibilitychange', () => this.handleVisibilityChange());
     window.addEventListener('focus', () => this.handleWindowFocus());
+    window.addEventListener('pagehide', () => {
+      if (this.logger && this.logger.isRecording) {
+        this.logger.saveCheckpoint(this.peakRpm || 0).catch(() => {});
+      }
+    });
+
+    if (this.terminalInput) {
+      this.terminalInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          this.sendManualCommand();
+        }
+      });
+    }
 
     this.logger.onStatsUpdate = (stats) => {
       this._updateText(this.hzValue, stats.hz.toFixed(1));
@@ -551,7 +566,7 @@ class M73Application {
       this.btnConnect.disabled = false;
       this.btnConnectText.textContent = "Подключить";
       if (this.widgetManager) this.widgetManager.stopOscLoop();
-    this.btnConnect.classList.remove('connected');
+      this.btnConnect.classList.remove('connected');
       this.connIndicator.className = 'status-pulse';
       this.connStateText.textContent = "Не подключено";
       this.elm.log('info', 'Поиск отменён пользователем');
@@ -560,10 +575,18 @@ class M73Application {
     }
 
     if (this.elm.isConnected) {
-      // Осознанное отключение пользователем
+      // Осознанное отключение пользователем: перед разрывом BLE возвращаем управление регуляторами ЭБУ
       this.userExplicitDisconnect = true;
       this.shouldBeConnected = false;
       await this.stopPolling();
+      const releaseIds = new Set(this._pendingReleases || []);
+      if (this.activeRegulator && this.activeRegulator.idHex) {
+        releaseIds.add(this.activeRegulator.idHex);
+      }
+      if (this._pendingReleases) this._pendingReleases.clear();
+      for (const id of releaseIds) {
+        try { await this.m73.releaseActuatorControl(id); } catch (e) {}
+      }
       await this.elm.disconnect();
       await this.handleDisconnectedState();
       return;
@@ -595,7 +618,7 @@ class M73Application {
       this.btnConnectText.textContent = "Отключить";
       this.connIndicator.className = 'status-pulse connected';
       this.connStateText.textContent = "Подключено к ЭБУ";
-      this.btnToggleLog.disabled = false;
+      if (this.btnToggleLog) this.btnToggleLog.disabled = false;
       this.peakRpm = 0;
       this._updateText(this.valPeakRpm, "Пик: 0");
 
@@ -632,7 +655,7 @@ class M73Application {
       if (!this.elm.isConnected) {
         this.btnConnectText.textContent = "Подключить";
         if (this.widgetManager) this.widgetManager.stopOscLoop();
-    this.btnConnect.classList.remove('connected');
+        this.btnConnect.classList.remove('connected');
         this.connIndicator.className = 'status-pulse';
         this.connStateText.textContent = "Не подключено";
       }
@@ -677,6 +700,11 @@ class M73Application {
           }
         }
       }
+    } else if (document.visibilityState === 'hidden') {
+      // При сворачивании приложения на iOS мгновенно сохраняем контрольную точку записи в IndexedDB
+      if (this.logger && this.logger.isRecording) {
+        this.logger.saveCheckpoint(this.peakRpm || 0).catch(() => {});
+      }
     }
   }
 
@@ -706,7 +734,7 @@ class M73Application {
     this.connIndicator.className = 'status-pulse reconnecting';
     this.elm.log('info', 'Автоматическое восстановление связи с адаптером...');
 
-    this.isPolling = false;
+    await this.stopPolling();
 
     let success = false;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -738,7 +766,7 @@ class M73Application {
       this.btnConnectText.textContent = "Отключить";
       this.connIndicator.className = 'status-pulse connected';
       this.connStateText.textContent = "Подключено к ЭБУ";
-      this.btnToggleLog.disabled = false;
+      if (this.btnToggleLog) this.btnToggleLog.disabled = false;
       this.elm.log('info', 'Связь с ЭБУ М73 успешно восстановлена! Логирование продолжается.');
 
       this.startContinuousPolling();
@@ -746,6 +774,7 @@ class M73Application {
     } else {
       this.elm.log('err', 'Не удалось восстановить связь автоматически. Пожалуйста, нажмите "Подключить".');
       this.shouldBeConnected = false;
+      try { await this.elm.disconnect(); } catch (e) {}
       await this.handleDisconnectedState();
     }
   }
@@ -772,16 +801,17 @@ class M73Application {
     if (this.logger.isRecording) {
       await this.stopLogging();
     }
+    this._o2AdcWindow = [];
     if (this.widgetManager) this.widgetManager.stopOscLoop();
     this.btnConnect.classList.remove('connected');
     this.btnConnectText.textContent = "Подключить";
     this.connIndicator.className = 'status-pulse';
     this.connStateText.textContent = "Не подключено";
-    this.btnToggleLog.disabled = true;
+    if (this.btnToggleLog) this.btnToggleLog.disabled = true;
     if (this.btnExportCsv) this.btnExportCsv.disabled = this.logger.records.length === 0;
     if (this.btnExportXlsx) this.btnExportXlsx.disabled = this.logger.records.length === 0;
-    this.hzValue.textContent = "0.0";
-    this.msValue.textContent = "0";
+    if (this.hzValue) this.hzValue.textContent = "0.0";
+    if (this.msValue) this.msValue.textContent = "0";
     this.refreshHistoryCount();
   }
 
@@ -863,18 +893,29 @@ class M73Application {
               const actData = await this.m73.readConfiguredCycle('2101');
               if (actData) this.updateActuatorLiveBar(actData);
               lastTesterPresent = Date.now();
+              if (failures >= 3) {
+                this.connStateText.textContent = "Подключено к ЭБУ";
+                this.connIndicator.className = 'status-pulse connected';
+              }
+              failures = 0;
             } catch (e) {
-              try {
-                await this.elm.send("3E", 500);
-                lastTesterPresent = Date.now();
-              } catch (e2) {}
+              await this.elm.send("3E", 500);
+              lastTesterPresent = Date.now();
+              if (failures >= 3) {
+                this.connStateText.textContent = "Подключено к ЭБУ";
+                this.connIndicator.className = 'status-pulse connected';
+              }
+              failures = 0;
             }
           } else if (Date.now() - lastTesterPresent > 2000) {
             // Раз в 2 секунды отправляем легкий Tester Present (3E), чтобы сессия ЭБУ не закрылась по таймауту
-            try {
-              await this.elm.send("3E", 500);
-              lastTesterPresent = Date.now();
-            } catch (e) {}
+            await this.elm.send("3E", 500);
+            lastTesterPresent = Date.now();
+            if (failures >= 3) {
+              this.connStateText.textContent = "Подключено к ЭБУ";
+              this.connIndicator.className = 'status-pulse connected';
+            }
+            failures = 0;
           }
           await this.delay(120);
           continue;
@@ -882,7 +923,7 @@ class M73Application {
 
         // 2. Логика строго раздельного опроса (1 вкладка = 1 кадр):
         if (this.currentTab === 'tab-dashboard') {
-          // Главная панель: опрашиваем ИСКЛЮЧИЛЬНО Кадр 1 (21 01) на максимальной скорости K-Line
+          // Главная панель: опрашиваем ИСКЛЮЧИТЕЛЬНО Кадр 1 (21 01) на максимальной скорости K-Line
           const data = await this.m73.readConfiguredCycle('2101');
           if (this.widgetManager && this.widgetManager.oscChannel === 'mafAdc') {
             try { await this.m73.readConfiguredCycle('2103'); } catch (e) {}
@@ -910,16 +951,24 @@ class M73Application {
           }
         }
 
-        if (failures >= 5) this.connStateText.textContent = "Подключено к ЭБУ";
+        if (failures >= 3) {
+          this.connStateText.textContent = "Подключено к ЭБУ";
+          this.connIndicator.className = 'status-pulse connected';
+        }
         failures = 0;
         lastTesterPresent = Date.now();
       } catch (err) {
         failures++;
-        if (failures === 5) this.connStateText.textContent = "ЭБУ не отвечает";
+        if (failures === 3) {
+          this.connStateText.textContent = "ЭБУ не отвечает";
+          this.connIndicator.className = 'status-pulse reconnecting';
+          this._updateText(this.hzValue, "0.0");
+          this._updateText(this.msValue, "0");
+        }
 
         // В Ладе Приоре разъём OBD-II запитан от постоянных +12В АКБ, поэтому при выключении зажигания
         // Bluetooth-адаптер остаётся подключённым, а ЭБУ перестаёт отвечать. Сохраняем контрольную точку лога поездки!
-        if (failures === 8 && this.logger.isRecording && this.logger.records.length >= 5) {
+        if ((failures === 3 || failures === 8) && this.logger.isRecording && this.logger.records.length >= 2) {
           try {
             const saved = await this.logger.saveCheckpoint(this.peakRpm || 0);
             if (saved) {
@@ -961,7 +1010,7 @@ class M73Application {
 
   _setStyle(el, prop, val) {
     if (!el) return;
-    if (el['_lastStyle_' + prop] !== val || el.style[prop] !== val) {
+    if (el['_lastStyle_' + prop] !== val) {
       el['_lastStyle_' + prop] = val;
       el.style[prop] = val;
     }
@@ -1206,9 +1255,10 @@ class M73Application {
     const mafV = Number(adc.maf);
     const voltV = Number(adc.volt);
     const lastRpm = (this.m73.latestData && this.m73.latestData.rpm) || 0;
-    // Мгновенное определение работающего двигателя прямо по физике кадра 21 03 (без лишних запросов 21 01):
-    // при запуске мотора поток воздуха сразу поднимает АЦП ДМРВ >= 1.20 В, а генератор даёт >= 13.45 В
-    const isRunning = mafV >= 1.20 || voltV >= 13.45 || (lastRpm > 300 && mafV > 1.16);
+    // Мгновенное определение работающего двигателя по физике кадра 21 03 (без лишних запросов 21 01):
+    // генератор даёт >= 13.35 В ИЛИ поток воздуха ДМРВ в рабочем диапазоне (1.22..4.50 В) при нормальной просадке бортсети (>= 13.0 В).
+    // Если сигнальный провод ДМРВ оборван на заглушенном моторе (5.00 В при АКБ 12.6 В), условие <= 4.50 В не позволит спутать обрыв с пуском!
+    const isRunning = voltV >= 13.35 || ((mafV >= 1.22 && mafV <= 4.50) && (voltV >= 13.0 || lastRpm > 300));
 
     let countOk = 0;
     let countWarn = 0;
@@ -1236,27 +1286,27 @@ class M73Application {
     if (!isRunning) {
       if (mafV >= 0.996 && mafV <= 1.020) {
         setBadge(this.healthAdcMaf, this.descAdcMaf, 'ok', '🟢 Идеал', 'Покой: Новый датчик (0.996 ... 1.020 В)', this.barAdcMaf, mafRatio);
-        if (this.adcMaf) this.adcMaf.style.color = 'var(--apple-green)';
+        this._setStyle(this.adcMaf, 'color', 'var(--apple-green)');
       } else if (mafV >= 1.021 && mafV <= 1.035) {
         setBadge(this.healthAdcMaf, this.descAdcMaf, 'ok', '🟢 Норма', 'Покой: Рабочий датчик (1.021 ... 1.035 В)', this.barAdcMaf, mafRatio);
-        if (this.adcMaf) this.adcMaf.style.color = 'var(--apple-green)';
+        this._setStyle(this.adcMaf, 'color', 'var(--apple-green)');
       } else if (mafV >= 1.036 && mafV <= 1.050) {
         setBadge(this.healthAdcMaf, this.descAdcMaf, 'warn', '🟡 Износ', 'Покой: Износ кристалла. Повышенный расход топлива', this.barAdcMaf, mafRatio);
-        if (this.adcMaf) this.adcMaf.style.color = 'var(--apple-amber)';
+        this._setStyle(this.adcMaf, 'color', 'var(--apple-amber)');
       } else if (mafV > 1.050) {
         setBadge(this.healthAdcMaf, this.descAdcMaf, 'danger', '🔴 Неисправен', 'Покой: Критический дрейф нуля (>1.050В). Требуется замена', this.barAdcMaf, mafRatio);
-        if (this.adcMaf) this.adcMaf.style.color = 'var(--apple-rose)';
+        this._setStyle(this.adcMaf, 'color', 'var(--apple-rose)');
       } else {
         setBadge(this.healthAdcMaf, this.descAdcMaf, 'danger', '🔴 Ошибка нуля', 'Покой: Напряжение ниже нормы (<0.996В). Проверьте массы', this.barAdcMaf, mafRatio);
-        if (this.adcMaf) this.adcMaf.style.color = 'var(--apple-rose)';
+        this._setStyle(this.adcMaf, 'color', 'var(--apple-rose)');
       }
     } else {
       if (mafV >= 1.01 && mafV <= 4.80) {
         setBadge(this.healthAdcMaf, this.descAdcMaf, 'ok', '🟢 Активен', 'Двигатель запущен: динамический отклик расхода воздуха', this.barAdcMaf, mafRatio);
-        if (this.adcMaf) this.adcMaf.style.color = 'var(--apple-green)';
+        this._setStyle(this.adcMaf, 'color', 'var(--apple-green)');
       } else {
         setBadge(this.healthAdcMaf, this.descAdcMaf, 'danger', '🔴 Выход за пределы', 'Напряжение вне рабочего диапазона', this.barAdcMaf, mafRatio);
-        if (this.adcMaf) this.adcMaf.style.color = 'var(--apple-rose)';
+        this._setStyle(this.adcMaf, 'color', 'var(--apple-rose)');
       }
     }
 
@@ -1320,11 +1370,29 @@ class M73Application {
       setBadge(this.healthAdcAirTemp, this.descAdcAirTemp, 'danger', '🔴 КЗ на массу (0В)', 'Замыкание цепи датчика температуры воздуха на массу', this.barAdcAirTemp, airRatio);
     }
 
-    // 6. ДК1 (Управляющий лямбда-зонд)
+    // 6. ДК1 (Управляющий лямбда-зонд с анализом амплитуды скользящего окна)
     const o2V = Number(adc.o2);
     const o2Ratio = o2V / 1.0;
+    if (!this._o2AdcWindow) this._o2AdcWindow = [];
+    if (!Number.isNaN(o2V)) {
+      this._o2AdcWindow.push(o2V);
+      if (this._o2AdcWindow.length > 15) this._o2AdcWindow.shift();
+    }
+    let o2Min = o2V;
+    let o2Max = o2V;
+    for (let i = 0; i < this._o2AdcWindow.length; i++) {
+      const v = this._o2AdcWindow[i];
+      if (v < o2Min) o2Min = v;
+      if (v > o2Max) o2Max = v;
+    }
+    const isO2Oscillating = this._o2AdcWindow.length >= 4 && (o2Max - o2Min) >= 0.25;
+
     if (o2V >= 0.42 && o2V <= 0.48) {
-      setBadge(this.healthAdcO2, this.descAdcO2, 'warn', '🟡 Прогрев / Опорное', 'Опорные ~0.45 В. Зонд прогревается или смесь разомкнута', this.barAdcO2, o2Ratio);
+      if (isO2Oscillating) {
+        setBadge(this.healthAdcO2, this.descAdcO2, 'ok', '🟢 Регулирование', 'Активное переключение лямбда-зонда (0.1 ... 0.9 В)', this.barAdcO2, o2Ratio);
+      } else {
+        setBadge(this.healthAdcO2, this.descAdcO2, 'warn', '🟡 Прогрев / Опорное', 'Опорные ~0.45 В. Зонд прогревается или смесь разомкнута', this.barAdcO2, o2Ratio);
+      }
     } else if (o2V >= 0.05 && o2V < 0.42) {
       setBadge(this.healthAdcO2, this.descAdcO2, 'ok', '🟢 Бедная смесь', 'Сигнал ДК1 в диапазоне бедной смеси (0.1 ... 0.4 В)', this.barAdcO2, o2Ratio);
     } else if (o2V > 0.48 && o2V <= 0.95) {
@@ -1388,12 +1456,12 @@ class M73Application {
   estimateGear(rpm, speed) {
     if (speed < 5 || rpm < 700) return "нейтраль";
     const ratio = rpm / speed;
+    if (ratio > 175 || ratio < 21) return "нейтраль";
     if (ratio > 95) return "1";
     if (ratio > 58) return "2";
     if (ratio > 40) return "3";
-    if (ratio > 30) return "4";
-    if (ratio > 20) return "5";
-    return "—";
+    if (ratio > 28.5) return "4";
+    return "5";
   }
 
   updateMisfireBox(el, val) {
@@ -1417,9 +1485,9 @@ class M73Application {
 
   startLogging() {
     this.logger.start();
-    this.btnToggleLog.classList.add('active');
-    this.recBtnLabel.textContent = "Остановить";
-    this.loggerStatusDot.classList.add('recording');
+    if (this.btnToggleLog) this.btnToggleLog.classList.add('active');
+    if (this.recBtnLabel) this.recBtnLabel.textContent = "Остановить";
+    if (this.loggerStatusDot) this.loggerStatusDot.classList.add('recording');
     if (this.btnExportCsv) this.btnExportCsv.disabled = true;
     if (this.btnExportXlsx) this.btnExportXlsx.disabled = true;
     if (this.tripSavedAlert) this.tripSavedAlert.style.display = 'none';
@@ -1427,10 +1495,10 @@ class M73Application {
 
   async stopLogging() {
     const saved = await this.logger.stop(this.peakRpm || 0);
-    this.btnToggleLog.classList.remove('active');
-    this.recBtnLabel.textContent = "Начать запись";
-    this.loggerStatusDot.classList.remove('recording');
-    this.loggerStatsText.textContent = `Запись завершена • ${this.logger.records.length} точек`;
+    if (this.btnToggleLog) this.btnToggleLog.classList.remove('active');
+    if (this.recBtnLabel) this.recBtnLabel.textContent = "Начать запись";
+    if (this.loggerStatusDot) this.loggerStatusDot.classList.remove('recording');
+    if (this.loggerStatsText) this.loggerStatsText.textContent = `Запись завершена • ${this.logger.records.length} точек`;
     if (this.btnExportCsv) this.btnExportCsv.disabled = this.logger.records.length === 0;
     if (this.btnExportXlsx) this.btnExportXlsx.disabled = this.logger.records.length === 0;
     if (saved) {
@@ -1543,7 +1611,7 @@ class M73Application {
       return;
     }
     if (this.isActuatorBusy) {
-      alert("Идёт тест механизма, подождите");
+      alert("Шина K-Line занята завершением предыдущей команды, подождите");
       return;
     }
 
@@ -1605,7 +1673,7 @@ class M73Application {
       return;
     }
     if (this.isActuatorBusy) {
-      alert("Идёт тест механизма, подождите");
+      alert("Шина K-Line занята завершением предыдущей команды, подождите");
       return;
     }
     if (!confirm("Вы действительно хотите сбросить ошибки в контроллере?")) return;
