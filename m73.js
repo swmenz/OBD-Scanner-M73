@@ -9,9 +9,10 @@ class ItelmaM73Protocol {
     this.elm = elm;
     this.isInitialized = false;
 
-    // Режим Турбо v55.0: суффикс 1, чистый постоянный таймаут шины AT ST 10 (~64 мс)
+    // Режим Турбо v55.1: суффикс 1, чистый постоянный таймаут шины AT ST 10 (~64 мс)
     this.singleFrameSuffixSupported = null; // null = не проверено, true = '21011', false = '2101'
     this.fastStEnabled = true;
+    this._lastParsedProbe = null;
 
     // Кэш для объединения данных из всех параметров ЭБУ (Кадр 21 01 и 21 03)
     // Полный эталонный набор параметров OpenDiag Mobile и ReadLogs (83 канала)
@@ -218,6 +219,19 @@ class ItelmaM73Protocol {
   }
 
   /**
+   * Проверка активности ЭБУ коротким запросом TesterPresent (3E) на сервисных вкладках
+   * Отличает живой ответ ЭБУ (7E / 7F 3E) от текстового "NO DATA" адаптера при выключенном зажигании.
+   */
+  async checkEcuAlive() {
+    const resp = await this.elm.send("3E", 500);
+    const clean = (resp || "").replace(/[\s\r\n>]/g, '').toUpperCase();
+    if (!clean || /NODATA|ERROR|UNABLE|\?|BUSINIT|BUSBUSY|FBERROR|DATAERROR/.test(clean)) {
+      return false;
+    }
+    return clean.startsWith("7E") || clean.startsWith("7F3E") || clean.includes("7E");
+  }
+
+  /**
    * Сверхбыстрая отправка запроса кадра с автоматическим зондированием (Auto-Probe)
    * суффикса '1' (21011 / 21031) для мгновенного закрытия кадра (0 мс ожидания тишины)
    * и железной фиксацией на AT ST 10 (без искусственных замедлений и откатов на AT ST 20).
@@ -237,6 +251,7 @@ class ItelmaM73Protocol {
             : Boolean(this.parseFrame2103(probeResp));
           if (idx !== -1 && (cleanProbe.length - idx) >= minHexLen && parsedOk) {
             this.singleFrameSuffixSupported = true;
+            this._lastParsedProbe = { cmd: baseCmd, raw: probeResp };
             this.elm.log('info', `Турбо-опрос активирован: адаптер поддерживает ${baseCmd}1 (закрытие кадра 0 мс)`);
             return probeResp;
           }
@@ -269,7 +284,9 @@ class ItelmaM73Protocol {
 
     if (target === '2103') {
       const rawAdc = await this._sendFastRead("2103");
-      if (this.parseFrame2103(rawAdc)) {
+      const alreadyParsedAdc = this._lastParsedProbe && this._lastParsedProbe.cmd === "2103" && this._lastParsedProbe.raw === rawAdc;
+      this._lastParsedProbe = null;
+      if (alreadyParsedAdc || this.parseFrame2103(rawAdc)) {
         this.latestData.timestamp = new Date();
         return this.latestData;
       }
@@ -278,7 +295,9 @@ class ItelmaM73Protocol {
 
     // По умолчанию — базовый скоростной Кадр 1 (21 01)
     let raw1 = await this._sendFastRead("2101");
-    if (!this.parseFrame2101(raw1)) {
+    const alreadyParsed2101 = this._lastParsedProbe && this._lastParsedProbe.cmd === "2101" && this._lastParsedProbe.raw === raw1;
+    this._lastParsedProbe = null;
+    if (!alreadyParsed2101 && !this.parseFrame2101(raw1)) {
       // Если суффикс '1' был активирован на коротком кадре 2103, но обрезал длинный 74-байтный кадр 2101
       if (this.singleFrameSuffixSupported && raw1 && raw1.replace(/\s+/g, '').toUpperCase().includes("6101")) {
         this.singleFrameSuffixSupported = false;
@@ -614,14 +633,18 @@ class ItelmaM73Protocol {
       await this.elm.send("AT SH 84 10 F1", 500);
       const raw = await this.elm.send("1800FF00", 1500);
 
-      const hex = (raw || "").replace(/[\s\r\n]/g, '').toUpperCase();
+      const hex = (raw || "")
+        .replace(/SEARCHING\.+/gi, '')
+        .replace(/BUSINIT:?\.+OK/gi, '')
+        .replace(/BUSINIT:OK/gi, '')
+        .replace(/[\s\r\n>]/g, '')
+        .toUpperCase();
       const dtcList = [];
-      if (hex.startsWith("7F")) throw new Error("ЭБУ отклонил запрос чтения ошибок (отрицательный ответ " + hex.substring(0, 6) + ")");
+      if (hex.startsWith("7F") || hex.includes("7F18")) throw new Error("ЭБУ отклонил запрос чтения ошибок (отрицательный ответ " + hex.substring(0, 6) + ")");
       if (/NODATA|ERROR|UNABLE|\?/.test(hex)) throw new Error("ЭБУ не ответил на запрос ошибок");
-      const idx = hex.indexOf("58");
-      if (idx === -1) throw new Error("Некорректный ответ ЭБУ: " + (hex || "пусто"));
+      if (!hex.startsWith("58")) throw new Error("Некорректный ответ ЭБУ: " + (hex || "пусто"));
 
-      const payload = hex.substring(idx + 2);
+      const payload = hex.substring(2);
       if (payload.length < 2) return dtcList;
 
       const count = parseInt(payload.substr(0, 2), 16);
@@ -811,6 +834,7 @@ class ItelmaM73Protocol {
    * Возврат управления регулятором обратно ЭБУ (30 <ID> 00 + принудительный опрос 21 01 для мгновенного снятия удержания в М73)
    */
   async releaseActuatorControl(idHex) {
+    let headerRestored = false;
     try {
       await this.elm.send("AT SH 83 10 F1", 1000);
       const rawResp = await this.elm.send(`30${idHex}00`, 1000);
@@ -821,24 +845,26 @@ class ItelmaM73Protocol {
         await this.elm.send(`30${idHex}0000`, 1000);
       }
       await this.elm.send("AT SH 81 10 F1", 1000);
+      headerRestored = true;
       // Принудительное чтение кадра 21 01 выводит прошивку М73 из подрежима удержания IOControl (идентично переходу на вкладку Приборы)
       try {
-        const raw2101 = await this._sendFastRead("2101");
-        this.parseFrame2101(raw2101);
+        await this.readConfiguredCycle("2101");
       } catch (e) {}
       this.elm.log('info', `[Уставка ИМ] Управление ${idHex} возвращено ЭБУ (30${idHex}00)`);
       return true;
     } catch (e) {
       return false;
     } finally {
-      try { await this.elm.send("AT SH 81 10 F1", 1000); } catch (e) {}
+      if (!headerRestored) {
+        try { await this.elm.send("AT SH 81 10 F1", 1000); } catch (e) {}
+      }
     }
   }
 
 
   async resetWithInit() {
     this.elm.log('info', 'Выполнение сброса ЭБУ с инициализацией (KWP2000 Reset 11 01)...');
-    let resetLikelyDroppedSession = false;
+    let rejectedBy7F = false;
     try {
       try {
         await this.elm.send("AT SH 82 10 F1", 500);
@@ -848,31 +874,35 @@ class ItelmaM73Protocol {
           return true;
         }
         const hasAdapterErr = /ERROR|UNABLE|\?|BUSBUSY|FBERROR|DATAERROR/.test(clean);
-        const isNegative = clean.startsWith("7F") || clean.includes("7F11");
-        if (!hasAdapterErr && !isNegative && this.isInitialized && clean.includes("NODATA")) {
-          resetLikelyDroppedSession = true;
+        if (hasAdapterErr) {
+          return false;
+        }
+        if (clean.startsWith("7F") || clean.includes("7F11")) {
+          rejectedBy7F = true;
+        } else if (this.isInitialized && this.elm && this.elm.isConnected && clean.includes("NODATA")) {
+          // Если сессия была активна и ЭБУ ушёл в перезагрузку мгновенно без ответа (NO DATA) — не шлём лишних команд вдогонку
+          return true;
         }
       } catch (e) {
         if (this.isInitialized && this.elm && this.elm.isConnected) {
-          resetLikelyDroppedSession = true;
-        }
-      }
-
-      // Резервная попытка через старт процедуры 31 01 00 (если 11 01 вернул 7F или NO DATA)
-      this.elm.log('info', 'Резервная попытка сброса через 31 01 00...');
-      try {
-        await this.elm.send("AT SH 83 10 F1", 500);
-        const resp2 = (await this.elm.send("310100", 2000)).replace(/\s+/g, '').toUpperCase();
-        if (resp2.startsWith("71") || resp2.includes("7101")) {
-          return true;
-        }
-        if (resetLikelyDroppedSession && resp2.includes("NODATA")) {
+          // Таймаут при 11 01 на активной сессии означает, что контроллер уже ушёл в перезагрузку
           return true;
         }
         return false;
-      } catch (e) {
-        return resetLikelyDroppedSession;
       }
+
+      if (rejectedBy7F) {
+        // Резервная попытка через старт процедуры 31 01 00 ТОЛЬКО при явном отрицательном ответе 7F на 11 01
+        this.elm.log('info', 'Резервная попытка сброса через 31 01 00...');
+        try {
+          await this.elm.send("AT SH 83 10 F1", 500);
+          const resp2 = (await this.elm.send("310100", 2000)).replace(/\s+/g, '').toUpperCase();
+          return resp2.startsWith("71") || resp2.includes("7101");
+        } catch (e) {
+          return false;
+        }
+      }
+      return false;
     } finally {
       try { await this.elm.send("AT SH 81 10 F1", 500); } catch (e) {}
     }

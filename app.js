@@ -391,17 +391,17 @@ class M73Application {
             if (reg) await reg.update();
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v55.0\n\nОбновления:\n1) Протокол KWP2000 и BLE: ресинхронизация буфера ELM327 после таймаутов (140 мс тишины без дублирования команд), строгая проверка 17 байт кадра АЦП 21031 (защита ДНД от обнуления) и точный разбор ответов 0x70/0x7F при уставке РХХ = 127 шагов\n2) Вкладка АЦП (~5.0 Гц): умное окно лямбда-зонда ДК1 (без ложного «Прогрева» при переходе синусоиды через 0.45 В), защита диагностики обрыва ДМРВ на заглушенном моторе и синхронизация справочника допусков\n3) Надёжность логгера поездок: автосохранение контрольных точек в IndexedDB каждые 45 сек, при сворачивании приложения (visibilitychange / pagehide) и при выключении зажигания на любой вкладке\n4) Оптимизация 120 FPS: исправлен Dirty Checking для CSS-переменных (var(--...)), умная пауза rAF осциллографа при потере связи и снижение нагрева GPU iPhone");
+        alert("Диагностика М73 — Версия v55.1\n\nОбновления:\n1) Протокол KWP2000 и BLE: проверка активности ЭБУ (checkEcuAlive) на вкладках Ошибок, Тестов и Терминала (мгновенная фиксация NO DATA при выключении зажигания), строгий префикс 58 при чтении DTC и защита от повторной отправки AT SH 81 10 F1\n2) Вкладка АЦП (~5.0 Гц): определение работающего двигателя строго по живым каналам кадра 21031 (без зависимости от старых оборотов 21011) и умное скользящее окно ДК1\n3) Надёжность логгера поездок: быстрые неблокирующие чекпоинты в IndexedDB каждые 45 сек (очередь транзакций без лишнего чтения базы), автосохранение при сворачивании и выключении зажигания на любой вкладке\n4) Оптимизация рендеринга: Dirty Checking для CSS-переменных, умная пауза rAF осциллографа при потере связи и снижение нагрева GPU iPhone");
       });
     }
 
     // Интеллектуальное автоскрытие нижнего дока при отсутствии взаимодействия и скролле вниз
     this.initDockAutoHide();
 
-    // Режим скорости опроса K-Line: Постоянный Турбо v55.0
+    // Режим скорости опроса K-Line: Постоянный Турбо v55.1
     const cadencePill = document.querySelector('.cadence-pill');
     if (cadencePill) {
-      cadencePill.title = 'Частота опроса K-Line: Турбо v55.0';
+      cadencePill.title = 'Частота опроса K-Line: Турбо v55.1';
       this.currentSpeedProfile = 'extreme';
 
       cadencePill.addEventListener('click', () => {
@@ -409,7 +409,7 @@ class M73Application {
           ? "Включен (21011 / 21031, закрытие кадра 0 мс)"
           : (this.m73 && this.m73.singleFrameSuffixSupported === false ? "Отключен адаптером (стандартный 2101)" : "Определяется...");
         alert(
-          `⚡ Режим опроса: Постоянный Турбо (Релиз v55.0)\n\n` +
+          `⚡ Режим опроса: Постоянный Турбо (Релиз v55.1)\n\n` +
           `• Адаптивный тайминг: AT AT 2\n` +
           `• Таймаут шины: AT ST 10 (~64 мс, постоянный Турбо)\n` +
           `• Турбо-суффикс кадра: ${suffixInfo}\n` +
@@ -452,7 +452,11 @@ class M73Application {
       this._updateText(this.hzValue, stats.hz.toFixed(1));
       this._updateText(this.msValue, stats.ms);
       if (this.logger.isRecording) {
-        this._updateText(this.loggerStatsText, `Идёт запись • ${stats.count} точек (${stats.hz} Гц)`);
+        if (this.currentTab === 'tab-dashboard') {
+          this._updateText(this.loggerStatsText, `Идёт запись • ${stats.count} точек (${stats.hz} Гц)`);
+        } else {
+          this._updateText(this.loggerStatsText, `Запись на паузе (откройте «Панель») • ${stats.count} точек`);
+        }
       }
     };
 
@@ -891,7 +895,8 @@ class M73Application {
             // обновляет актуальные обороты/скорость и гарантирует выход М73 из режима 0x30 IOControl
             try {
               const actData = await this.m73.readConfiguredCycle('2101');
-              if (actData) this.updateActuatorLiveBar(actData);
+              if (!actData) throw new Error("Пустой кадр 21 01");
+              this.updateActuatorLiveBar(actData);
               lastTesterPresent = Date.now();
               if (failures >= 3) {
                 this.connStateText.textContent = "Подключено к ЭБУ";
@@ -899,7 +904,8 @@ class M73Application {
               }
               failures = 0;
             } catch (e) {
-              await this.elm.send("3E", 500);
+              const alive = await this.m73.checkEcuAlive();
+              if (!alive) throw new Error("Нет ответа ЭБУ на TesterPresent (3E)");
               lastTesterPresent = Date.now();
               if (failures >= 3) {
                 this.connStateText.textContent = "Подключено к ЭБУ";
@@ -909,7 +915,8 @@ class M73Application {
             }
           } else if (Date.now() - lastTesterPresent > 2000) {
             // Раз в 2 секунды отправляем легкий Tester Present (3E), чтобы сессия ЭБУ не закрылась по таймауту
-            await this.elm.send("3E", 500);
+            const alive = await this.m73.checkEcuAlive();
+            if (!alive) throw new Error("Нет ответа ЭБУ на TesterPresent (3E)");
             lastTesterPresent = Date.now();
             if (failures >= 3) {
               this.connStateText.textContent = "Подключено к ЭБУ";
@@ -964,6 +971,9 @@ class M73Application {
           this.connIndicator.className = 'status-pulse reconnecting';
           this._updateText(this.hzValue, "0.0");
           this._updateText(this.msValue, "0");
+          if (this.logger && typeof this.logger.resetCadence === 'function') {
+            this.logger.resetCadence();
+          }
         }
 
         // В Ладе Приоре разъём OBD-II запитан от постоянных +12В АКБ, поэтому при выключении зажигания
@@ -1254,11 +1264,10 @@ class M73Application {
     const adc = data.adc;
     const mafV = Number(adc.maf);
     const voltV = Number(adc.volt);
-    const lastRpm = (this.m73.latestData && this.m73.latestData.rpm) || 0;
-    // Мгновенное определение работающего двигателя по физике кадра 21 03 (без лишних запросов 21 01):
-    // генератор даёт >= 13.35 В ИЛИ поток воздуха ДМРВ в рабочем диапазоне (1.22..4.50 В) при нормальной просадке бортсети (>= 13.0 В).
+    // Определение работающего двигателя строго по живым каналам кадра 21 03 (без устаревшего lastRpm из 21 01):
+    // генератор даёт >= 13.35 В ИЛИ поток воздуха ДМРВ в рабочем диапазоне (1.22..4.50 В) при нормальном напряжении сети (>= 12.95 В).
     // Если сигнальный провод ДМРВ оборван на заглушенном моторе (5.00 В при АКБ 12.6 В), условие <= 4.50 В не позволит спутать обрыв с пуском!
-    const isRunning = voltV >= 13.35 || ((mafV >= 1.22 && mafV <= 4.50) && (voltV >= 13.0 || lastRpm > 300));
+    const isRunning = voltV >= 13.35 || (mafV >= 1.22 && mafV <= 4.50 && voltV >= 12.95);
 
     let countOk = 0;
     let countWarn = 0;
@@ -2034,6 +2043,16 @@ class M73Application {
       }
     }
     this.currentTab = tabId;
+    if (tabId === 'tab-adc') {
+      this._o2AdcWindow = [];
+    }
+    if (this.logger && this.logger.isRecording) {
+      if (tabId === 'tab-dashboard') {
+        this._updateText(this.loggerStatsText, `Идёт запись • ${this.logger.records.length} точек (${this.logger.currentHz} Гц)`);
+      } else {
+        this._updateText(this.loggerStatsText, `Запись на паузе (откройте «Панель») • ${this.logger.records.length} точек`);
+      }
+    }
     if (tabId === 'tab-dashboard') {
       if (this.widgetManager) this.widgetManager.ensureOscLoop();
       if (this.m73 && this.m73.latestData) this.updateDashboardUI(this.m73.latestData);

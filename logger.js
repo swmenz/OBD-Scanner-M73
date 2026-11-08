@@ -8,6 +8,7 @@ class TripStorage {
     this.storeName = 'trips';
     this.version = 1;
     this.db = null;
+    this._writeQueue = Promise.resolve();
   }
 
   async _openDb() {
@@ -28,36 +29,43 @@ class TripStorage {
     });
   }
 
-  async saveTrip(records, maxRpm = 0, existingId = null) {
+  async saveTrip(records, maxRpm = 0, existingId = null, skipPrune = false) {
     if (!records || records.length === 0) return null;
-    const db = await this._openDb();
-    const tripId = existingId || Date.now();
-    const now = new Date(tripId);
-    const dateFormatted = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const fileDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
-    
-    const trip = {
-      id: tripId,
-      dateStr: dateFormatted,
-      fileName: `Приора_М73_Лог_${fileDateStr}.csv`,
-      pointCount: records.length,
-      maxRpm: maxRpm,
-      records: records
+    const task = async () => {
+      const db = await this._openDb();
+      const tripId = existingId || Date.now();
+      const now = new Date(tripId);
+      const dateFormatted = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const fileDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
+      
+      const trip = {
+        id: tripId,
+        dateStr: dateFormatted,
+        fileName: `Приора_М73_Лог_${fileDateStr}.csv`,
+        pointCount: records.length,
+        maxRpm: maxRpm,
+        records: records
+      };
+
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(this.storeName, 'readwrite');
+        const store = tx.objectStore(this.storeName);
+        store.put(trip);
+        tx.oncomplete = async () => {
+          if (!skipPrune) {
+            try {
+              await this._pruneOldTrips();
+            } catch (e) {}
+          }
+          resolve(trip);
+        };
+        tx.onerror = (e) => reject(e.target.error);
+        tx.onabort = (e) => reject(tx.error || (e && e.target && e.target.error) || new Error('IndexedDB transaction aborted'));
+      });
     };
 
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(this.storeName, 'readwrite');
-      const store = tx.objectStore(this.storeName);
-      store.put(trip);
-      tx.oncomplete = async () => {
-        try {
-          await this._pruneOldTrips();
-        } catch (e) {}
-        resolve(trip);
-      };
-      tx.onerror = (e) => reject(e.target.error);
-      tx.onabort = (e) => reject(tx.error || (e && e.target && e.target.error) || new Error('IndexedDB transaction aborted'));
-    });
+    this._writeQueue = this._writeQueue.catch(() => {}).then(task);
+    return this._writeQueue;
   }
 
   async _pruneOldTrips(maxCount = 10) {
@@ -228,9 +236,9 @@ class TripLogger {
   }
 
   async saveCheckpoint(maxRpm = 0) {
-    if (this.records && this.records.length >= 5) {
+    if (this.records && this.records.length >= 2) {
       try {
-        const saved = await this.storage.saveTrip(this.records, maxRpm, this.currentTripId);
+        const saved = await this.storage.saveTrip(this.records, maxRpm, this.currentTripId, true);
         this.lastSavedTrip = saved;
         return saved;
       } catch (err) {
@@ -243,9 +251,9 @@ class TripLogger {
   async stop(maxRpm = 0) {
     this.isRecording = false;
     this._disableBackgroundMode();
-    if (this.records && this.records.length >= 5) {
+    if (this.records && this.records.length >= 2) {
       try {
-        const saved = await this.storage.saveTrip(this.records, maxRpm, this.currentTripId);
+        const saved = await this.storage.saveTrip(this.records, maxRpm, this.currentTripId, false);
         this.lastSavedTrip = saved;
         return saved;
       } catch (err) {
@@ -253,6 +261,13 @@ class TripLogger {
       }
     }
     return null;
+  }
+
+  resetCadence() {
+    this.lastFrameTime = 0;
+    this.hzHistory = [];
+    this.currentHz = 0;
+    this.currentMs = 0;
   }
 
   /**
