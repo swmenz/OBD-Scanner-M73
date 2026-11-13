@@ -708,6 +708,7 @@ class DashboardWidgetManager {
   }
 
   removeWidget(widgetEl) {
+    if (!widgetEl || widgetEl.getAttribute('data-widget-id') === 'logger-card') return;
     widgetEl.removeAttribute('data-widget-id');
     widgetEl.classList.add('widget-leaving');
     setTimeout(() => {
@@ -731,8 +732,6 @@ class DashboardWidgetManager {
     if (searchInput) searchInput.value = '';
 
     this._populateGallery();
-    this.galleryModal.style.display = 'flex';
-    void this.galleryModal.offsetWidth; // Принудительный reflow для активации CSS-перехода
     this.galleryModal.classList.add('open');
   }
 
@@ -743,11 +742,6 @@ class DashboardWidgetManager {
     if (!this.galleryModal) return;
 
     this.galleryModal.classList.remove('open');
-    setTimeout(() => {
-      if (this.galleryModal && !this.galleryModal.classList.contains('open')) {
-        this.galleryModal.style.display = 'none';
-      }
-    }, 250);
   }
 
   _populateGallery() {
@@ -1017,7 +1011,6 @@ class DashboardWidgetManager {
       'duty': { title: 'Загрузка форсунок', valId: 'valDuty', unit: 'нагрузка', def: '0.0%', featured: true },
       'mult-adapt': { title: 'Мультипликатив (FRA)', valId: 'valMultAdapt', unit: 'множитель', def: '1.000' },
       'add-adapt': { title: 'Аддитив (TRA / ХХ)', valId: 'valAddAdapt', unit: 'смещение ХХ', def: '+0.00%' },
-      'spark': { title: 'УОЗ / Отскок', valId: 'valSpark', unit: '° / <strong id="valRetard" style="font-weight:700;">0.0°</strong>', def: '0.0', cardId: 'cardSpark' },
       'throttle': { title: 'Дроссельная заслонка', valId: 'valThrottle', unit: '%', def: '0.0' },
       'temp': { title: 'Температура ОЖ', valId: 'valTemp', unit: '°C', def: '0', progress: 'barTemp' },
       'intake-temp': { title: 'Температура впуска (ДТВ)', valId: 'valIntakeTemp', unit: '°C', def: '0.0' },
@@ -1043,7 +1036,7 @@ class DashboardWidgetManager {
             <span class="tile-num" id="${def.valId}">${def.def}</span>
             <span class="tile-unit">${def.unit}</span>
           </div>
-          ${def.progress ? `<div class="glass-progress-track"><div class="glass-progress-bar" id="${def.progress}"></div></div>` : ''}
+          ${def.progress ? `<div class="mini-glass-track"><div class="mini-glass-bar" id="${def.progress}"></div></div>` : ''}
         </div>
       `;
     }
@@ -1104,8 +1097,12 @@ class DashboardWidgetManager {
       }
     });
 
-    // Скрытые виджеты, которых нет в сохраненном layout
-    existingMap.forEach(widget => {
+    // Скрытые виджеты, которых нет в сохраненном layout (системный logger-card не удаляется никогда)
+    existingMap.forEach((widget, id) => {
+      if (id === 'logger-card') {
+        this.container.appendChild(widget);
+        return;
+      }
       widget.remove();
     });
     this._activeSensorsDirty = true;
@@ -1265,19 +1262,18 @@ class DashboardWidgetManager {
       this.setOscChannel(channelId);
     }
     if (this.modalOsc) {
-      this.modalOsc.style.display = 'flex';
       this.modalOsc.classList.add('open');
       this.modalCanvas = document.getElementById('canvasOscModal');
       if (this.modalCanvas) this.modalCtx = this.modalCanvas.getContext('2d');
       this._updateOscUIElements();
-      setTimeout(() => this.drawOscilloscope(), 40);
+      requestAnimationFrame(() => this.drawOscilloscope());
+      setTimeout(() => this.drawOscilloscope(), 60);
     }
   }
 
   closeOscModal() {
     if (this.modalOsc) {
       this.modalOsc.classList.remove('open');
-      this.modalOsc.style.display = 'none';
     }
   }
 
@@ -1425,7 +1421,7 @@ class DashboardWidgetManager {
     const animate = () => {
       const dashPane = document.getElementById('tab-dashboard');
       const isDashActive = dashPane && dashPane.classList.contains('active');
-      const isModalOpen = this.modalOsc && (this.modalOsc.classList.contains('open') || this.modalOsc.style.display === 'flex');
+      const isModalOpen = Boolean(this.modalOsc && this.modalOsc.classList.contains('open'));
       const canvasEl = document.getElementById('canvasO2');
       const hasVisibleCanvas = (isDashActive && Boolean(canvasEl && canvasEl.isConnected)) || isModalOpen;
 

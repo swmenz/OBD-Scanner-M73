@@ -6,62 +6,126 @@ class TripStorage {
   constructor() {
     this.dbName = 'Priora_M73_Logs';
     this.storeName = 'trips';
-    this.version = 1;
+    this.metaStoreName = 'trips_meta';
+    this.version = 2;
     this.db = null;
+    this._openPromise = null;
     this._writeQueue = Promise.resolve();
   }
 
   async _openDb() {
     if (this.db) return this.db;
-    return new Promise((resolve, reject) => {
+    if (this._openPromise) return this._openPromise;
+
+    this._openPromise = new Promise((resolve, reject) => {
       const req = indexedDB.open(this.dbName, this.version);
       req.onupgradeneeded = (e) => {
         const db = e.target.result;
+        const tx = e.target.transaction;
         if (!db.objectStoreNames.contains(this.storeName)) {
           db.createObjectStore(this.storeName, { keyPath: 'id' });
         }
+        if (!db.objectStoreNames.contains(this.metaStoreName)) {
+          db.createObjectStore(this.metaStoreName, { keyPath: 'id' });
+        }
+        // Миграция метаданных существующих поездок с v1 без потери логов
+        if (e.oldVersion > 0 && e.oldVersion < 2) {
+          const metaStore = tx.objectStore(this.metaStoreName);
+          tx.objectStore(this.storeName).openCursor().onsuccess = (ev) => {
+            const cursor = ev.target.result;
+            if (cursor) {
+              const t = cursor.value;
+              metaStore.put({
+                id: t.id,
+                dateStr: t.dateStr,
+                fileName: t.fileName,
+                pointCount: t.pointCount,
+                maxRpm: t.maxRpm
+              });
+              cursor.continue();
+            }
+          };
+        }
       };
       req.onsuccess = (e) => {
-        this.db = e.target.result;
-        resolve(this.db);
+        const db = e.target.result;
+        db.onclose = () => {
+          if (this.db === db) this.db = null;
+        };
+        db.onversionchange = () => {
+          try { db.close(); } catch (err) {}
+          if (this.db === db) this.db = null;
+        };
+        this.db = db;
+        this._openPromise = null;
+        resolve(db);
       };
-      req.onerror = (e) => reject(e.target.error);
+      req.onerror = (e) => {
+        this._openPromise = null;
+        reject(e.target.error);
+      };
+      req.onblocked = () => {
+        this._openPromise = null;
+        reject(new Error('IndexedDB open blocked'));
+      };
     });
+
+    return this._openPromise;
+  }
+
+  async _withDb(fn) {
+    let db = await this._openDb();
+    try {
+      return await fn(db);
+    } catch (err) {
+      if (err && (err.name === 'InvalidStateError' || /closing|closed/i.test(err.message || ''))) {
+        this.db = null;
+        db = await this._openDb();
+        return await fn(db);
+      }
+      throw err;
+    }
   }
 
   async saveTrip(records, maxRpm = 0, existingId = null, skipPrune = false) {
     if (!records || records.length === 0) return null;
     const task = async () => {
-      const db = await this._openDb();
       const tripId = existingId || Date.now();
       const now = new Date(tripId);
       const dateFormatted = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
       const fileDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
-      
-      const trip = {
+
+      const meta = {
         id: tripId,
         dateStr: dateFormatted,
         fileName: `Приора_М73_Лог_${fileDateStr}.csv`,
+        pointCount: records.length,
+        maxRpm: maxRpm
+      };
+      const trip = {
+        id: tripId,
+        dateStr: dateFormatted,
+        fileName: meta.fileName,
         pointCount: records.length,
         maxRpm: maxRpm,
         records: records
       };
 
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(this.storeName, 'readwrite');
-        const store = tx.objectStore(this.storeName);
-        store.put(trip);
-        tx.oncomplete = async () => {
-          if (!skipPrune) {
-            try {
-              await this._pruneOldTrips();
-            } catch (e) {}
-          }
-          resolve(trip);
-        };
+      await this._withDb((db) => new Promise((resolve, reject) => {
+        const tx = db.transaction([this.storeName, this.metaStoreName], 'readwrite');
+        tx.objectStore(this.storeName).put(trip);
+        tx.objectStore(this.metaStoreName).put(meta);
+        tx.oncomplete = () => resolve(trip);
         tx.onerror = (e) => reject(e.target.error);
         tx.onabort = (e) => reject(tx.error || (e && e.target && e.target.error) || new Error('IndexedDB transaction aborted'));
-      });
+      }));
+
+      if (!skipPrune) {
+        try {
+          await this._pruneOldTrips();
+        } catch (e) {}
+      }
+      return trip;
     };
 
     this._writeQueue = this._writeQueue.catch(() => {}).then(task);
@@ -73,79 +137,63 @@ class TripStorage {
     if (trips.length > maxCount) {
       trips.sort((a, b) => b.id - a.id);
       const toDelete = trips.slice(maxCount);
-      const db = await this._openDb();
-      return new Promise((resolve) => {
-        const tx = db.transaction(this.storeName, 'readwrite');
+      return this._withDb((db) => new Promise((resolve) => {
+        const tx = db.transaction([this.storeName, this.metaStoreName], 'readwrite');
         const store = tx.objectStore(this.storeName);
+        const metaStore = tx.objectStore(this.metaStoreName);
         for (const t of toDelete) {
           store.delete(t.id);
+          metaStore.delete(t.id);
         }
         tx.oncomplete = () => resolve(true);
         tx.onerror = () => resolve(false);
         tx.onabort = () => resolve(false);
-      });
+      }));
     }
   }
 
   async getAllTripsMeta() {
-    const db = await this._openDb();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(this.storeName, 'readonly');
-      const store = tx.objectStore(this.storeName);
-      const meta = [];
-      const req = store.openCursor();
+    return this._withDb((db) => new Promise((resolve, reject) => {
+      const tx = db.transaction(this.metaStoreName, 'readonly');
+      const store = tx.objectStore(this.metaStoreName);
+      const req = store.getAll();
       req.onsuccess = (e) => {
-        const cursor = e.target.result;
-        if (cursor) {
-          const t = cursor.value;
-          meta.push({
-            id: t.id,
-            dateStr: t.dateStr,
-            fileName: t.fileName,
-            pointCount: t.pointCount,
-            maxRpm: t.maxRpm
-          });
-          cursor.continue();
-        } else {
-          meta.sort((a, b) => b.id - a.id);
-          resolve(meta);
-        }
+        const meta = (e.target && e.target.result) ? e.target.result.slice() : [];
+        meta.sort((a, b) => b.id - a.id);
+        resolve(meta);
       };
       req.onerror = (e) => reject(e.target.error);
-    });
+    }));
   }
 
   async getTrip(id) {
-    const db = await this._openDb();
-    return new Promise((resolve, reject) => {
+    return this._withDb((db) => new Promise((resolve, reject) => {
       const tx = db.transaction(this.storeName, 'readonly');
       const store = tx.objectStore(this.storeName);
       const req = store.get(id);
       req.onsuccess = () => resolve(req.result);
       req.onerror = (e) => reject(e.target.error);
-    });
+    }));
   }
 
   async deleteTrip(id) {
-    const db = await this._openDb();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(this.storeName, 'readwrite');
-      const store = tx.objectStore(this.storeName);
-      store.delete(id);
+    return this._withDb((db) => new Promise((resolve, reject) => {
+      const tx = db.transaction([this.storeName, this.metaStoreName], 'readwrite');
+      tx.objectStore(this.storeName).delete(id);
+      tx.objectStore(this.metaStoreName).delete(id);
       tx.oncomplete = () => resolve(true);
       tx.onerror = (e) => reject(e.target.error);
-    });
+    }));
   }
 
   async clearAll() {
-    const db = await this._openDb();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(this.storeName, 'readwrite');
-      const store = tx.objectStore(this.storeName);
-      store.clear();
+    return this._withDb((db) => new Promise((resolve, reject) => {
+      const tx = db.transaction([this.storeName, this.metaStoreName], 'readwrite');
+      tx.objectStore(this.storeName).clear();
+      tx.objectStore(this.metaStoreName).clear();
       tx.oncomplete = () => resolve(true);
       tx.onerror = (e) => reject(e.target.error);
-    });
+    }));
   }
 }
 
@@ -184,11 +232,17 @@ class TripLogger {
       return;
     }
 
+    if ('audioSession' in navigator) {
+      try { navigator.audioSession.type = 'ambient'; } catch (e) {}
+    }
     try {
       if (!this.silentAudio) {
         const silentWav = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
         this.silentAudio = new Audio(silentWav);
         this.silentAudio.loop = true;
+        this.silentAudio.volume = 0.01;
+        this.silentAudio.setAttribute('playsinline', '');
+        this.silentAudio.setAttribute('webkit-playsinline', '');
       }
       this.silentAudio.play().catch(e => console.log("Фоновый звук ожидает взаимодействия"));
     } catch (e) {
@@ -322,7 +376,7 @@ class TripLogger {
       const f = params.flags || {};
       const mis = params.misfires || {};
 
-      // Полный эталонный набор параметров OpenDiag Mobile и ReadLogs (83 канала)
+      // Полный эталонный набор параметров OpenDiag Mobile и ReadLogs (66 каналов)
       const record = {
         "Время (сек)": parseFloat(elapsedSec),
         "Обороты двигателя (об/мин)": params.rpm || 0,
@@ -494,6 +548,45 @@ class TripLogger {
   }
 
   /**
+   * Ленивая подгрузка библиотеки SheetJS (xlsx.full.min.js) при первом экспорте или фоновом прогреве
+   */
+  ensureXlsxLoaded() {
+    if (typeof XLSX !== 'undefined') return Promise.resolve();
+    if (TripLogger._xlsxLoadPromise) return TripLogger._xlsxLoadPromise;
+
+    TripLogger._xlsxLoadPromise = new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[data-xlsx-loader="true"]');
+      if (existing) {
+        existing.addEventListener('load', () => resolve(), { once: true });
+        existing.addEventListener('error', () => {
+          TripLogger._xlsxLoadPromise = null;
+          reject(new Error('Не удалось загрузить SheetJS'));
+        }, { once: true });
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'xlsx.full.min.js';
+      script.async = true;
+      script.setAttribute('data-xlsx-loader', 'true');
+      script.onload = () => {
+        if (typeof XLSX !== 'undefined') {
+          resolve();
+        } else {
+          TripLogger._xlsxLoadPromise = null;
+          reject(new Error('Библиотека SheetJS не инициализировалась'));
+        }
+      };
+      script.onerror = () => {
+        TripLogger._xlsxLoadPromise = null;
+        reject(new Error('Не удалось загрузить xlsx.full.min.js'));
+      };
+      document.head.appendChild(script);
+    });
+
+    return TripLogger._xlsxLoadPromise;
+  }
+
+  /**
    * Генерация таблицы .xlsx (Microsoft Excel) и вызов меню «Поделиться»
    */
   async exportToXlsx(recordsToExport = null, customFileName = null) {
@@ -504,8 +597,12 @@ class TripLogger {
     }
 
     if (typeof XLSX === "undefined") {
-      alert("Ошибка: библиотека SheetJS не загружена");
-      return;
+      try {
+        await this.ensureXlsxLoaded();
+      } catch (err) {
+        alert("Ошибка: библиотека SheetJS не загружена (" + (err.message || err) + ")");
+        return;
+      }
     }
 
     const worksheet = XLSX.utils.json_to_sheet(data);

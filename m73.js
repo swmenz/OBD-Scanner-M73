@@ -1,7 +1,7 @@
 /**
  * Протокол взаимодействия с ЭБУ Итэлма М73 (Лада Приора / Калина / 2114)
  * Стандарт KWP2000 (ISO 14230), Fast Init, 10400 бод.
- * Полный эталонный набор параметров OpenDiag Mobile и ReadLogs (83 канала).
+ * Полный эталонный набор параметров OpenDiag Mobile и ReadLogs (кадры 21 01 и 21 03).
  */
 
 class ItelmaM73Protocol {
@@ -15,7 +15,6 @@ class ItelmaM73Protocol {
     this._lastParsedProbe = null;
 
     // Кэш для объединения данных из всех параметров ЭБУ (Кадр 21 01 и 21 03)
-    // Полный эталонный набор параметров OpenDiag Mobile и ReadLogs (83 канала)
     this.latestData = {
       timestamp: new Date(),
 
@@ -198,24 +197,6 @@ class ItelmaM73Protocol {
     this.currentSpeedProfile = 'extreme';
     this.elm.log('info', '>>> СВЯЗЬ С ЭБУ ИТЭЛМА М73 УСПЕШНО УСТАНОВЛЕНА И ПРОВЕРЕНА! <<<');
     return true;
-  }
-
-  /**
-   * Профиль скорости опроса K-Line (Постоянный Турбо v54.6: AT AT 2, AT ST 10, ~64 мс)
-   */
-  async setSpeedProfile(profile = 'extreme') {
-    if (!this.elm || !this.elm.isConnected) return false;
-    try {
-      await this.elm.send("AT AT 2");
-      await this.elm.send("AT ST 10"); // ~64 мс (чистый турбо таймаут тишины)
-      this.currentSpeedProfile = 'extreme';
-      this.fastStEnabled = true;
-      this.elm.log('info', 'Режим скорости: Турбо v54.6 (AT AT 2, AT ST 10, ~64мс)');
-      return true;
-    } catch (e) {
-      this.elm.log('warn', 'Ошибка установки профиля скорости: ' + (e.message || e));
-      return false;
-    }
   }
 
   /**
@@ -741,11 +722,11 @@ class ItelmaM73Protocol {
       inj3_test:  { id: "03", duration: 2500, name: "Форсунка цилиндра 3" },
       inj4_test:  { id: "04", duration: 2500, name: "Форсунка цилиндра 4" },
 
-      // Катушки зажигания
-      coil1_test: { id: "05", duration: 2500, name: "Катушка зажигания 1 (цил. 1–4)" },
-      coil2_test: { id: "06", duration: 2500, name: "Катушка зажигания 2" },
-      coil3_test: { id: "07", duration: 2500, name: "Катушка зажигания 3 (цил. 2–3)" },
-      coil4_test: { id: "08", duration: 2500, name: "Катушка зажигания 4" }
+      // Катушки зажигания (индивидуальные ИКЗ 16V)
+      coil1_test: { id: "05", duration: 2500, name: "Катушка зажигания цилиндра 1" },
+      coil2_test: { id: "06", duration: 2500, name: "Катушка зажигания цилиндра 2" },
+      coil3_test: { id: "07", duration: 2500, name: "Катушка зажигания цилиндра 3" },
+      coil4_test: { id: "08", duration: 2500, name: "Катушка зажигания цилиндра 4" }
     };
   }
 

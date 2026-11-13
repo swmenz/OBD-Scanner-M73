@@ -172,6 +172,15 @@ class Elm327BLE {
 
     this.log('info', `Тихое переподключение к "${this.device.name || 'OBD BLE'}"...`);
 
+    // Немедленно блокируем отправку новых команд и отвязываем устаревшие характеристики
+    this.isConnected = false;
+    if (this.rxCharacteristic) {
+      try { this.rxCharacteristic.removeEventListener('characteristicvaluechanged', this._rxHandler); } catch (e) {}
+    }
+    this.txCharacteristic = null;
+    this.rxCharacteristic = null;
+    this.server = null;
+
     // Гасим зависшие таймеры и очищаем очередь
     if (this.commandTimeoutTimer) {
       clearTimeout(this.commandTimeoutTimer);
@@ -188,6 +197,11 @@ class Elm327BLE {
     }
     this._queue = Promise.resolve();
 
+    // Отключаем обработчик обрыва до принудительного закрытия GATT, чтобы не плодить ложные события
+    try {
+      this.device.removeEventListener('gattserverdisconnected', this._gattHandler);
+    } catch (e) {}
+
     // Если GATT числился подключенным, производим аккуратный дисконнект перед новым коннектом
     try {
       if (this.device.gatt && this.device.gatt.connected) {
@@ -195,10 +209,7 @@ class Elm327BLE {
       }
     } catch (e) {}
 
-    // Гарантируем регистрацию обработчика разрыва связи
-    try {
-      this.device.removeEventListener('gattserverdisconnected', this._gattHandler);
-    } catch (e) {}
+    // Гарантируем регистрацию обработчика разрыва связи для нового соединения
     this.device.addEventListener('gattserverdisconnected', this._gattHandler);
 
     this.log('info', 'Подключение к GATT серверу адаптера...');
@@ -334,14 +345,23 @@ class Elm327BLE {
           }
         }
 
+        let settled = false;
         this.activeResolver = (resp) => {
+          if (settled) return;
+          settled = true;
           // Сначала пробуждаем конвейер опроса (Request Pipelining), затем логируем в терминал
           resolve(resp);
           this.log('rx', resp);
         };
-        this.activeRejecter = reject;
+        this.activeRejecter = (err) => {
+          if (settled) return;
+          settled = true;
+          reject(err);
+        };
 
         this.commandTimeoutTimer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
           const partial = this.rxBuffer;
           this.rxBuffer = "";
           this._needsResync = true;
@@ -364,6 +384,8 @@ class Elm327BLE {
         this.log('tx', command);
 
         writePromise.catch((err) => {
+          if (settled) return;
+          settled = true;
           if (this.commandTimeoutTimer) {
             clearTimeout(this.commandTimeoutTimer);
             this.commandTimeoutTimer = null;
@@ -382,6 +404,16 @@ class Elm327BLE {
   }
 
   async disconnect() {
+    // Сбрасываем статус и характеристики до сброса очереди и асинхронного disconnect(),
+    // чтобы ни один новый или ожидающий send() не проскочил поверх закрытия GATT
+    this.isConnected = false;
+    if (this.rxCharacteristic) {
+      try { this.rxCharacteristic.removeEventListener('characteristicvaluechanged', this._rxHandler); } catch (e) {}
+    }
+    this.txCharacteristic = null;
+    this.rxCharacteristic = null;
+    this.server = null;
+
     if (this.commandTimeoutTimer) {
       clearTimeout(this.commandTimeoutTimer);
       this.commandTimeoutTimer = null;
@@ -407,7 +439,6 @@ class Elm327BLE {
         } catch (e) {}
       }
     }
-    this.isConnected = false;
   }
 }
 

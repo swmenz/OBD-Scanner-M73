@@ -1,5 +1,5 @@
-// Сервис-воркер для 100% оффлайн работы приложения в машине без интернета (v55.2)
-const CACHE_NAME = 'm73-diag-cache-v55.2';
+// Сервис-воркер для 100% оффлайн работы приложения в машине без интернета (v55.3)
+const CACHE_NAME = 'm73-diag-cache-v55.3';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -47,9 +47,29 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Перехват запросов: приоритет сети при наличии интернета, надежный оффлайн в машине
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
+async function fetchNoCacheWithTimeout(url, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { cache: 'no-cache', signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Перехват запросов: приоритет сети (в обход HTTP-кэша браузера) при наличии интернета, надежный оффлайн в машине
 self.addEventListener('fetch', (event) => {
   const request = event.request;
+
+  if (request.cache === 'only-if-cached' && request.mode !== 'same-origin') {
+    return;
+  }
 
   // Обрабатываем только GET-запросы к своему же сайту
   if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) {
@@ -60,16 +80,13 @@ self.addEventListener('fetch', (event) => {
   // при слабом/отсутствующем интернете в машине сразу отдаём страницу из кэша
   if (request.mode === 'navigate') {
     event.respondWith(
-      Promise.race([
-        fetch(request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const clone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put('./index.html', clone));
-          }
-          return networkResponse;
-        }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
-      ]).catch(async () => {
+      fetchNoCacheWithTimeout(request.url, 2000).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const clone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put('./index.html', clone));
+        }
+        return networkResponse;
+      }).catch(async () => {
         const cached = (await caches.match('./index.html')) || (await caches.match('./'));
         return cached || new Response('Оффлайн режим. Запустите приложение с интернетом хотя бы один раз.', {
           status: 503,
@@ -80,18 +97,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Скрипты, стили, иконки: сначала пробуем сеть (таймаут 1.5 с), чтобы
-  // любые обновления доставлялись сразу при перезагрузке. Если сети нет — мгновенно из кэша!
+  // Скрипты, стили, иконки: сначала пробуем сеть (таймаут 1.5 с, AbortController + cache: 'no-cache'),
+  // чтобы любые обновления доставлялись сразу при перезагрузке. Если сети нет — мгновенно из кэша!
   event.respondWith(
-    Promise.race([
-      fetch(request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200) {
-          const clone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-        }
-        return networkResponse;
-      }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500))
-    ]).catch(() => caches.match(request, { ignoreSearch: true }))
+    fetchNoCacheWithTimeout(request.url, 1500).then((networkResponse) => {
+      if (networkResponse && networkResponse.status === 200) {
+        const clone = networkResponse.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+      }
+      return networkResponse;
+    }).catch(() => caches.match(request, { ignoreSearch: true }))
   );
 });

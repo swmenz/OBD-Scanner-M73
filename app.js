@@ -293,9 +293,6 @@ class M73Application {
     this.valLambdaCorr = document.getElementById('valLambdaCorr');
     this.valTargetLambda = document.getElementById('valTargetLambda');
     this.valPurgeRate = document.getElementById('valPurgeRate');
-    this.valIdleTarget = document.getElementById('valIdleTarget');
-    this.valPower = document.getElementById('valPower');
-    this.valTorque = document.getElementById('valTorque');
     this.valAltitude = document.getElementById('valAltitude');
 
     this.flagPump = document.getElementById('flagPump');
@@ -388,20 +385,32 @@ class M73Application {
         try {
           if ('serviceWorker' in navigator) {
             const reg = await navigator.serviceWorker.getRegistration();
-            if (reg) await reg.update();
+            if (reg) {
+              await reg.update();
+              if (reg.waiting) {
+                reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                this._swUpdateReady = true;
+              }
+            }
           }
         } catch (e) {}
-        alert("Диагностика М73 — Версия v55.2\n\nОбновления:\n1) Конвейерный опрос (Request Pipelining v55.2): следующий запрос 21011 / 21031 уходит в радиомодуль BLE мгновенно при получении '>' от адаптера, параллельно с парсингом, обновлением DOM/Canvas и записью лога на CPU iPhone\n2) Zero-Overhead BLE TX/RX: бинарный кэш команд Uint8Array, аппаратная запись GATT до строкового логирования и отложенное форматирование времени терминала\n3) Протокол KWP2000: проверка активности ЭБУ (checkEcuAlive) на сервисных вкладках, независимая диагностика АЦП по живым каналам 21031 и неблокирующие чекпоинты логгера");
+        if (this._swUpdateReady && !this.elm.isConnected && !this.connecting) {
+          if (confirm("Доступна обновлённая версия приложения. Перезагрузить страницу сейчас?")) {
+            window.location.reload();
+            return;
+          }
+        }
+        alert("Диагностика М73 — Версия v55.3\n\nОбновления:\n1) Надёжность BLE и БД: атомарная блокировка очереди при отключении/реконнекте, авто-переоткрытие IndexedDB на iOS и отдельный стор метаданных поездок\n2) Стабильность UI и опроса: защита отмены подключения и возврата из фона во время тестов ИМ, сохранность системной карточки логгера и единый цикл модальных окон\n3) Оптимизация PWA: отложенная подгрузка SheetJS (xlsx), актуальный Service Worker и снижение GPU-слоёв backdrop-filter");
       });
     }
 
     // Интеллектуальное автоскрытие нижнего дока при отсутствии взаимодействия и скролле вниз
     this.initDockAutoHide();
 
-    // Режим скорости опроса K-Line: Постоянный Турбо + Конвейер v55.2
+    // Режим скорости опроса K-Line: Постоянный Турбо + Конвейер v55.3
     const cadencePill = document.querySelector('.cadence-pill');
     if (cadencePill) {
-      cadencePill.title = 'Частота опроса K-Line: Турбо + Конвейер v55.2';
+      cadencePill.title = 'Частота опроса K-Line: Турбо + Конвейер v55.3';
       this.currentSpeedProfile = 'extreme';
 
       cadencePill.addEventListener('click', () => {
@@ -409,7 +418,7 @@ class M73Application {
           ? "Включен (21011 / 21031, закрытие кадра 0 мс)"
           : (this.m73 && this.m73.singleFrameSuffixSupported === false ? "Отключен адаптером (стандартный 2101)" : "Определяется...");
         alert(
-          `⚡ Режим опроса: Турбо + Конвейер (Релиз v55.2)\n\n` +
+          `Режим опроса: Турбо + Конвейер (Релиз v55.3)\n\n` +
           `• Адаптивный тайминг: AT AT 2\n` +
           `• Таймаут шины: AT ST 10 (~64 мс, постоянный Турбо)\n` +
           `• Турбо-суффикс кадра: ${suffixInfo}\n` +
@@ -421,7 +430,7 @@ class M73Application {
     }
 
     
-    document.querySelectorAll('.tabbar-item, .dock-item').forEach(btn => {
+    document.querySelectorAll('.dock-item').forEach(btn => {
       btn.addEventListener('click', () => {
         const targetTab = btn.getAttribute('data-tab');
         this.switchTab(targetTab);
@@ -517,7 +526,6 @@ class M73Application {
     if (this.btnOpenAdcRefModal) {
       this.btnOpenAdcRefModal.addEventListener('click', () => {
         if (this.modalAdcReference) {
-          this.modalAdcReference.style.display = 'flex';
           this.modalAdcReference.classList.add('open');
         }
       });
@@ -526,7 +534,6 @@ class M73Application {
       this.btnCloseAdcRef.addEventListener('click', () => {
         if (this.modalAdcReference) {
           this.modalAdcReference.classList.remove('open');
-          this.modalAdcReference.style.display = 'none';
         }
       });
     }
@@ -534,7 +541,6 @@ class M73Application {
       this.modalAdcReference.addEventListener('click', (e) => {
         if (e.target === this.modalAdcReference) {
           this.modalAdcReference.classList.remove('open');
-          this.modalAdcReference.style.display = 'none';
         }
       });
     }
@@ -563,6 +569,11 @@ class M73Application {
   }
 
   async toggleConnection() {
+    if (this.isReconnecting) {
+      this.elm.log('info', 'Идёт автоматическое восстановление связи, подождите...');
+      return;
+    }
+
     // Если поиск уже идёт — повторное нажатие служит кнопкой быстрой отмены!
     if (this.connecting) {
       this.connecting = false;
@@ -618,6 +629,11 @@ class M73Application {
       this.btnConnectText.textContent = "Связь...";
       await this.m73.initEcu();
 
+      if (!this.connecting || this.userExplicitDisconnect || !this.elm.isConnected) {
+        try { await this.elm.disconnect(); } catch (e) {}
+        return;
+      }
+
       this.shouldBeConnected = true;
       this.btnConnect.classList.add('connected');
       this.btnConnectText.textContent = "Отключить";
@@ -641,7 +657,8 @@ class M73Application {
       }
     } catch (err) {
       // Проверяем, была ли это намеренная отмена или закрытие окна пользователем
-      const isCancelled = err.isCancelled ||
+      const isCancelled = this.userExplicitDisconnect ||
+                          err.isCancelled ||
                           err.name === 'NotFoundError' ||
                           err.name === 'AbortError' ||
                           (err.message && /cancel|отмен|closed|dismiss|abort/i.test(err.message));
@@ -649,7 +666,7 @@ class M73Application {
       if (!isCancelled) {
         alert(err && err.message ? err.message : "Не удалось найти Bluetooth адаптер");
       }
-      this.elm.log('info', isCancelled ? 'Выбор устройства отменен пользователем' : 'Ошибка подключения: ' + (err.message || err));
+      this.elm.log('info', isCancelled ? 'Подключение отменено пользователем' : 'Ошибка подключения: ' + (err.message || err));
 
       // Если Bluetooth уже открыт, а ЭБУ не ответил — закрываем канал
       try { await this.elm.disconnect(); } catch (e) {}
@@ -698,8 +715,8 @@ class M73Application {
           this.needsReconnectOnVisible = false;
           await this.performSilentReconnect();
         } else {
-          // Канал Bluetooth активен — убеждаемся, что цикл опроса крутится
-          if (!this.isPolling) {
+          // Канал Bluetooth активен — возобновляем опрос только если шина не занята тестом или реконнектом
+          if (!this.isPolling && !this.isActuatorBusy && !this.isReconnecting && !this.connecting) {
             this.elm.log('info', 'Возобновление опроса после возврата в приложение...');
             this.startContinuousPolling();
           }
@@ -714,7 +731,7 @@ class M73Application {
   }
 
   async handleWindowFocus() {
-    if (this.shouldBeConnected) {
+    if (this.shouldBeConnected && !this.connecting && !this.userExplicitDisconnect) {
       const bleLost = !this.elm.isConnected || (this.elm.device && !this.elm.device.gatt?.connected);
       if (bleLost && !this.isReconnecting) {
         await this.performSilentReconnect();
@@ -1009,7 +1026,12 @@ class M73Application {
             const dataAdc = await this.m73.commitRawFrame('2103', rawAdc);
             if (dataAdc) {
               this.updateAdcUI(dataAdc);
-              if (this.widgetManager && this.widgetManager.oscChannel === 'mafAdc') {
+              if (
+                this.widgetManager &&
+                this.widgetManager.oscChannel === 'mafAdc' &&
+                this.widgetManager.modalOsc &&
+                this.widgetManager.modalOsc.classList.contains('open')
+              ) {
                 this.widgetManager.updateDynamicWidgets(dataAdc);
               }
               // Всегда обновляем частоту опроса (Гц / мс) и таймер кадра без записи пустых точек в лог
@@ -1254,9 +1276,6 @@ class M73Application {
     if (data.lambdaCorr !== undefined) this._updateText(this.valLambdaCorr, data.lambdaCorr.toFixed(3));
     if (data.targetLambda !== undefined) this._updateText(this.valTargetLambda, data.targetLambda.toFixed(3));
     if (data.purgeRate !== undefined) this._updateText(this.valPurgeRate, data.purgeRate.toFixed(1));
-    if (data.idleTarget !== undefined) this._updateText(this.valIdleTarget, data.idleTarget);
-    if (data.enginePower !== undefined) this._updateText(this.valPower, data.enginePower.toFixed(1));
-    if (data.engineTorque !== undefined) this._updateText(this.valTorque, data.engineTorque.toFixed(1));
     if (data.altitudeFactor !== undefined) this._updateText(this.valAltitude, data.altitudeFactor.toFixed(3));
 
     // Флаги состояния (быстрый dirty check)
@@ -1762,7 +1781,6 @@ class M73Application {
       if (ok) {
         clearedOk = true;
         this.updateDockDtcBadge(0);
-        alert("Ошибки успешно сброшены!");
       } else {
         alert("Контроллер отклонил команду сброса");
       }
@@ -1774,6 +1792,7 @@ class M73Application {
 
     if (clearedOk && this.elm.isConnected) {
       await this.readDtc();
+      alert("Ошибки успешно сброшены!");
     }
   }
   adjustRegulator(key, delta) {
@@ -2128,7 +2147,7 @@ class M73Application {
       }
     }
     document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.tabbar-item, .dock-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.dock-item').forEach(el => el.classList.remove('active'));
 
     const targetContent = document.getElementById(tabId);
     const targetNav = document.querySelector(`[data-tab="${tabId}"]`);
@@ -2182,7 +2201,7 @@ class M73Application {
 
     const hideDock = () => {
       if (this.widgetManager && this.widgetManager.isEditMode) return;
-      const modalOpen = document.querySelector('.modal-backdrop.open, .history-modal.open, .adc-ref-sheet.open, [style*="display: flex"].modal-backdrop');
+      const modalOpen = document.querySelector('.modal-backdrop.open');
       if (modalOpen) return;
 
       dock.classList.add('dock-hidden');
@@ -2298,10 +2317,43 @@ class M73Application {
 
 // Запуск приложения и регистрация оффлайн-кэша
 window.addEventListener('DOMContentLoaded', () => {
-  window.M73App = new M73Application();
+  const app = new M73Application();
+  window.M73App = app;
+
+  // Фоновый прогрев тяжёлой библиотеки SheetJS после первого кадра без задержки старта
+  setTimeout(() => {
+    if (app.logger && typeof app.logger.ensureXlsxLoaded === 'function') {
+      app.logger.ensureXlsxLoaded().catch(() => {});
+    }
+  }, 1500);
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(err => {
+    const hadController = Boolean(navigator.serviceWorker.controller);
+    const markUpdateReady = () => {
+      app._swUpdateReady = true;
+      const badgeEl = document.getElementById('appVersionBadge');
+      if (badgeEl) {
+        badgeEl.classList.add('has-update');
+        badgeEl.title = 'Доступно обновление — нажмите для перезагрузки';
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (hadController) markUpdateReady();
+    });
+
+    navigator.serviceWorker.register('./sw.js').then((reg) => {
+      if (reg.waiting && hadController) markUpdateReady();
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener('statechange', () => {
+          if (nw.state === 'installed' && (hadController || navigator.serviceWorker.controller)) {
+            markUpdateReady();
+          }
+        });
+      });
+    }).catch(err => {
       console.log('SW note:', err);
     });
   }

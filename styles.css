@@ -141,6 +141,13 @@ body {
   letter-spacing: 0.02em;
 }
 
+.app-version-badge.has-update {
+  color: var(--apple-green);
+  background: rgba(48, 209, 88, 0.16);
+  border-color: rgba(48, 209, 88, 0.45);
+  box-shadow: 0 0 8px rgba(48, 209, 88, 0.3);
+}
+
 .status-pulse {
   width: 7px;
   height: 7px;
@@ -188,9 +195,7 @@ body {
   display: flex;
   align-items: baseline;
   gap: 3px;
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.08);
   padding: 4px 8px;
   height: 30px;
   box-sizing: border-box;
@@ -609,9 +614,7 @@ body {
 
 .liquid-segmented {
   display: flex;
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.05);
   padding: 3px;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -633,9 +636,7 @@ body {
 }
 
 .liquid-seg-item.active {
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.16);
   color: #ffffff;
   border: 1px solid rgba(255, 255, 255, 0.25);
   border-top: 1px solid rgba(255, 255, 255, 0.4);
@@ -1971,9 +1972,7 @@ body {
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  background: rgba(28, 28, 30, 0.92);
-  backdrop-filter: blur(40px);
-  -webkit-backdrop-filter: blur(40px);
+  background: rgba(28, 28, 30, 0.94);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 24px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
@@ -2196,9 +2195,7 @@ body {
   height: 22px;
   border-radius: 50%;
   border: 1.5px solid rgba(255, 255, 255, 0.6);
-  background: rgba(30, 30, 30, 0.95);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(30, 30, 30, 0.96);
   color: #fff;
   font-size: 11px;
   font-weight: 800;

@@ -14,8 +14,7 @@
   <link rel="icon" type="image/png" href="icon-192.png">
   <title>Диагностика М73 — Лада Приора</title>
   
-  <link rel="stylesheet" href="styles.css?v=55.2">
-  <script src="xlsx.full.min.js"></script>
+  <link rel="stylesheet" href="styles.css?v=55.3">
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
@@ -25,7 +24,7 @@
     <header class="glass-navbar">
       <div class="navbar-brand">
         <span class="status-pulse" id="connIndicator"></span>
-        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v55.2</span></div>
+        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v55.3</span></div>
         <span class="status-text" id="connStateText">Не подключено</span>
       </div>
 
@@ -1012,7 +1011,7 @@
             <div class="actuator-card-compact">
               <div class="act-compact-info">
                 <strong>Катушка 1</strong>
-                <span>Цил. 1–4 (ID 05)</span>
+                <span>Цил. 1 (ID 05)</span>
               </div>
               <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('coil1_test', this)">Тест</button>
             </div>
@@ -1028,7 +1027,7 @@
             <div class="actuator-card-compact">
               <div class="act-compact-info">
                 <strong>Катушка 3</strong>
-                <span>Цил. 2–3 (ID 07)</span>
+                <span>Цил. 3 (ID 07)</span>
               </div>
               <button class="glass-btn btn-glass-secondary btn-sm" type="button" onclick="M73App.testActuator('coil3_test', this)">Тест</button>
             </div>
@@ -1175,7 +1174,7 @@
   </div>
 
     <!-- МОДАЛЬНОЕ ОКНО: ГАЛЕРЕЯ ВИДЖЕТОВ (iOS STYLE) -->
-  <div id="modalWidgetGallery" class="modal-backdrop" style="display: none;">
+  <div id="modalWidgetGallery" class="modal-backdrop">
     <div class="glass-modal gallery-modal-sheet">
       <div class="modal-header">
         <div class="modal-title">Галерея виджетов</div>
@@ -1191,7 +1190,7 @@
   </div>
 
   <!-- МОДАЛЬНОЕ ОКНО: СПРАВОЧНИК ЭТАЛОНОВ И ДОПУСКОВ АЦП (BOSCH / ИТЭЛМА М73) -->
-  <div id="modalAdcReference" class="modal-backdrop" style="display: none;">
+  <div id="modalAdcReference" class="modal-backdrop">
     <div class="glass-modal adc-ref-sheet">
       <div class="modal-header">
         <div class="modal-title">Справочник допусков АЦП</div>
@@ -1287,7 +1286,7 @@
   </div>
 
   <!-- МОДАЛЬНОЕ ОКНО: УНИВЕРСАЛЬНЫЙ ЖИВОЙ ОСЦИЛЛОГРАФ (PRO) -->
-  <div id="modalOscilloscope" class="modal-backdrop" style="display: none;">
+  <div id="modalOscilloscope" class="modal-backdrop">
     <div class="glass-modal oscilloscope-modal-sheet">
       <div class="modal-header osc-modal-header">
         <div class="osc-header-left">
@@ -1372,10 +1371,10 @@
     </div>
   </div>
 
-  <script src="elm327.js?v=55.2"></script>
-  <script src="m73.js?v=55.2"></script>
-  <script src="logger.js?v=55.2"></script>
-  <script src="dashboard-widgets.js?v=55.2"></script>
-  <script src="app.js?v=55.2"></script>
+  <script src="elm327.js?v=55.3"></script>
+  <script src="m73.js?v=55.3"></script>
+  <script src="logger.js?v=55.3"></script>
+  <script src="dashboard-widgets.js?v=55.3"></script>
+  <script src="app.js?v=55.3"></script>
 </body>
 </html>
