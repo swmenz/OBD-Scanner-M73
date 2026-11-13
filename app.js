@@ -288,7 +288,6 @@ class M73Application {
     // Новые метрики ReadLogs / OpenDiag v32
     this.valFrlLoad = document.getElementById('valFrlLoad');
     this.valCalcLoad = document.getElementById('valCalcLoad');
-    this.valKnockVolt = document.getElementById('valKnockVolt');
     this.valO2Volt = document.getElementById('valO2Volt');
     this.valO2Volt2 = document.getElementById('valO2Volt2');
     this.valLambdaCorr = document.getElementById('valLambdaCorr');
@@ -407,24 +406,24 @@ class M73Application {
             return;
           }
         }
-        alert("Диагностика М73 — Версия v55.4\n\nОбновления:\n1) Надёжность BLE и раскладки: защита ресинхронизации очереди (140 мс) счётчиком поколения, атомарная отмена подключения, сброс виджетов без разрыва BLE и сохранение пика RPM\n2) Точность АЦП и логгера: определение запуска по свежему 2101 и АЦП с учётом просадки генератора, валидация ATFI и фильтрация пауз в частоте опроса\n3) Интерфейс: векторные статусы и кнопки осциллографа без эмодзи, корректный цвет Check Engine, увеличенные зоны нажатия и поддержка альбомного режима");
+        alert("Диагностика М73 — Версия v55.5\n\nОбновления:\n1) Чистый опрос главной панели: убран канал ДМРВ (АЦП) из осциллографа, поэтому на главном экране опрашивается строго кадр 21 01 без примеси 21 03\n2) Осциллограф: мёртвый канал сигнала детонации заменён на живой график отскока УОЗ (вверх от 0°); убрана лишняя плитка шума ДД\n3) Надёжность BLE и интерфейса: счётчик поколения очереди, живое питание АЦП-каналов в модалке и увеличенные зоны нажатия");
       });
     }
 
     // Интеллектуальное автоскрытие нижнего дока при отсутствии взаимодействия и скролле вниз
     this.initDockAutoHide();
 
-    // Режим скорости опроса K-Line: Постоянный Турбо + Конвейер v55.4
+    // Режим скорости опроса K-Line: Постоянный Турбо + Конвейер v55.5
     const cadencePill = document.querySelector('.cadence-pill');
     if (cadencePill) {
-      cadencePill.title = 'Частота опроса K-Line: Турбо + Конвейер v55.4';
+      cadencePill.title = 'Частота опроса K-Line: Турбо + Конвейер v55.5';
 
       cadencePill.addEventListener('click', () => {
         const suffixInfo = this.m73 && this.m73.singleFrameSuffixSupported === true
           ? "Включен (21011 / 21031, закрытие кадра 0 мс)"
           : (this.m73 && this.m73.singleFrameSuffixSupported === false ? "Отключен адаптером (стандартный 2101)" : "Определяется...");
         alert(
-          `Режим опроса: Турбо + Конвейер (Релиз v55.4)\n\n` +
+          `Режим опроса: Турбо + Конвейер (Релиз v55.5)\n\n` +
           `• Адаптивный тайминг: AT AT 2\n` +
           `• Таймаут шины: AT ST 10 (~64 мс, постоянный Турбо)\n` +
           `• Турбо-суффикс кадра: ${suffixInfo}\n` +
@@ -994,20 +993,11 @@ class M73Application {
               raw1 = await this.m73.sendRawFrame('2101');
             }
 
-            const oscVisibleOnDash = Boolean(this.widgetManager && this.widgetManager.o2Canvas && this.widgetManager.o2Canvas.isConnected);
-            const oscModalOpen = Boolean(this.widgetManager && this.widgetManager.modalOsc && this.widgetManager.modalOsc.classList.contains('open'));
-            const isMafAdcOsc = Boolean(
-              this.widgetManager &&
-              this.widgetManager.oscChannel === 'mafAdc' &&
-              !this.widgetManager.isOscPaused &&
-              (oscVisibleOnDash || oscModalOpen)
-            );
             if (
               this.isPolling &&
               this.elm.isConnected &&
               !this.isActuatorBusy &&
               this.currentTab === 'tab-dashboard' &&
-              !isMafAdcOsc &&
               this.m73.isRawFrameValidForPipeline('2101', raw1)
             ) {
               const nextPromise = this.m73.sendRawFrame('2101');
@@ -1016,9 +1006,6 @@ class M73Application {
             }
 
             const data = await this.m73.commitRawFrame('2101', raw1);
-            if (isMafAdcOsc) {
-              try { await this.m73.readConfiguredCycle('2103'); } catch (e) {}
-            }
             if (data) {
               // Мгновенный микро-рендеринг с Dirty Checking (<0.3 мс) и фиксация в лог параллельно с K-Line запросом следующего кадра
               this.updateDashboardUI(data);
@@ -1060,7 +1047,6 @@ class M73Application {
                 this.widgetManager.modalOsc.classList.contains('open')
               );
               const adcCompatibleOsc = this.widgetManager && (
-                this.widgetManager.oscChannel === 'mafAdc' ||
                 this.widgetManager.oscChannel === 'o2Volt' ||
                 this.widgetManager.oscChannel === 'o2Volt2' ||
                 this.widgetManager.oscChannel === 'volt'
@@ -1307,11 +1293,6 @@ class M73Application {
     // Новые параметры v32
     if (data.frlLoad !== undefined) this._updateText(this.valFrlLoad, data.frlLoad.toFixed(1));
     if (data.calcLoad !== undefined) this._updateText(this.valCalcLoad, data.calcLoad.toFixed(1));
-    if (data.knockVolt !== undefined) {
-      this._updateText(this.valKnockVolt, data.knockVolt.toFixed(3));
-      const col = data.knockVolt > 1.2 ? 'var(--apple-rose)' : (data.knockVolt > 0.7 ? 'var(--apple-amber)' : 'var(--text-primary)');
-      this._setStyle(this.valKnockVolt, 'color', col);
-    }
     const isO2OscActive = !this.widgetManager || this.widgetManager.oscChannel === 'o2Volt';
     if (data.o2Volt !== undefined && isO2OscActive) {
       this._updateText(this.valO2Volt, data.o2Volt.toFixed(3));

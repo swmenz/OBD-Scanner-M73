@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" href="icon-192.png">
   <title>Диагностика М73 — Лада Приора</title>
   
-  <link rel="stylesheet" href="styles.css?v=55.4">
+  <link rel="stylesheet" href="styles.css?v=55.5">
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
@@ -24,7 +24,7 @@
     <header class="glass-navbar">
       <div class="navbar-brand">
         <span class="status-pulse" id="connIndicator"></span>
-        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v55.4</span></div>
+        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v55.5</span></div>
         <span class="status-text" id="connStateText">Не подключено</span>
       </div>
 
@@ -318,17 +318,6 @@
             </div>
           </div>
 
-          <!-- Виджет 19: Шум датчика детонации -->
-          <div class="dashboard-widget widget-compact" data-widget-id="knock-volt" data-title="Шум детонации">
-            <div class="glass-card metric-tile" id="cardKnockVolt">
-              <span class="tile-label">Шум детонации</span>
-              <div class="tile-val-wrap">
-                <span class="tile-num" id="valKnockVolt">0.000</span>
-                <span class="tile-unit">В</span>
-              </div>
-            </div>
-          </div>
-
           <!-- Виджет 20: Универсальный живой осциллограф -->
           <div class="dashboard-widget widget-compact" data-widget-id="o2-volt" data-title="Осциллограф">
             <div class="glass-card metric-tile o2-oscilloscope-tile">
@@ -338,16 +327,15 @@
                     <option value="o2Volt">ДК1 (до ката)</option>
                     <option value="o2Volt2">ДК2 (после ката)</option>
                     <option value="maf">ДМРВ (Расход)</option>
-                    <option value="mafAdc">ДМРВ (АЦП)</option>
                     <option value="rpm">Обороты (RPM)</option>
                     <option value="spark">УОЗ</option>
+                    <option value="sparkRetard">Отскок УОЗ</option>
                     <option value="injTime">Время впрыска</option>
                     <option value="tps">Дроссель</option>
                     <option value="volt">Бортсеть</option>
                     <option value="speed">Скорость</option>
                     <option value="cycleAir">Цикловой расход</option>
                     <option value="duty">Загрузка %</option>
-                    <option value="knockVolt">Детонация</option>
                   </select>
                   <button id="btnOpenOscModalFromTile" class="osc-tile-expand-btn" type="button" title="Развернуть осциллограф на весь экран">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
@@ -1305,16 +1293,15 @@
           <option value="o2Volt">ДК1 (до ката) — Напряжение (В)</option>
           <option value="o2Volt2">ДК2 (после ката) — Напряжение (В)</option>
           <option value="maf">ДМРВ — Массовый расход (кг/ч)</option>
-          <option value="mafAdc">ДМРВ (АЦП) — Напряжение (В)</option>
           <option value="rpm">Обороты двигателя — (об/мин)</option>
           <option value="spark">УОЗ — Угол зажигания (°)</option>
+          <option value="sparkRetard">Отскок УОЗ — (°)</option>
           <option value="injTime">Время впрыска — (мс)</option>
           <option value="tps">Дроссель ДПДЗ — (%)</option>
           <option value="volt">Бортовая сеть — (В)</option>
           <option value="speed">Скорость авто — (км/ч)</option>
           <option value="cycleAir">Цикловой расход — (мг/такт)</option>
           <option value="duty">Загрузка форсунок — (%)</option>
-          <option value="knockVolt">Датчик детонации — (В)</option>
         </select>
       </div>
 
@@ -1372,10 +1359,10 @@
     </div>
   </div>
 
-  <script src="elm327.js?v=55.4"></script>
-  <script src="m73.js?v=55.4"></script>
-  <script src="logger.js?v=55.4"></script>
-  <script src="dashboard-widgets.js?v=55.4"></script>
-  <script src="app.js?v=55.4"></script>
+  <script src="elm327.js?v=55.5"></script>
+  <script src="m73.js?v=55.5"></script>
+  <script src="logger.js?v=55.5"></script>
+  <script src="dashboard-widgets.js?v=55.5"></script>
+  <script src="app.js?v=55.5"></script>
 </body>
 </html>

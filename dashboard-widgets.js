@@ -56,19 +56,6 @@ const OSC_CHANNELS = {
     refLabel: 'ХХ 9.5 кг/ч',
     extract: (d) => d.maf
   },
-  'mafAdc': {
-    id: 'mafAdc',
-    title: 'ДМРВ (АЦП покой/дин)',
-    shortTitle: 'ДМРВ АЦП',
-    unit: 'В',
-    decimals: 3,
-    color: '#FF9F0A',
-    min: 0.9,
-    max: 2.2,
-    refLine: 1.01,
-    refLabel: 'Покой 1.00В',
-    extract: (d) => (d.adc && d.adc.maf !== undefined) ? d.adc.maf : (d.mafVolt || null)
-  },
   'rpm': {
     id: 'rpm',
     title: 'Обороты двигателя (RPM)',
@@ -173,18 +160,18 @@ const OSC_CHANNELS = {
     refLabel: '15%',
     extract: (d) => d.dutyCycle !== undefined ? d.dutyCycle : d.duty
   },
-  'knockVolt': {
-    id: 'knockVolt',
-    title: 'Сигнал датчика детонации',
-    shortTitle: 'Детонация',
-    unit: 'В',
-    decimals: 3,
+  'sparkRetard': {
+    id: 'sparkRetard',
+    title: 'Отскок УОЗ при детонации',
+    shortTitle: 'Отскок УОЗ',
+    unit: '°',
+    decimals: 2,
     color: '#FF6482',
     min: 0,
-    max: 3.5,
-    refLine: 1.0,
-    refLabel: '1.0 В',
-    extract: (d) => d.knockVolt
+    max: 15,
+    refLine: 0,
+    refLabel: '0.0°',
+    extract: (d) => (d.sparkRetard !== undefined && d.sparkRetard !== null) ? Math.abs(Number(d.sparkRetard)) : null
   }
 };
 
@@ -204,6 +191,13 @@ class DashboardWidgetManager {
     let savedAutoScale = true;
     try {
       savedChannel = localStorage.getItem('priora_osc_channel') || 'o2Volt';
+      if (savedChannel === 'knockVolt') {
+        savedChannel = 'sparkRetard';
+        localStorage.setItem('priora_osc_channel', savedChannel);
+      } else if (!OSC_CHANNELS[savedChannel]) {
+        savedChannel = 'o2Volt';
+        localStorage.setItem('priora_osc_channel', savedChannel);
+      }
       savedPoints = parseInt(localStorage.getItem('priora_osc_points') || '90', 10) || 90;
       savedAutoScale = localStorage.getItem('priora_osc_autoscale') !== 'false';
     } catch (e) {}
@@ -772,7 +766,6 @@ class DashboardWidgetManager {
       { id: 'iac', title: 'Позиция РХХ', category: 'air', desc: 'Шаги регулятора холостого хода' },
       { id: 'frl-load', title: 'Нагрузка (FRL)', category: 'air', desc: 'Параметр нагрузки двигателя (%)' },
       { id: 'calc-load', title: 'Расчётная нагрузка', category: 'air', desc: 'Относительное заполнение воздухом (%)' },
-      { id: 'knock-volt', title: 'Шум датчика детонации', category: 'ignition', desc: 'Амплитуда шума ДД в Вольтах' },
       { id: 'o2-volt', title: 'ДК1 (до ката) — Осциллограф', category: 'fuel', desc: 'Живой неоновый график синусоиды лямбда-зонда' },
       { id: 'o2-volt2', title: 'ДК2 (после ката)', category: 'fuel', desc: 'Диагностический датчик кислорода (В)' },
       { id: 'lambda-corr', title: 'Коррекция смеси', category: 'fuel', desc: 'Быстрый коэффициент регулирования лямбда' },
@@ -959,16 +952,15 @@ class DashboardWidgetManager {
                 <option value="o2Volt">ДК1 (до ката)</option>
                 <option value="o2Volt2">ДК2 (после ката)</option>
                 <option value="maf">ДМРВ (Расход)</option>
-                <option value="mafAdc">ДМРВ (АЦП)</option>
                 <option value="rpm">Обороты (RPM)</option>
                 <option value="spark">УОЗ</option>
+                <option value="sparkRetard">Отскок УОЗ</option>
                 <option value="injTime">Время впрыска</option>
                 <option value="tps">Дроссель</option>
                 <option value="volt">Бортсеть</option>
                 <option value="speed">Скорость</option>
                 <option value="cycleAir">Цикловой расход</option>
                 <option value="duty">Загрузка %</option>
-                <option value="knockVolt">Детонация</option>
               </select>
               <button id="btnOpenOscModalFromTile" class="osc-tile-expand-btn" type="button" title="Развернуть осциллограф на весь экран">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
@@ -1019,7 +1011,6 @@ class DashboardWidgetManager {
       'iac': { title: 'Позиция РХХ', valId: 'valIac', unit: 'шагов', def: '0' },
       'frl-load': { title: 'Нагрузка (FRL)', valId: 'valFrlLoad', unit: '%', def: '0.0' },
       'calc-load': { title: 'Расчётная нагрузка', valId: 'valCalcLoad', unit: '%', def: '0.0' },
-      'knock-volt': { title: 'Шум датчика детонации', valId: 'valKnockVolt', unit: 'В', def: '0.000' },
       'o2-volt2': { title: 'ДК2 (после ката)', valId: 'valO2Volt2', unit: 'В', def: '0.000' },
       'lambda-corr': { title: 'Коррекция смеси', valId: 'valLambdaCorr', unit: 'множитель', def: '1.000' },
       'target-lambda': { title: 'Целевая лямбда', valId: 'valTargetLambda', unit: 'λ', def: '1.000' },
