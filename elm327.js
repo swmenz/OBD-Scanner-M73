@@ -17,6 +17,7 @@ class Elm327BLE {
     this.activeRejecter = null;
     this.commandTimeoutTimer = null;
     this._needsResync = false;
+    this._connGen = 0;
     this._queue = Promise.resolve(); // Последовательная очередь команд (Mutex)
 
     // Единые ссылки на обработчики: повторная регистрация одной и той же функции
@@ -33,9 +34,16 @@ class Elm327BLE {
     this._encodedCmdCache = new Map();
   }
 
-  _onGattDisconnected() {
+  _resetActiveState(rejectMsg, resetQueue = false) {
+    this._connGen++;
     this.isConnected = false;
-    // Немедленно отклоняем зависшую команду и гасим таймер, чтобы очередь не ждала таймаут
+    if (this.rxCharacteristic) {
+      try { this.rxCharacteristic.removeEventListener('characteristicvaluechanged', this._rxHandler); } catch (e) {}
+    }
+    this.txCharacteristic = null;
+    this.rxCharacteristic = null;
+    this.server = null;
+
     if (this.commandTimeoutTimer) {
       clearTimeout(this.commandTimeoutTimer);
       this.commandTimeoutTimer = null;
@@ -46,7 +54,17 @@ class Elm327BLE {
     this.rxBuffer = "";
     this._needsResync = false;
     if (this._decoder) this._decoder.decode();
-    if (pendingReject) pendingReject(new Error("Связь с адаптером потеряна"));
+    if (pendingReject && rejectMsg) {
+      try { pendingReject(new Error(rejectMsg)); } catch (e) {}
+    }
+    if (resetQueue) {
+      this._queue = Promise.resolve();
+    }
+  }
+
+  _onGattDisconnected() {
+    // Немедленно очищаем характеристики и отклоняем зависшую команду при обрыве GATT
+    this._resetActiveState("Связь с адаптером потеряна", true);
     this.log('err', 'Связь с Bluetooth адаптером разорвана');
     if (this.onDisconnect) this.onDisconnect();
   }
@@ -97,6 +115,7 @@ class Elm327BLE {
       throw new Error("Web Bluetooth не поддерживается. Откройте страницу в приложении Bluefy на iOS!");
     }
 
+    const connectGen = ++this._connGen;
     this.log('info', 'Поиск адаптера "OBD BLE"...');
 
     // Только строковые 128-битные UUID (исправляет ошибку Bluefy: "Request payload could not be parsed")
@@ -107,9 +126,10 @@ class Elm327BLE {
       "000018f0-0000-1000-8000-00805f9b34fb"
     ];
 
+    let selectedDevice = null;
     try {
       // Ищем адаптер "OBD BLE" или любые устройства с диагностическими префиксами
-      this.device = await navigator.bluetooth.requestDevice({
+      selectedDevice = await navigator.bluetooth.requestDevice({
         filters: [
           { name: "OBD BLE" },
           { namePrefix: "OBD" },
@@ -142,11 +162,27 @@ class Elm327BLE {
       throw err;
     }
 
-    if (!this.device) {
+    if (connectGen !== this._connGen) {
+      try {
+        if (selectedDevice && selectedDevice.gatt && selectedDevice.gatt.connected) {
+          await selectedDevice.gatt.disconnect();
+        }
+      } catch (e) {}
+      const cancelErr = new Error("Подключение отменено пользователем");
+      cancelErr.isCancelled = true;
+      throw cancelErr;
+    }
+
+    if (!selectedDevice) {
       const cancelErr = new Error("Адаптер не выбран");
       cancelErr.isCancelled = true;
       throw cancelErr;
     }
+
+    if (this.device && this.device !== selectedDevice) {
+      try { this.device.removeEventListener('gattserverdisconnected', this._gattHandler); } catch (e) {}
+    }
+    this.device = selectedDevice;
 
     this.log('info', `Выбран адаптер: ${this.device.name || 'Безымянный'}`);
 
@@ -155,8 +191,23 @@ class Elm327BLE {
     this.log('info', 'Подключение к GATT серверу адаптера...');
     this.server = await this.device.gatt.connect();
 
+    if (connectGen !== this._connGen) {
+      try { if (this.device.gatt && this.device.gatt.connected) await this.device.gatt.disconnect(); } catch (e) {}
+      const cancelErr = new Error("Подключение отменено пользователем");
+      cancelErr.isCancelled = true;
+      throw cancelErr;
+    }
+
     await this._discoverSerialPort();
-    
+
+    if (connectGen !== this._connGen) {
+      this._resetActiveState(null, true);
+      try { if (this.device.gatt && this.device.gatt.connected) await this.device.gatt.disconnect(); } catch (e) {}
+      const cancelErr = new Error("Подключение отменено пользователем");
+      cancelErr.isCancelled = true;
+      throw cancelErr;
+    }
+
     this.isConnected = true;
     this.log('info', 'Порт BLE успешно открыт и готов к работе!');
   }
@@ -172,30 +223,9 @@ class Elm327BLE {
 
     this.log('info', `Тихое переподключение к "${this.device.name || 'OBD BLE'}"...`);
 
-    // Немедленно блокируем отправку новых команд и отвязываем устаревшие характеристики
-    this.isConnected = false;
-    if (this.rxCharacteristic) {
-      try { this.rxCharacteristic.removeEventListener('characteristicvaluechanged', this._rxHandler); } catch (e) {}
-    }
-    this.txCharacteristic = null;
-    this.rxCharacteristic = null;
-    this.server = null;
-
-    // Гасим зависшие таймеры и очищаем очередь
-    if (this.commandTimeoutTimer) {
-      clearTimeout(this.commandTimeoutTimer);
-      this.commandTimeoutTimer = null;
-    }
-    const pendingReject = this.activeRejecter;
-    this.activeResolver = null;
-    this.activeRejecter = null;
-    this.rxBuffer = "";
-    this._needsResync = false;
-    if (this._decoder) this._decoder.decode();
-    if (pendingReject) {
-      try { pendingReject(new Error("Переподключение")); } catch (e) {}
-    }
-    this._queue = Promise.resolve();
+    // Немедленно блокируем отправку новых команд, повышаем поколение соединения и очищаем очередь
+    this._resetActiveState("Переподключение", true);
+    const reconnectGen = this._connGen;
 
     // Отключаем обработчик обрыва до принудительного закрытия GATT, чтобы не плодить ложные события
     try {
@@ -209,13 +239,28 @@ class Elm327BLE {
       }
     } catch (e) {}
 
+    if (reconnectGen !== this._connGen) {
+      throw new Error("Переподключение прервано");
+    }
+
     // Гарантируем регистрацию обработчика разрыва связи для нового соединения
     this.device.addEventListener('gattserverdisconnected', this._gattHandler);
 
     this.log('info', 'Подключение к GATT серверу адаптера...');
     this.server = await this.device.gatt.connect();
 
+    if (reconnectGen !== this._connGen) {
+      try { if (this.device.gatt && this.device.gatt.connected) await this.device.gatt.disconnect(); } catch (e) {}
+      throw new Error("Переподключение прервано");
+    }
+
     await this._discoverSerialPort();
+
+    if (reconnectGen !== this._connGen) {
+      this._resetActiveState(null, true);
+      try { if (this.device.gatt && this.device.gatt.connected) await this.device.gatt.disconnect(); } catch (e) {}
+      throw new Error("Переподключение прервано");
+    }
 
     this.isConnected = true;
     this.log('info', 'Порт BLE успешно переподключен!');
@@ -309,9 +354,11 @@ class Elm327BLE {
       return Promise.reject(new Error("Адаптер не подключен"));
     }
 
-    // Последовательная очередь (Mutex) без промежуточного .catch()-микротаска на входе (v55.2)
+    const sendGen = this._connGen;
+
+    // Последовательная очередь (Mutex) без промежуточного .catch()-микротаска на входе
     const run = async () => {
-      if (!this.isConnected || !this.txCharacteristic) {
+      if (sendGen !== this._connGen || !this.isConnected || !this.txCharacteristic) {
         throw new Error("Адаптер не подключен");
       }
 
@@ -323,13 +370,14 @@ class Elm327BLE {
         this.rxBuffer = "";
         if (this._decoder) this._decoder.decode();
         await new Promise(r => setTimeout(r, 140));
-        if (!this.isConnected || !this.txCharacteristic) {
+        if (sendGen !== this._connGen || !this.isConnected || !this.txCharacteristic) {
           throw new Error("Адаптер не подключен");
         }
       }
 
       return new Promise((resolve, reject) => {
-        if (!this.isConnected || !this.txCharacteristic) {
+        const txChar = this.txCharacteristic;
+        if (sendGen !== this._connGen || !this.isConnected || !txChar) {
           return reject(new Error("Адаптер не подключен"));
         }
 
@@ -373,13 +421,17 @@ class Elm327BLE {
         }, timeoutMs);
 
         // Проверяем РЕАЛЬНУЮ поддержку writeWithoutResponse характеристикой GATT,
-        // а не просто наличие метода в прототипе Web Bluetooth (устраняет ложный сбой и задержку 15-25 мс).
-        // Инициируем аппаратную передачу пакета в радиомодуль BLE ДО строкового логирования (Zero-Overhead TX v55.2).
-        const props = this.txCharacteristic.properties;
-        const canWriteNoResp = Boolean(props && props.writeWithoutResponse && this.txCharacteristic.writeValueWithoutResponse);
+        // а не просто наличие метода в прототипе Web Bluetooth.
+        const props = txChar.properties;
+        const canWriteNoResp = Boolean(props && props.writeWithoutResponse && txChar.writeValueWithoutResponse);
         const writePromise = canWriteNoResp
-          ? this.txCharacteristic.writeValueWithoutResponse(data).catch(() => this.txCharacteristic.writeValue(data))
-          : this.txCharacteristic.writeValue(data);
+          ? txChar.writeValueWithoutResponse(data).catch(() => {
+              if (sendGen !== this._connGen || !this.isConnected || this.txCharacteristic !== txChar) {
+                return Promise.reject(new Error("Адаптер не подключен"));
+              }
+              return txChar.writeValue(data);
+            })
+          : txChar.writeValue(data);
 
         this.log('tx', command);
 
@@ -404,30 +456,9 @@ class Elm327BLE {
   }
 
   async disconnect() {
-    // Сбрасываем статус и характеристики до сброса очереди и асинхронного disconnect(),
-    // чтобы ни один новый или ожидающий send() не проскочил поверх закрытия GATT
-    this.isConnected = false;
-    if (this.rxCharacteristic) {
-      try { this.rxCharacteristic.removeEventListener('characteristicvaluechanged', this._rxHandler); } catch (e) {}
-    }
-    this.txCharacteristic = null;
-    this.rxCharacteristic = null;
-    this.server = null;
-
-    if (this.commandTimeoutTimer) {
-      clearTimeout(this.commandTimeoutTimer);
-      this.commandTimeoutTimer = null;
-    }
-    const pendingReject = this.activeRejecter;
-    this.activeResolver = null;
-    this.activeRejecter = null;
-    this.rxBuffer = "";
-    this._needsResync = false;
-    if (this._decoder) this._decoder.decode();
-    if (pendingReject) {
-      pendingReject(new Error("Соединение с адаптером разорвано"));
-    }
-    this._queue = Promise.resolve();
+    // Сбрасываем статус и поколение соединения до асинхронного disconnect(),
+    // чтобы ни один ожидающий send() не проскочил поверх закрытия/нового коннекта
+    this._resetActiveState("Соединение с адаптером разорвано", true);
 
     if (this.device) {
       try {

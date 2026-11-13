@@ -233,13 +233,12 @@ class DashboardWidgetManager {
       { id: 'extra-idle-torque-i', title: 'Момент ХХ: I-часть', unit: '%', field: 'idleTorqueI', category: 'dynamics', decimals: 2 },
       { id: 'extra-idle-torque-pd', title: 'Момент ХХ: PD-часть', unit: '%', field: 'idleTorquePD', category: 'dynamics', decimals: 2 },
       { id: 'extra-o2-period', title: 'Период сигнала ДК1', unit: 'с', field: 'o2Period', category: 'fuel', decimals: 2 },
-      { id: 'extra-o2-2-delay', title: 'Задержка ОС по ДК2', unit: 'с', field: 'o2_2_integralDelay', category: 'fuel', decimals: 1 },
-      { id: 'extra-damper-adapt', title: 'Адаптация демпфера', unit: 'об/с²', field: 'damperAdapt', category: 'dynamics', decimals: 2 },
-      { id: 'extra-unbalance-rpm', title: 'Неравномерность коленвала', unit: 'об/с²', field: 'unbalanceRpm', category: 'dynamics', decimals: 2 },
+      { id: 'extra-o2-2-delay', title: 'Задержка ОС по ДК2', unit: 'с', field: 'o2_2_integralDelay', category: 'fuel', decimals: 2 },
+      { id: 'extra-damper-adapt', title: 'Адаптация демпфера', unit: 'об/с²', field: 'damperAdapt', category: 'dynamics', decimals: 1 },
+      { id: 'extra-unbalance-rpm', title: 'Неравномерность коленвала', unit: 'об/с²', field: 'unbalanceRpm', category: 'dynamics', decimals: 1 },
       { id: 'extra-temp-start', title: 'Температура ОЖ при пуске', unit: '°C', field: 'tempAtStart', category: 'ignition', decimals: 1 },
       { id: 'extra-time-reset', title: 'Время с момента сброса', unit: 'мин', field: 'timeSinceReset', category: 'main', decimals: 0 },
-      { id: 'extra-time-reset-hours', title: 'Время сброса ЭБУ (ч)', unit: 'ч', field: 'timeSinceResetHours', category: 'main', decimals: 1 },
-      { id: 'extra-idle-air-offset', title: 'Аддитивная корр. TRA', unit: '%', field: 'addAdapt', category: 'fuel', decimals: 1 }
+      { id: 'extra-time-reset-hours', title: 'Время сброса ЭБУ (ч)', unit: 'ч', field: 'timeSinceResetHours', category: 'main', decimals: 1 }
     ];
   }
 
@@ -1010,17 +1009,17 @@ class DashboardWidgetManager {
       'inj-time': { title: 'Длительность впрыска', valId: 'valInjTime', unit: 'мс', def: '0.00' },
       'duty': { title: 'Загрузка форсунок', valId: 'valDuty', unit: 'нагрузка', def: '0.0%', featured: true },
       'mult-adapt': { title: 'Мультипликатив (FRA)', valId: 'valMultAdapt', unit: 'множитель', def: '1.000' },
-      'add-adapt': { title: 'Аддитив (TRA / ХХ)', valId: 'valAddAdapt', unit: 'смещение ХХ', def: '+0.00%' },
+      'add-adapt': { title: 'Аддитив (TRA / ХХ)', valId: 'valAddAdapt', unit: 'смещение ХХ', def: '0.00%' },
       'throttle': { title: 'Дроссельная заслонка', valId: 'valThrottle', unit: '%', def: '0.0' },
       'temp': { title: 'Температура ОЖ', valId: 'valTemp', unit: '°C', def: '0', progress: 'barTemp' },
       'intake-temp': { title: 'Температура впуска (ДТВ)', valId: 'valIntakeTemp', unit: '°C', def: '0.0' },
       'voltage': { title: 'Бортовая сеть', valId: 'valVoltage', unit: 'В', def: '0.0' },
-      'rough-road': { title: 'Неровная дорога (ДНД)', valId: 'valRoughRoad', unit: 'g', def: '0.00' },
+      'rough-road': { title: 'Неровная дорога (ДНД)', valId: 'valRoughRoad', unit: 'ускорение', def: '0.00g' },
       'fuel-rate': { title: 'Текущий расход', valId: 'valFuelRate', unit: 'л/ч', def: '0.00' },
       'iac': { title: 'Позиция РХХ', valId: 'valIac', unit: 'шагов', def: '0' },
       'frl-load': { title: 'Нагрузка (FRL)', valId: 'valFrlLoad', unit: '%', def: '0.0' },
       'calc-load': { title: 'Расчётная нагрузка', valId: 'valCalcLoad', unit: '%', def: '0.0' },
-      'knock-volt': { title: 'Шум датчика детонации', valId: 'valKnockVolt', unit: 'В', def: '0.00' },
+      'knock-volt': { title: 'Шум датчика детонации', valId: 'valKnockVolt', unit: 'В', def: '0.000' },
       'o2-volt2': { title: 'ДК2 (после ката)', valId: 'valO2Volt2', unit: 'В', def: '0.000' },
       'lambda-corr': { title: 'Коррекция смеси', valId: 'valLambdaCorr', unit: 'множитель', def: '1.000' },
       'target-lambda': { title: 'Целевая лямбда', valId: 'valTargetLambda', unit: 'λ', def: '1.000' },
@@ -1070,25 +1069,37 @@ class DashboardWidgetManager {
 
     if (!saved || !Array.isArray(saved) || saved.length === 0) return;
 
-    // Восстанавливаем порядок и размеры
+    // Восстанавливаем порядок и размеры (с мягкой миграцией дубля extra-idle-air-offset -> add-adapt)
     const existingMap = new Map();
     Array.from(this.container.querySelectorAll('.dashboard-widget')).forEach(w => {
       existingMap.set(w.getAttribute('data-widget-id'), w);
     });
 
+    const hasAddAdaptInSaved = saved.some(item => item && item.id === 'add-adapt');
+    const seenIds = new Set();
+
     saved.forEach(item => {
-      let widget = existingMap.get(item.id);
+      if (!item || !item.id) return;
+      let targetId = item.id;
+      if (targetId === 'extra-idle-air-offset') {
+        if (hasAddAdaptInSaved) return;
+        targetId = 'add-adapt';
+      }
+      if (seenIds.has(targetId)) return;
+      seenIds.add(targetId);
+
+      let widget = existingMap.get(targetId);
       if (widget) {
         widget.classList.remove('widget-compact', 'widget-wide');
         widget.classList.add(item.size === 'wide' ? 'widget-wide' : 'widget-compact');
         this.container.appendChild(widget);
-        existingMap.delete(item.id);
+        existingMap.delete(targetId);
       } else {
         // Проверяем, был ли это сохраненный дополнительный датчик
-        const extra = this.extraSensorsCatalog.find(s => s.id === item.id);
+        const extra = this.extraSensorsCatalog.find(s => s.id === targetId);
         if (extra) {
           this._createAndAddWidget(extra, true);
-          const newW = this.container.querySelector(`[data-widget-id="${item.id}"]`);
+          const newW = this.container.querySelector(`[data-widget-id="${targetId}"]`);
           if (newW && item.size === 'wide') {
             newW.classList.remove('widget-compact');
             newW.classList.add('widget-wide');
@@ -1117,7 +1128,46 @@ class DashboardWidgetManager {
     try {
       localStorage.removeItem(this.storageKey);
     } catch (e) {}
-    window.location.reload();
+
+    if (!this.container || !this.standardTemplates || this.standardTemplates.size === 0) {
+      window.location.reload();
+      return;
+    }
+
+    this.container.innerHTML = '';
+    this.standardTemplates.forEach((tpl, id) => {
+      const widgetEl = document.createElement('div');
+      widgetEl.className = `dashboard-widget ${tpl.defaultSize === 'wide' ? 'widget-wide' : 'widget-compact'}`;
+      widgetEl.setAttribute('data-widget-id', id);
+      widgetEl.setAttribute('data-title', tpl.title);
+      widgetEl.innerHTML = tpl.html;
+      this._attachWidgetControls(widgetEl);
+      this.container.appendChild(widgetEl);
+    });
+
+    this._activeSensorsDirty = true;
+    this._cachedActiveSensors = null;
+    this._valO2VoltEl = null;
+    this._hudElements = null;
+
+    this.o2Canvas = document.getElementById('canvasO2');
+    this.o2Ctx = this.o2Canvas ? this.o2Canvas.getContext('2d') : null;
+    this._bindOscWidgetEvents(this.container);
+    this._updateOscUIElements();
+
+    if (this.app && typeof this.app.initElements === 'function') {
+      this.app.initElements();
+      if (this.app.m73 && this.app.m73.latestData && (this.app.elm.isConnected || this.app.m73._lastFrame2101At > 0)) {
+        this.app.updateDashboardUI(this.app.m73.latestData);
+      }
+    }
+
+    if (this.galleryModal && this.galleryModal.classList.contains('open')) {
+      this._populateGallery();
+    }
+
+    this.drawOscilloscope();
+    if (navigator.vibrate) navigator.vibrate(25);
   }
 
   /**
@@ -1173,8 +1223,7 @@ class DashboardWidgetManager {
     const btnScale = document.getElementById('btnOscAutoScale');
     if (btnScale) {
       btnScale.addEventListener('click', () => this.toggleOscAutoScale());
-      btnScale.classList.toggle('active', this.isOscAutoScale);
-      btnScale.innerHTML = this.isOscAutoScale ? '<span>↕️ Авто</span>' : '<span>🔒 Фикс</span>';
+      this._renderOscScaleButton(btnScale);
     }
 
     // Кнопки буфера точек (45 / 90 / 180)
@@ -1221,6 +1270,34 @@ class DashboardWidgetManager {
     }
   }
 
+  _renderOscScaleButton(btn) {
+    if (!btn) return;
+    btn.classList.toggle('active', this.isOscAutoScale);
+    btn.innerHTML = this.isOscAutoScale
+      ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4"/></svg><span>Авто</span>'
+      : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span>Фикс</span>';
+  }
+
+  _resetOscHudDisplays() {
+    const ch = this.oscChannels[this.oscChannel] || this.oscChannels['o2Volt'];
+    const zeroText = (0).toFixed(ch.decimals);
+
+    const valEl = document.getElementById('valO2Volt');
+    if (valEl) {
+      valEl.textContent = zeroText;
+      valEl.style.color = '';
+      valEl._lastStyle_color = '';
+    }
+    const currEl = document.getElementById('oscHudCurr');
+    const minEl = document.getElementById('oscHudMin');
+    const maxEl = document.getElementById('oscHudMax');
+    const deltaEl = document.getElementById('oscHudDelta');
+    if (currEl) currEl.textContent = zeroText;
+    if (minEl) minEl.textContent = zeroText;
+    if (maxEl) maxEl.textContent = zeroText;
+    if (deltaEl) deltaEl.textContent = zeroText;
+  }
+
   setOscChannel(chId) {
     if (!this.oscChannels[chId]) return;
     this.oscChannel = chId;
@@ -1229,12 +1306,6 @@ class DashboardWidgetManager {
     this.oscHistory = [];
     this.o2History = this.oscHistory;
 
-    const valEl = document.getElementById('valO2Volt');
-    if (valEl) {
-      valEl.style.color = '';
-      valEl._lastStyle_color = '';
-    }
-
     const tileSelect = document.getElementById('oscWidgetChannelSelect');
     if (tileSelect) tileSelect.value = chId;
 
@@ -1242,6 +1313,7 @@ class DashboardWidgetManager {
     if (modalSelect) modalSelect.value = chId;
 
     this._updateOscUIElements();
+    this._resetOscHudDisplays();
     this.drawOscilloscope();
   }
 
@@ -1284,38 +1356,25 @@ class DashboardWidgetManager {
     const icon = document.getElementById('btnOscPauseIcon');
     if (btn) btn.classList.toggle('is-paused', this.isOscPaused);
     if (txt) txt.textContent = this.isOscPaused ? 'Запуск' : 'Пауза';
-    if (icon) icon.textContent = this.isOscPaused ? '▶️' : '⏸️';
+    if (icon) {
+      icon.innerHTML = this.isOscPaused
+        ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"/></svg>'
+        : '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>';
+    }
     this.drawOscilloscope();
   }
 
   clearOscHistory() {
     this.oscHistory = [];
     this.o2History = this.oscHistory;
-
-    const valEl = document.getElementById('valO2Volt');
-    if (valEl) {
-      valEl.style.color = '';
-      valEl._lastStyle_color = '';
-    }
-    const currEl = document.getElementById('oscHudCurr');
-    const minEl = document.getElementById('oscHudMin');
-    const maxEl = document.getElementById('oscHudMax');
-    const deltaEl = document.getElementById('oscHudDelta');
-    if (currEl) currEl.textContent = '0.000';
-    if (minEl) minEl.textContent = '0.000';
-    if (maxEl) maxEl.textContent = '0.000';
-    if (deltaEl) deltaEl.textContent = '0.000';
+    this._resetOscHudDisplays();
     this.drawOscilloscope();
   }
 
   toggleOscAutoScale() {
     this.isOscAutoScale = !this.isOscAutoScale;
     try { localStorage.setItem('priora_osc_autoscale', this.isOscAutoScale); } catch (e) {}
-    const btn = document.getElementById('btnOscAutoScale');
-    if (btn) {
-      btn.classList.toggle('active', this.isOscAutoScale);
-      btn.innerHTML = this.isOscAutoScale ? '<span>↕️ Авто</span>' : '<span>🔒 Фикс</span>';
-    }
+    this._renderOscScaleButton(document.getElementById('btnOscAutoScale'));
     this.drawOscilloscope();
   }
 
@@ -1658,7 +1717,7 @@ class DashboardWidgetManager {
       ctx.fillStyle = 'rgba(255, 69, 58, 0.85)';
       ctx.font = 'bold 11px -apple-system, sans-serif';
       ctx.textAlign = 'right';
-      ctx.fillText('⏸ ЗАМОРОЗКА КАДРА', w - padRight - 8, padTop + 14);
+      ctx.fillText('ПАУЗА · ЗАМОРОЗКА', w - padRight - 8, padTop + 14);
     }
 
     ctx.restore();

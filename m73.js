@@ -9,10 +9,10 @@ class ItelmaM73Protocol {
     this.elm = elm;
     this.isInitialized = false;
 
-    // Режим Турбо v55.2: суффикс 1, конвейерный предзапрос (Request Pipelining), чистый таймаут шины AT ST 10 (~64 мс)
+    // Режим Турбо: суффикс 1, конвейерный предзапрос (Request Pipelining), чистый таймаут шины AT ST 10 (~64 мс)
     this.singleFrameSuffixSupported = null; // null = не проверено, true = '21011', false = '2101'
-    this.fastStEnabled = true;
     this._lastParsedProbe = null;
+    this._lastFrame2101At = 0;
 
     // Кэш для объединения данных из всех параметров ЭБУ (Кадр 21 01 и 21 03)
     this.latestData = {
@@ -143,29 +143,16 @@ class ItelmaM73Protocol {
 
     // Сброс флагов автоопределения турбо-режима
     this.singleFrameSuffixSupported = null;
-    this.fastStEnabled = true;
 
     this.elm.log('info', 'Открытие диагностической сессии (AT FI)...');
-
-    const checkSession = (resp) => {
-      const clean = (resp || "").replace(/\s+/g, '').toUpperCase();
-      const hasError = /ERROR|NODATA|UNABLE|\?|CANBUS|BUSBUSY|FBERROR|DATAERROR/.test(clean);
-      return {
-        clean,
-        ok: !hasError && clean.length > 0 && (
-          clean.includes("C1") ||
-          clean.includes("8110F1") ||
-          clean.includes("BUSINIT:OK") ||
-          clean.includes("OK"))
-      };
-    };
 
     let session = { clean: "", ok: false };
     const maxFiAttempts = 3;
     for (let attempt = 1; attempt <= maxFiAttempts; attempt++) {
       try {
         const resp = await this.elm.send("AT FI", 3000);
-        session = checkSession(resp);
+        const clean = (resp || "").replace(/\s+/g, '').toUpperCase();
+        session = { clean, ok: this.isFastInitResponseOk(resp) };
         if (session.ok) break;
       } catch (e) {
         session = { clean: (e && e.message) || "", ok: false };
@@ -193,10 +180,25 @@ class ItelmaM73Protocol {
     }
 
     this.parseFrame2101(testResp);
+    this._lastFrame2101At = Date.now();
     this.isInitialized = true;
-    this.currentSpeedProfile = 'extreme';
     this.elm.log('info', '>>> СВЯЗЬ С ЭБУ ИТЭЛМА М73 УСПЕШНО УСТАНОВЛЕНА И ПРОВЕРЕНА! <<<');
     return true;
+  }
+
+  /**
+   * Валидация ответа адаптера на команду Fast Init (AT FI)
+   */
+  isFastInitResponseOk(resp) {
+    const clean = (resp || "").replace(/\s+/g, '').toUpperCase();
+    if (!clean) return false;
+    const hasError = /ERROR|NODATA|UNABLE|\?|CANBUS|BUSBUSY|FBERROR|DATAERROR/.test(clean);
+    return !hasError && (
+      clean.includes("C1") ||
+      clean.includes("8110F1") ||
+      clean.includes("BUSINIT:OK") ||
+      clean.includes("OK")
+    );
   }
 
   /**
@@ -308,6 +310,7 @@ class ItelmaM73Protocol {
     }
 
     this.latestData.timestamp = new Date();
+    this._lastFrame2101At = Date.now();
     return this.latestData;
   }
 
@@ -454,7 +457,6 @@ class ItelmaM73Protocol {
     const idleTorqueI = r2((s16(53) * 100.0) / 32768.0);
     // 55-56 (байты 57-58 ответа 61 01): Потребность в моменте для регулирования ХХ: PD-часть (%)
     const idleTorquePD = r2((s16(55) * 100.0) / 32768.0);
-    const addAdaptBank2 = 0;
     // 57-58 (байты 59-60 ответа 61 01): Мультипликативная составляющая коррекции смеси FR / FRA2 (-) (норма = 1.000)
     // В OpenDiag (hk.java, case 59): u16(59) / 32768.0 (формат %.3f)
     const multAdapt = r3(u16(57) / 32768.0);
@@ -561,7 +563,6 @@ class ItelmaM73Protocol {
 
     this.latestData.timeSinceReset = timeSinceReset;
     this.latestData.timeSinceResetHours = timeSinceResetHours;
-    this.latestData.addAdaptBank2 = addAdaptBank2;
     this.latestData.ecuChecksum = ecuChecksum;
     this.latestData.flags = flags;
 

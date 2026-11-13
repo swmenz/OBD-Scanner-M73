@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" href="icon-192.png">
   <title>Диагностика М73 — Лада Приора</title>
   
-  <link rel="stylesheet" href="styles.css?v=55.3">
+  <link rel="stylesheet" href="styles.css?v=55.4">
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
@@ -24,7 +24,7 @@
     <header class="glass-navbar">
       <div class="navbar-brand">
         <span class="status-pulse" id="connIndicator"></span>
-        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v55.3</span></div>
+        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v55.4</span></div>
         <span class="status-text" id="connStateText">Не подключено</span>
       </div>
 
@@ -452,7 +452,7 @@
                   <span class="chip-beacon"></span>
                   <span>Вентилятор 2</span>
                 </div>
-                <div class="glass-chip" id="flagMil">
+                <div class="glass-chip chip-alert" id="flagMil">
                   <span class="chip-beacon"></span>
                   <span>Check Engine</span>
                 </div>
@@ -1348,11 +1348,11 @@
       <div class="osc-controls-bar">
         <div class="osc-ctrl-group">
           <button id="btnOscPause" class="glass-btn osc-btn osc-btn-pause" type="button">
-            <span id="btnOscPauseIcon">⏸️</span>
+            <span id="btnOscPauseIcon"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg></span>
             <span id="btnOscPauseText">Пауза</span>
           </button>
           <button id="btnOscClear" class="glass-btn osc-btn" type="button" title="Очистить буфер">
-            <span>🔄</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
             <span>Сброс</span>
           </button>
         </div>
@@ -1364,17 +1364,18 @@
             <button class="seg-btn" data-pts="180">180т</button>
           </div>
           <button id="btnOscAutoScale" class="glass-btn osc-btn osc-btn-scale active" type="button" title="Переключить масштаб">
-            <span>↕️ Авто</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
+            <span>Авто</span>
           </button>
         </div>
       </div>
     </div>
   </div>
 
-  <script src="elm327.js?v=55.3"></script>
-  <script src="m73.js?v=55.3"></script>
-  <script src="logger.js?v=55.3"></script>
-  <script src="dashboard-widgets.js?v=55.3"></script>
-  <script src="app.js?v=55.3"></script>
+  <script src="elm327.js?v=55.4"></script>
+  <script src="m73.js?v=55.4"></script>
+  <script src="logger.js?v=55.4"></script>
+  <script src="dashboard-widgets.js?v=55.4"></script>
+  <script src="app.js?v=55.4"></script>
 </body>
 </html>

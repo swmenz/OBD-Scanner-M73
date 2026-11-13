@@ -325,23 +325,35 @@ class TripLogger {
   }
 
   /**
+   * Общий расчёт каденса опроса (Гц / мс) с фильтрацией длинных пауз (> 3 с),
+   * возникающих при сворачивании приложения, переключении на сервисные вкладки или реконнекте.
+   */
+  _recordFrameTiming(now) {
+    if (this.lastFrameTime > 0) {
+      const deltaMs = now - this.lastFrameTime;
+      if (deltaMs > 3000) {
+        this.hzHistory = [];
+        this.currentMs = 0;
+      } else {
+        this.currentMs = Math.round(deltaMs);
+        const instantHz = 1000 / Math.max(1, deltaMs);
+
+        this.hzHistory.push(instantHz);
+        if (this.hzHistory.length > 10) this.hzHistory.shift();
+
+        const sumHz = this.hzHistory.reduce((a, b) => a + b, 0);
+        this.currentHz = parseFloat((sumHz / this.hzHistory.length).toFixed(1));
+      }
+    }
+    this.lastFrameTime = now;
+  }
+
+  /**
    * Обновление только метрик частоты опроса (Гц и мс) без добавления строки в массив записей лога.
    * Используется на вкладке АЦП (21 03), чтобы индикатор частоты в шапке не замирал во время записи.
    */
   updateCadenceOnly() {
-    const now = performance.now();
-    if (this.lastFrameTime > 0) {
-      const deltaMs = now - this.lastFrameTime;
-      this.currentMs = Math.round(deltaMs);
-      const instantHz = 1000 / Math.max(1, deltaMs);
-
-      this.hzHistory.push(instantHz);
-      if (this.hzHistory.length > 10) this.hzHistory.shift();
-
-      const sumHz = this.hzHistory.reduce((a, b) => a + b, 0);
-      this.currentHz = parseFloat((sumHz / this.hzHistory.length).toFixed(1));
-    }
-    this.lastFrameTime = now;
+    this._recordFrameTiming(performance.now());
 
     if (this.onStatsUpdate) {
       this.onStatsUpdate({
@@ -357,19 +369,7 @@ class TripLogger {
    */
   addPoint(params) {
     const now = performance.now();
-    
-    if (this.lastFrameTime > 0) {
-      const deltaMs = now - this.lastFrameTime;
-      this.currentMs = Math.round(deltaMs);
-      const instantHz = 1000 / Math.max(1, deltaMs);
-      
-      this.hzHistory.push(instantHz);
-      if (this.hzHistory.length > 10) this.hzHistory.shift();
-
-      const sumHz = this.hzHistory.reduce((a, b) => a + b, 0);
-      this.currentHz = parseFloat((sumHz / this.hzHistory.length).toFixed(1));
-    }
-    this.lastFrameTime = now;
+    this._recordFrameTiming(now);
 
     if (this.isRecording) {
       const elapsedSec = ((now - this.startTime) / 1000).toFixed(3);

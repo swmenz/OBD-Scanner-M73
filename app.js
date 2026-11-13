@@ -189,6 +189,7 @@ class M73Application {
 
     // Состояние подключения и терминала
     this.connecting = false;
+    this._connectSeq = 0;
     this.pollPromise = null;
     this.termBuffer = [];
     this.TERM_LIMIT = 300;
@@ -372,6 +373,10 @@ class M73Application {
     // Терминал
     this.terminalLog = document.getElementById('terminalLog');
     this.terminalInput = document.getElementById('terminalInput');
+
+    if (this.valPeakRpm && this.peakRpm > 0) {
+      this._updateText(this.valPeakRpm, `Пик: ${this.peakRpm}`);
+    }
   }
 
   bindEvents() {
@@ -382,48 +387,49 @@ class M73Application {
       badge.style.cursor = 'pointer';
       badge.title = 'Нажмите для проверки обновлений';
       badge.addEventListener('click', async () => {
-        try {
-          if ('serviceWorker' in navigator) {
-            const reg = await navigator.serviceWorker.getRegistration();
-            if (reg) {
-              await reg.update();
-              if (reg.waiting) {
-                reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-                this._swUpdateReady = true;
+        if (!this._swUpdateReady) {
+          try {
+            if ('serviceWorker' in navigator) {
+              const reg = await navigator.serviceWorker.getRegistration();
+              if (reg) {
+                await reg.update();
+                if (reg.waiting) {
+                  reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                  this._swUpdateReady = true;
+                }
               }
             }
-          }
-        } catch (e) {}
+          } catch (e) {}
+        }
         if (this._swUpdateReady && !this.elm.isConnected && !this.connecting) {
           if (confirm("Доступна обновлённая версия приложения. Перезагрузить страницу сейчас?")) {
             window.location.reload();
             return;
           }
         }
-        alert("Диагностика М73 — Версия v55.3\n\nОбновления:\n1) Надёжность BLE и БД: атомарная блокировка очереди при отключении/реконнекте, авто-переоткрытие IndexedDB на iOS и отдельный стор метаданных поездок\n2) Стабильность UI и опроса: защита отмены подключения и возврата из фона во время тестов ИМ, сохранность системной карточки логгера и единый цикл модальных окон\n3) Оптимизация PWA: отложенная подгрузка SheetJS (xlsx), актуальный Service Worker и снижение GPU-слоёв backdrop-filter");
+        alert("Диагностика М73 — Версия v55.4\n\nОбновления:\n1) Надёжность BLE и раскладки: защита ресинхронизации очереди (140 мс) счётчиком поколения, атомарная отмена подключения, сброс виджетов без разрыва BLE и сохранение пика RPM\n2) Точность АЦП и логгера: определение запуска по свежему 2101 и АЦП с учётом просадки генератора, валидация ATFI и фильтрация пауз в частоте опроса\n3) Интерфейс: векторные статусы и кнопки осциллографа без эмодзи, корректный цвет Check Engine, увеличенные зоны нажатия и поддержка альбомного режима");
       });
     }
 
     // Интеллектуальное автоскрытие нижнего дока при отсутствии взаимодействия и скролле вниз
     this.initDockAutoHide();
 
-    // Режим скорости опроса K-Line: Постоянный Турбо + Конвейер v55.3
+    // Режим скорости опроса K-Line: Постоянный Турбо + Конвейер v55.4
     const cadencePill = document.querySelector('.cadence-pill');
     if (cadencePill) {
-      cadencePill.title = 'Частота опроса K-Line: Турбо + Конвейер v55.3';
-      this.currentSpeedProfile = 'extreme';
+      cadencePill.title = 'Частота опроса K-Line: Турбо + Конвейер v55.4';
 
       cadencePill.addEventListener('click', () => {
         const suffixInfo = this.m73 && this.m73.singleFrameSuffixSupported === true
           ? "Включен (21011 / 21031, закрытие кадра 0 мс)"
           : (this.m73 && this.m73.singleFrameSuffixSupported === false ? "Отключен адаптером (стандартный 2101)" : "Определяется...");
         alert(
-          `Режим опроса: Турбо + Конвейер (Релиз v55.3)\n\n` +
+          `Режим опроса: Турбо + Конвейер (Релиз v55.4)\n\n` +
           `• Адаптивный тайминг: AT AT 2\n` +
           `• Таймаут шины: AT ST 10 (~64 мс, постоянный Турбо)\n` +
           `• Турбо-суффикс кадра: ${suffixInfo}\n` +
           `• Конвейер (Request Pipelining): Активен (BLE-запрос параллельно с рендером CPU)\n` +
-          `• Главная панель (только 21011, 79 байт): до 4.2–4.5 Гц (~225–240 мс)\n` +
+          `• Главная панель (только 21011, 79 байт): до 4.1–4.5 Гц (~225–245 мс)\n` +
           `• Вкладка АЦП (только 21031, 27 байт): ~5.0–5.3 Гц (~190 мс)`
         );
       });
@@ -576,12 +582,14 @@ class M73Application {
 
     // Если поиск уже идёт — повторное нажатие служит кнопкой быстрой отмены!
     if (this.connecting) {
+      this._connectSeq++;
       this.connecting = false;
       this.userExplicitDisconnect = true;
       this.shouldBeConnected = false;
       this.btnConnect.disabled = false;
       this.btnConnectText.textContent = "Подключить";
       if (this.widgetManager) this.widgetManager.stopOscLoop();
+      if (!this.logger.isRecording) this.bgKeeper.stop();
       this.btnConnect.classList.remove('connected');
       this.connIndicator.className = 'status-pulse';
       this.connStateText.textContent = "Не подключено";
@@ -592,6 +600,7 @@ class M73Application {
 
     if (this.elm.isConnected) {
       // Осознанное отключение пользователем: перед разрывом BLE возвращаем управление регуляторами ЭБУ
+      this._connectSeq++;
       this.userExplicitDisconnect = true;
       this.shouldBeConnected = false;
       await this.stopPolling();
@@ -608,6 +617,7 @@ class M73Application {
       return;
     }
 
+    const seq = ++this._connectSeq;
     this.userExplicitDisconnect = false;
     this.connecting = true;
 
@@ -621,16 +631,20 @@ class M73Application {
     try {
       await this.elm.requestAndConnect();
 
-      if (!this.connecting || this.userExplicitDisconnect) {
-        await this.elm.disconnect();
+      if (seq !== this._connectSeq || !this.connecting || this.userExplicitDisconnect) {
+        if (seq === this._connectSeq) {
+          try { await this.elm.disconnect(); } catch (e) {}
+        }
         return;
       }
-      
+
       this.btnConnectText.textContent = "Связь...";
       await this.m73.initEcu();
 
-      if (!this.connecting || this.userExplicitDisconnect || !this.elm.isConnected) {
-        try { await this.elm.disconnect(); } catch (e) {}
+      if (seq !== this._connectSeq || !this.connecting || this.userExplicitDisconnect || !this.elm.isConnected) {
+        if (seq === this._connectSeq) {
+          try { await this.elm.disconnect(); } catch (e) {}
+        }
         return;
       }
 
@@ -649,6 +663,7 @@ class M73Application {
       // Активируем удержание экрана включенным на приборной панели
       await this.wakeLockMgr.request();
 
+      if (seq !== this._connectSeq) return;
       this.startContinuousPolling();
 
       // Автозапись при подключении (если тумблер включен)
@@ -656,6 +671,9 @@ class M73Application {
         this.startLogging();
       }
     } catch (err) {
+      if (seq !== this._connectSeq) {
+        return;
+      }
       // Проверяем, была ли это намеренная отмена или закрытие окна пользователем
       const isCancelled = this.userExplicitDisconnect ||
                           err.isCancelled ||
@@ -672,6 +690,9 @@ class M73Application {
       try { await this.elm.disconnect(); } catch (e) {}
       await this.handleDisconnectedState();
     } finally {
+      if (seq !== this._connectSeq) {
+        return;
+      }
       this.connecting = false;
       this.btnConnect.disabled = false;
       if (!this.elm.isConnected) {
@@ -973,7 +994,14 @@ class M73Application {
               raw1 = await this.m73.sendRawFrame('2101');
             }
 
-            const isMafAdcOsc = Boolean(this.widgetManager && this.widgetManager.oscChannel === 'mafAdc');
+            const oscVisibleOnDash = Boolean(this.widgetManager && this.widgetManager.o2Canvas && this.widgetManager.o2Canvas.isConnected);
+            const oscModalOpen = Boolean(this.widgetManager && this.widgetManager.modalOsc && this.widgetManager.modalOsc.classList.contains('open'));
+            const isMafAdcOsc = Boolean(
+              this.widgetManager &&
+              this.widgetManager.oscChannel === 'mafAdc' &&
+              !this.widgetManager.isOscPaused &&
+              (oscVisibleOnDash || oscModalOpen)
+            );
             if (
               this.isPolling &&
               this.elm.isConnected &&
@@ -1000,7 +1028,7 @@ class M73Application {
               throw new Error("Пустой кадр 21 01");
             }
           } else if (this.currentTab === 'tab-adc') {
-            // Вкладка АЦП: опрашиваем СТРОГО короткий Кадр 3 (21 03 / 21031) с конвейерным предзапросом (Request Pipelining v55.2)
+            // Вкладка АЦП: опрашиваем СТРОГО короткий Кадр 3 (21 03 / 21031) с конвейерным предзапросом (Request Pipelining)
             let rawAdc;
             if (prefetched && prefetched.target === '2103') {
               const p = prefetched.promise;
@@ -1026,13 +1054,19 @@ class M73Application {
             const dataAdc = await this.m73.commitRawFrame('2103', rawAdc);
             if (dataAdc) {
               this.updateAdcUI(dataAdc);
-              if (
+              const oscModalOpen = Boolean(
                 this.widgetManager &&
-                this.widgetManager.oscChannel === 'mafAdc' &&
                 this.widgetManager.modalOsc &&
                 this.widgetManager.modalOsc.classList.contains('open')
-              ) {
-                this.widgetManager.updateDynamicWidgets(dataAdc);
+              );
+              const adcCompatibleOsc = this.widgetManager && (
+                this.widgetManager.oscChannel === 'mafAdc' ||
+                this.widgetManager.oscChannel === 'o2Volt' ||
+                this.widgetManager.oscChannel === 'o2Volt2' ||
+                this.widgetManager.oscChannel === 'volt'
+              );
+              if (oscModalOpen && adcCompatibleOsc) {
+                this.widgetManager.feedOscilloscope({ adc: dataAdc.adc });
               }
               // Всегда обновляем частоту опроса (Гц / мс) и таймер кадра без записи пустых точек в лог
               this.logger.updateCadenceOnly();
@@ -1079,8 +1113,12 @@ class M73Application {
           } else if (failures >= 10 && failures % 10 === 0) {
             try {
               this.elm.log('info', 'Попытка автовосстановления сессии K-Line (AT FI)...');
-              await this.elm.send("ATFI", 2000);
-              await this.elm.send("ATH0", 1000); // Обязательно выключаем заголовки после реконнекта
+              const fiResp = await this.elm.send("ATFI", 2000);
+              if (this.m73.isFastInitResponseOk(fiResp)) {
+                await this.elm.send("ATH0", 1000); // Обязательно выключаем заголовки после реконнекта
+              } else {
+                this.elm.log('warn', `AT FI не восстановил сессию: ${fiResp || 'нет ответа'}`);
+              }
             } catch (e) {}
           }
           await this.delay(failures < 5 ? 80 : 250);
@@ -1155,9 +1193,11 @@ class M73Application {
 
     // Обороты (Аппаратное ускорение через transform: scaleX для 120 FPS + реактивное свечение зоны оборотов)
     this._updateText(this.valRpm, data.rpm);
-    if (this.valPeakRpm && data.rpm > this.peakRpm) {
+    if (data.rpm > this.peakRpm) {
       this.peakRpm = data.rpm;
-      this._updateText(this.valPeakRpm, `Пик: ${this.peakRpm}`);
+      if (this.valPeakRpm) {
+        this._updateText(this.valPeakRpm, `Пик: ${this.peakRpm}`);
+      }
     }
     if (this.barRpm) {
       const rpmRatio = Math.min(1, Math.max(0, data.rpm / 6800));
@@ -1248,6 +1288,12 @@ class M73Application {
     // ДТВ (Температура впускного воздуха)
     if (data.intakeTemp !== undefined && data.intakeTemp !== null) {
       this._updateText(this.valIntakeTemp, data.intakeTemp.toFixed(1));
+      if (this.valIntakeTemp) {
+        const intakeCol = data.intakeTemp >= 75
+          ? 'var(--apple-rose)'
+          : (data.intakeTemp >= 55 ? 'var(--apple-amber)' : (data.intakeTemp < -25 ? '#64D2FF' : 'var(--text-primary)'));
+        this._setStyle(this.valIntakeTemp, 'color', intakeCol);
+      }
     }
 
     // ДНД (Датчик неровной дороги, вертикальное ускорение кузова)
@@ -1272,7 +1318,17 @@ class M73Application {
       const col = data.o2Volt >= 0.6 ? 'var(--apple-green)' : (data.o2Volt <= 0.3 ? 'var(--apple-blue)' : 'var(--text-primary)');
       this._setStyle(this.valO2Volt, 'color', col);
     }
-    if (data.o2Volt2 !== undefined) this._updateText(this.valO2Volt2, data.o2Volt2.toFixed(3));
+    if (data.o2Volt2 !== undefined) {
+      this._updateText(this.valO2Volt2, data.o2Volt2.toFixed(3));
+      if (this.valO2Volt2) {
+        const o2Col2 = (data.o2Volt2 < 0.05 || data.o2Volt2 > 0.95)
+          ? 'var(--apple-rose)'
+          : ((data.o2Volt2 >= 0.55 && data.o2Volt2 <= 0.78)
+            ? 'var(--apple-green)'
+            : ((data.o2Volt2 >= 0.40 && data.o2Volt2 < 0.55) ? 'var(--apple-amber)' : 'var(--text-primary)'));
+        this._setStyle(this.valO2Volt2, 'color', o2Col2);
+      }
+    }
     if (data.lambdaCorr !== undefined) this._updateText(this.valLambdaCorr, data.lambdaCorr.toFixed(3));
     if (data.targetLambda !== undefined) this._updateText(this.valTargetLambda, data.targetLambda.toFixed(3));
     if (data.purgeRate !== undefined) this._updateText(this.valPurgeRate, data.purgeRate.toFixed(1));
@@ -1348,10 +1404,11 @@ class M73Application {
     const adc = data.adc;
     const mafV = Number(adc.maf);
     const voltV = Number(adc.volt);
-    // Определение работающего двигателя строго по живым каналам кадра 21 03 (без устаревшего lastRpm из 21 01):
-    // генератор даёт >= 13.35 В ИЛИ поток воздуха ДМРВ в рабочем диапазоне (1.22..4.50 В) при нормальном напряжении сети (>= 12.95 В).
-    // Если сигнальный провод ДМРВ оборван на заглушенном моторе (5.00 В при АКБ 12.6 В), условие <= 4.50 В не позволит спутать обрыв с пуском!
-    const isRunning = voltV >= 13.35 || (mafV >= 1.22 && mafV <= 4.50 && voltV >= 12.95);
+    // Приоритет — свежие обороты из 21 01 (если кадр моложе 4 с), иначе оценка по АЦП с допуском просадки генератора (>= 11.2 В при активном ДМРВ)
+    const hasFresh2101 = Boolean(this.m73 && this.m73._lastFrame2101At && (Date.now() - this.m73._lastFrame2101At <= 4000));
+    const isRunning = hasFresh2101
+      ? (Number(this.m73.latestData.rpm) > 300)
+      : (voltV >= 13.35 || (mafV >= 1.22 && mafV <= 4.50 && voltV >= 11.2));
 
     let countOk = 0;
     let countWarn = 0;
@@ -1361,12 +1418,16 @@ class M73Application {
       if (!badgeEl) return;
       const nextClass = `badge-health badge-health-${status}`;
       if (badgeEl.className !== nextClass) badgeEl.className = nextClass;
-      this._updateText(badgeEl, badgeText);
+      const nextHtml = `<span class="badge-dot"></span>${badgeText}`;
+      if (badgeEl._lastHtml !== nextHtml) {
+        badgeEl._lastHtml = nextHtml;
+        badgeEl.innerHTML = nextHtml;
+      }
       if (descEl && descText) this._updateText(descEl, descText);
       if (barEl) {
-        const clamped = Math.max(0.04, Math.min(1, ratio));
+        const clamped = status === 'neutral' ? 0 : Math.max(0.04, Math.min(1, ratio));
         this._setStyle(barEl, 'transform', `scaleX(${clamped.toFixed(3)})`);
-        const fillClass = `adc-mini-fill fill-${status}`;
+        const fillClass = `adc-mini-fill fill-${status === 'neutral' ? 'info' : status}`;
         if (barEl.className !== fillClass) barEl.className = fillClass;
       }
       if (status === 'ok') countOk++;
@@ -1378,27 +1439,27 @@ class M73Application {
     const mafRatio = isRunning ? (mafV / 5.0) : Math.min(1, Math.max(0, (mafV - 0.95) / 0.15));
     if (!isRunning) {
       if (mafV >= 0.996 && mafV <= 1.020) {
-        setBadge(this.healthAdcMaf, this.descAdcMaf, 'ok', '🟢 Идеал', 'Покой: Новый датчик (0.996 ... 1.020 В)', this.barAdcMaf, mafRatio);
+        setBadge(this.healthAdcMaf, this.descAdcMaf, 'ok', 'Идеал', 'Покой: Новый датчик (0.996 ... 1.020 В)', this.barAdcMaf, mafRatio);
         this._setStyle(this.adcMaf, 'color', 'var(--apple-green)');
       } else if (mafV >= 1.021 && mafV <= 1.035) {
-        setBadge(this.healthAdcMaf, this.descAdcMaf, 'ok', '🟢 Норма', 'Покой: Рабочий датчик (1.021 ... 1.035 В)', this.barAdcMaf, mafRatio);
+        setBadge(this.healthAdcMaf, this.descAdcMaf, 'ok', 'Норма', 'Покой: Рабочий датчик (1.021 ... 1.035 В)', this.barAdcMaf, mafRatio);
         this._setStyle(this.adcMaf, 'color', 'var(--apple-green)');
       } else if (mafV >= 1.036 && mafV <= 1.050) {
-        setBadge(this.healthAdcMaf, this.descAdcMaf, 'warn', '🟡 Износ', 'Покой: Износ кристалла. Повышенный расход топлива', this.barAdcMaf, mafRatio);
+        setBadge(this.healthAdcMaf, this.descAdcMaf, 'warn', 'Износ', 'Покой: Износ кристалла. Повышенный расход топлива', this.barAdcMaf, mafRatio);
         this._setStyle(this.adcMaf, 'color', 'var(--apple-amber)');
       } else if (mafV > 1.050) {
-        setBadge(this.healthAdcMaf, this.descAdcMaf, 'danger', '🔴 Неисправен', 'Покой: Критический дрейф нуля (>1.050В). Требуется замена', this.barAdcMaf, mafRatio);
+        setBadge(this.healthAdcMaf, this.descAdcMaf, 'danger', 'Неисправен', 'Покой: Критический дрейф нуля (>1.050В). Требуется замена', this.barAdcMaf, mafRatio);
         this._setStyle(this.adcMaf, 'color', 'var(--apple-rose)');
       } else {
-        setBadge(this.healthAdcMaf, this.descAdcMaf, 'danger', '🔴 Ошибка нуля', 'Покой: Напряжение ниже нормы (<0.996В). Проверьте массы', this.barAdcMaf, mafRatio);
+        setBadge(this.healthAdcMaf, this.descAdcMaf, 'danger', 'Ошибка нуля', 'Покой: Напряжение ниже нормы (<0.996В). Проверьте массы', this.barAdcMaf, mafRatio);
         this._setStyle(this.adcMaf, 'color', 'var(--apple-rose)');
       }
     } else {
       if (mafV >= 1.01 && mafV <= 4.80) {
-        setBadge(this.healthAdcMaf, this.descAdcMaf, 'ok', '🟢 Активен', 'Двигатель запущен: динамический отклик расхода воздуха', this.barAdcMaf, mafRatio);
+        setBadge(this.healthAdcMaf, this.descAdcMaf, 'ok', 'Активен', 'Двигатель запущен: динамический отклик расхода воздуха', this.barAdcMaf, mafRatio);
         this._setStyle(this.adcMaf, 'color', 'var(--apple-green)');
       } else {
-        setBadge(this.healthAdcMaf, this.descAdcMaf, 'danger', '🔴 Выход за пределы', 'Напряжение вне рабочего диапазона', this.barAdcMaf, mafRatio);
+        setBadge(this.healthAdcMaf, this.descAdcMaf, 'danger', 'Выход за пределы', 'Напряжение вне рабочего диапазона', this.barAdcMaf, mafRatio);
         this._setStyle(this.adcMaf, 'color', 'var(--apple-rose)');
       }
     }
@@ -1407,37 +1468,37 @@ class M73Application {
     const tpsV = Number(adc.tps);
     const tpsRatio = tpsV / 5.0;
     if (tpsV >= 0.35 && tpsV <= 0.65) {
-      setBadge(this.healthAdcThrottle, this.descAdcThrottle, 'ok', '🟢 Закрыта (0%)', 'Калибровка нуля заслонки в норме (0.35 ... 0.65 В)', this.barAdcThrottle, tpsRatio);
+      setBadge(this.healthAdcThrottle, this.descAdcThrottle, 'ok', 'Закрыта (0%)', 'Калибровка нуля заслонки в норме (0.35 ... 0.65 В)', this.barAdcThrottle, tpsRatio);
     } else if (tpsV > 0.65 && tpsV <= 0.75) {
-      setBadge(this.healthAdcThrottle, this.descAdcThrottle, 'warn', '🟡 Смещение нуля', 'Возможен перетяг троса газа или нагар на упоре дросселя', this.barAdcThrottle, tpsRatio);
+      setBadge(this.healthAdcThrottle, this.descAdcThrottle, 'warn', 'Смещение нуля', 'Возможен перетяг троса газа или нагар на упоре дросселя', this.barAdcThrottle, tpsRatio);
     } else if (tpsV > 0.75 && tpsV <= 4.70) {
       const openPct = Math.min(100, Math.max(0, ((tpsV - 0.5) / 4.0) * 100)).toFixed(0);
-      setBadge(this.healthAdcThrottle, this.descAdcThrottle, 'info', `🔵 Открыта (~${openPct}%)`, 'Дроссельная заслонка открыта, сигнал изменяется плавно', this.barAdcThrottle, tpsRatio);
+      setBadge(this.healthAdcThrottle, this.descAdcThrottle, 'info', `Открыта (~${openPct}%)`, 'Дроссельная заслонка открыта, сигнал изменяется плавно', this.barAdcThrottle, tpsRatio);
     } else if (tpsV < 0.35) {
-      setBadge(this.healthAdcThrottle, this.descAdcThrottle, 'danger', '🔴 КЗ на массу', 'Напряжение < 0.35 В. Замыкание сигнального провода на корпус', this.barAdcThrottle, tpsRatio);
+      setBadge(this.healthAdcThrottle, this.descAdcThrottle, 'danger', 'КЗ на массу', 'Напряжение < 0.35 В. Замыкание сигнального провода на корпус', this.barAdcThrottle, tpsRatio);
     } else {
-      setBadge(this.healthAdcThrottle, this.descAdcThrottle, 'danger', '🔴 Обрыв цепи', 'Напряжение > 4.70 В. Обрыв сигнального провода или массы', this.barAdcThrottle, tpsRatio);
+      setBadge(this.healthAdcThrottle, this.descAdcThrottle, 'danger', 'Обрыв цепи', 'Напряжение > 4.70 В. Обрыв сигнального провода или массы', this.barAdcThrottle, tpsRatio);
     }
 
     // 3. Бортовая сеть (АКБ / Генератор)
     const voltRatio = Math.max(0, Math.min(1, (voltV - 10.0) / 5.5));
     if (!isRunning) {
       if (voltV >= 12.4) {
-        setBadge(this.healthAdcVolt, this.descAdcVolt, 'ok', '🟢 АКБ заряжен', 'Покой: Напряжение батареи в норме (80-100% заряда)', this.barAdcVolt, voltRatio);
+        setBadge(this.healthAdcVolt, this.descAdcVolt, 'ok', 'АКБ заряжен', 'Покой: Напряжение батареи в норме (80-100% заряда)', this.barAdcVolt, voltRatio);
       } else if (voltV >= 12.0) {
-        setBadge(this.healthAdcVolt, this.descAdcVolt, 'warn', '🟡 Разряжен АКБ', 'Покой: Низкое напряжение батареи (требуется подзарядка)', this.barAdcVolt, voltRatio);
+        setBadge(this.healthAdcVolt, this.descAdcVolt, 'warn', 'Разряжен АКБ', 'Покой: Низкое напряжение батареи (требуется подзарядка)', this.barAdcVolt, voltRatio);
       } else {
-        setBadge(this.healthAdcVolt, this.descAdcVolt, 'danger', '🔴 Глубокий разряд', 'Покой: Напряжение АКБ < 12.0 В. Риск отказа запуска', this.barAdcVolt, voltRatio);
+        setBadge(this.healthAdcVolt, this.descAdcVolt, 'danger', 'Глубокий разряд', 'Покой: Напряжение АКБ < 12.0 В. Риск отказа запуска', this.barAdcVolt, voltRatio);
       }
     } else {
       if (voltV >= 13.8 && voltV <= 14.7) {
-        setBadge(this.healthAdcVolt, this.descAdcVolt, 'ok', '🟢 Зарядка ОК', 'Работа: Генератор выдает стабильные 13.8 ... 14.7 В', this.barAdcVolt, voltRatio);
+        setBadge(this.healthAdcVolt, this.descAdcVolt, 'ok', 'Зарядка ОК', 'Работа: Генератор выдает стабильные 13.8 ... 14.7 В', this.barAdcVolt, voltRatio);
       } else if (voltV >= 13.2 && voltV < 13.8) {
-        setBadge(this.healthAdcVolt, this.descAdcVolt, 'warn', '🟡 Под нагрузкой', 'Работа: Небольшая просадка напряжения генератора', this.barAdcVolt, voltRatio);
+        setBadge(this.healthAdcVolt, this.descAdcVolt, 'warn', 'Под нагрузкой', 'Работа: Небольшая просадка напряжения генератора', this.barAdcVolt, voltRatio);
       } else if (voltV < 13.2) {
-        setBadge(this.healthAdcVolt, this.descAdcVolt, 'danger', '🔴 Недозаряд', 'Работа: Генератор не справляется (<13.2В). Проверьте ремень/щетки', this.barAdcVolt, voltRatio);
+        setBadge(this.healthAdcVolt, this.descAdcVolt, 'danger', 'Недозаряд', 'Работа: Генератор не справляется (<13.2В). Проверьте ремень/щетки', this.barAdcVolt, voltRatio);
       } else {
-        setBadge(this.healthAdcVolt, this.descAdcVolt, 'danger', '🔴 Перезаряд', 'Работа: Опасное перенапряжение (>14.7В). Пробит реле-регулятор', this.barAdcVolt, voltRatio);
+        setBadge(this.healthAdcVolt, this.descAdcVolt, 'danger', 'Перезаряд', 'Работа: Опасное перенапряжение (>14.7В). Пробит реле-регулятор', this.barAdcVolt, voltRatio);
       }
     }
 
@@ -1445,22 +1506,26 @@ class M73Application {
     const tempV = Number(adc.temp);
     const tempRatio = tempV / 5.0;
     if (tempV >= 0.20 && tempV <= 4.80) {
-      setBadge(this.healthAdcTemp, this.descAdcTemp, 'ok', '🟢 Цепь исправна', 'Терморезистор ДТОЖ в пределах рабочего диапазона', this.barAdcTemp, tempRatio);
+      setBadge(this.healthAdcTemp, this.descAdcTemp, 'ok', 'Цепь исправна', 'Терморезистор ДТОЖ в пределах рабочего диапазона', this.barAdcTemp, tempRatio);
     } else if (tempV > 4.80) {
-      setBadge(this.healthAdcTemp, this.descAdcTemp, 'danger', '🔴 Обрыв цепи (5В)', 'Опорное напряжение 5.0 В. Обрыв провода датчика', this.barAdcTemp, tempRatio);
+      setBadge(this.healthAdcTemp, this.descAdcTemp, 'danger', 'Обрыв цепи (5В)', 'Опорное напряжение 5.0 В. Обрыв провода датчика', this.barAdcTemp, tempRatio);
     } else {
-      setBadge(this.healthAdcTemp, this.descAdcTemp, 'danger', '🔴 КЗ на массу (0В)', 'Замыкание сигнальной цепи ДТОЖ на массу автомобиля', this.barAdcTemp, tempRatio);
+      setBadge(this.healthAdcTemp, this.descAdcTemp, 'danger', 'КЗ на массу (0В)', 'Замыкание сигнальной цепи ДТОЖ на массу автомобиля', this.barAdcTemp, tempRatio);
     }
 
     // 5. ДТВ (Температура впускного воздуха)
-    const airV = adc.airTemp !== undefined ? Number(adc.airTemp) : 3.5;
-    const airRatio = airV / 5.0;
-    if (airV >= 0.20 && airV <= 4.80) {
-      setBadge(this.healthAdcAirTemp, this.descAdcAirTemp, 'ok', '🟢 Цепь исправна', 'Терморезистор воздуха в рабочем диапазоне', this.barAdcAirTemp, airRatio);
-    } else if (airV > 4.80) {
-      setBadge(this.healthAdcAirTemp, this.descAdcAirTemp, 'danger', '🔴 Обрыв цепи (5В)', 'Опорные 5.0 В. Обрыв проводки ДТВ', this.barAdcAirTemp, airRatio);
+    if (adc.airTemp === undefined || adc.airTemp === null) {
+      setBadge(this.healthAdcAirTemp, this.descAdcAirTemp, 'neutral', 'Нет данных', 'Канал ДТВ не передан в ответе ЭБУ', this.barAdcAirTemp, 0);
     } else {
-      setBadge(this.healthAdcAirTemp, this.descAdcAirTemp, 'danger', '🔴 КЗ на массу (0В)', 'Замыкание цепи датчика температуры воздуха на массу', this.barAdcAirTemp, airRatio);
+      const airV = Number(adc.airTemp);
+      const airRatio = airV / 5.0;
+      if (airV >= 0.20 && airV <= 4.80) {
+        setBadge(this.healthAdcAirTemp, this.descAdcAirTemp, 'ok', 'Цепь исправна', 'Терморезистор воздуха в рабочем диапазоне', this.barAdcAirTemp, airRatio);
+      } else if (airV > 4.80) {
+        setBadge(this.healthAdcAirTemp, this.descAdcAirTemp, 'danger', 'Обрыв цепи (5В)', 'Опорные 5.0 В. Обрыв проводки ДТВ', this.barAdcAirTemp, airRatio);
+      } else {
+        setBadge(this.healthAdcAirTemp, this.descAdcAirTemp, 'danger', 'КЗ на массу (0В)', 'Замыкание цепи датчика температуры воздуха на массу', this.barAdcAirTemp, airRatio);
+      }
     }
 
     // 6. ДК1 (Управляющий лямбда-зонд с анализом амплитуды скользящего окна)
@@ -1482,42 +1547,50 @@ class M73Application {
 
     if (o2V >= 0.42 && o2V <= 0.48) {
       if (isO2Oscillating) {
-        setBadge(this.healthAdcO2, this.descAdcO2, 'ok', '🟢 Регулирование', 'Активное переключение лямбда-зонда (0.1 ... 0.9 В)', this.barAdcO2, o2Ratio);
+        setBadge(this.healthAdcO2, this.descAdcO2, 'ok', 'Регулирование', 'Активное переключение лямбда-зонда (0.1 ... 0.9 В)', this.barAdcO2, o2Ratio);
       } else {
-        setBadge(this.healthAdcO2, this.descAdcO2, 'warn', '🟡 Прогрев / Опорное', 'Опорные ~0.45 В. Зонд прогревается или смесь разомкнута', this.barAdcO2, o2Ratio);
+        setBadge(this.healthAdcO2, this.descAdcO2, 'warn', 'Прогрев / Опорное', 'Опорные ~0.45 В. Зонд прогревается или смесь разомкнута', this.barAdcO2, o2Ratio);
       }
     } else if (o2V >= 0.05 && o2V < 0.42) {
-      setBadge(this.healthAdcO2, this.descAdcO2, 'ok', '🟢 Бедная смесь', 'Сигнал ДК1 в диапазоне бедной смеси (0.1 ... 0.4 В)', this.barAdcO2, o2Ratio);
+      setBadge(this.healthAdcO2, this.descAdcO2, 'ok', 'Бедная смесь', 'Сигнал ДК1 в диапазоне бедной смеси (0.1 ... 0.4 В)', this.barAdcO2, o2Ratio);
     } else if (o2V > 0.48 && o2V <= 0.95) {
-      setBadge(this.healthAdcO2, this.descAdcO2, 'ok', '🟢 Богатая смесь', 'Сигнал ДК1 в диапазоне богатой смеси (0.5 ... 0.9 В)', this.barAdcO2, o2Ratio);
+      setBadge(this.healthAdcO2, this.descAdcO2, 'ok', 'Богатая смесь', 'Сигнал ДК1 в диапазоне богатой смеси (0.5 ... 0.9 В)', this.barAdcO2, o2Ratio);
     } else {
-      setBadge(this.healthAdcO2, this.descAdcO2, 'danger', '🔴 Залипание сигнала', 'Выход сигнала за пределы рабочего диапазона 0.05-0.95В', this.barAdcO2, o2Ratio);
+      setBadge(this.healthAdcO2, this.descAdcO2, 'danger', 'Залипание сигнала', 'Выход сигнала за пределы рабочего диапазона 0.05-0.95В', this.barAdcO2, o2Ratio);
     }
 
     // 7. ДК2 (Диагностический лямбда-зонд)
-    const o2_2V = adc.o2_2 !== undefined ? Number(adc.o2_2) : 0.65;
-    const o2_2Ratio = o2_2V / 1.0;
-    if (o2_2V >= 0.55 && o2_2V <= 0.78) {
-      setBadge(this.healthAdcO2_2, this.descAdcO2_2, 'ok', '🟢 Катализатор ОК', 'Стабильный уровень напряжения после исправного нейтрализатора', this.barAdcO2_2, o2_2Ratio);
-    } else if (o2_2V >= 0.42 && o2_2V <= 0.48) {
-      setBadge(this.healthAdcO2_2, this.descAdcO2_2, 'warn', '🟡 Прогрев / Опорное', 'Опорное напряжение ненагретого зонда', this.barAdcO2_2, o2_2Ratio);
-    } else if (o2_2V >= 0.05 && o2_2V < 0.55) {
-      setBadge(this.healthAdcO2_2, this.descAdcO2_2, 'warn', '🟡 Бедный отклик', 'Напряжение ниже нормы для нейтрализатора', this.barAdcO2_2, o2_2Ratio);
-    } else if (o2_2V > 0.78 && o2_2V <= 0.95) {
-      setBadge(this.healthAdcO2_2, this.descAdcO2_2, 'warn', '🟡 Богатый отклик', 'Повышенный уровень напряжения ДК2', this.barAdcO2_2, o2_2Ratio);
+    if (adc.o2_2 === undefined || adc.o2_2 === null) {
+      setBadge(this.healthAdcO2_2, this.descAdcO2_2, 'neutral', 'Нет данных', 'Канал ДК2 не передан в ответе ЭБУ', this.barAdcO2_2, 0);
     } else {
-      setBadge(this.healthAdcO2_2, this.descAdcO2_2, 'danger', '🔴 Ошибка сигнала', 'Выход за допустимые пределы', this.barAdcO2_2, o2_2Ratio);
+      const o2_2V = Number(adc.o2_2);
+      const o2_2Ratio = o2_2V / 1.0;
+      if (o2_2V >= 0.55 && o2_2V <= 0.78) {
+        setBadge(this.healthAdcO2_2, this.descAdcO2_2, 'ok', 'Катализатор ОК', 'Стабильный уровень напряжения после исправного нейтрализатора', this.barAdcO2_2, o2_2Ratio);
+      } else if (o2_2V >= 0.42 && o2_2V <= 0.48) {
+        setBadge(this.healthAdcO2_2, this.descAdcO2_2, 'warn', 'Прогрев / Опорное', 'Опорное напряжение ненагретого зонда', this.barAdcO2_2, o2_2Ratio);
+      } else if (o2_2V >= 0.05 && o2_2V < 0.55) {
+        setBadge(this.healthAdcO2_2, this.descAdcO2_2, 'warn', 'Бедный отклик', 'Напряжение ниже нормы для нейтрализатора', this.barAdcO2_2, o2_2Ratio);
+      } else if (o2_2V > 0.78 && o2_2V <= 0.95) {
+        setBadge(this.healthAdcO2_2, this.descAdcO2_2, 'warn', 'Богатый отклик', 'Повышенный уровень напряжения ДК2', this.barAdcO2_2, o2_2Ratio);
+      } else {
+        setBadge(this.healthAdcO2_2, this.descAdcO2_2, 'danger', 'Ошибка сигнала', 'Выход за допустимые пределы', this.barAdcO2_2, o2_2Ratio);
+      }
     }
 
     // 8. ДНД (Датчик неровной дороги)
-    const roughV = adc.roughRoad !== undefined ? Number(adc.roughRoad) : 2.5;
-    const roughRatio = roughV / 5.0;
-    if (roughV >= 2.20 && roughV <= 2.80) {
-      setBadge(this.healthAdcRoughRoad, this.descAdcRoughRoad, 'ok', '🟢 Покой (~2.5 В)', 'Опорное напряжение акселерометра в норме (2.5 В)', this.barAdcRoughRoad, roughRatio);
-    } else if (roughV >= 0.50 && roughV <= 4.50) {
-      setBadge(this.healthAdcRoughRoad, this.descAdcRoughRoad, 'info', '🔵 Динамика дороги', 'Акселерометр фиксирует ускорения и вибрации подвески', this.barAdcRoughRoad, roughRatio);
+    if (adc.roughRoad === undefined || adc.roughRoad === null) {
+      setBadge(this.healthAdcRoughRoad, this.descAdcRoughRoad, 'neutral', 'Нет данных', 'Канал ДНД не передан в ответе ЭБУ', this.barAdcRoughRoad, 0);
     } else {
-      setBadge(this.healthAdcRoughRoad, this.descAdcRoughRoad, 'danger', '🔴 Ошибка ДНД', 'Выход опорного напряжения за физический предел датчика', this.barAdcRoughRoad, roughRatio);
+      const roughV = Number(adc.roughRoad);
+      const roughRatio = roughV / 5.0;
+      if (roughV >= 2.20 && roughV <= 2.80) {
+        setBadge(this.healthAdcRoughRoad, this.descAdcRoughRoad, 'ok', 'Покой (~2.5 В)', 'Опорное напряжение акселерометра в норме (2.5 В)', this.barAdcRoughRoad, roughRatio);
+      } else if (roughV >= 0.50 && roughV <= 4.50) {
+        setBadge(this.healthAdcRoughRoad, this.descAdcRoughRoad, 'info', 'Динамика дороги', 'Акселерометр фиксирует ускорения и вибрации подвески', this.barAdcRoughRoad, roughRatio);
+      } else {
+        setBadge(this.healthAdcRoughRoad, this.descAdcRoughRoad, 'danger', 'Ошибка ДНД', 'Выход опорного напряжения за физический предел датчика', this.barAdcRoughRoad, roughRatio);
+      }
     }
 
     // Обновление счетчиков
@@ -1915,7 +1988,7 @@ class M73Application {
     }
   }
 
-  async releaseRegulator(key, silent = false) {
+  async releaseRegulator(key) {
     const idMap = { idleRpm: '42', rxx: '41', purge: '43' };
     const idHex = idMap[key];
     if (!idHex) return;
@@ -2119,9 +2192,10 @@ class M73Application {
   }
 
   switchTab(tabId) {
-    if (this.currentTab === 'tab-actuators' && tabId !== 'tab-actuators') {
+    const prevTab = this.currentTab;
+    if (prevTab === 'tab-actuators' && tabId !== 'tab-actuators') {
       if (this.activeRegulator) {
-        this.releaseRegulator(this.activeRegulator.key, true);
+        this.releaseRegulator(this.activeRegulator.key);
       } else if (this.isActuatorBusy) {
         this._cancelRegulatorRequested = true;
       }
@@ -2129,6 +2203,16 @@ class M73Application {
     this.currentTab = tabId;
     if (tabId === 'tab-adc') {
       this._o2AdcWindow = [];
+    }
+    const isTelemetryTab = tabId === 'tab-dashboard' || tabId === 'tab-adc';
+    if (prevTab !== tabId && this.logger) {
+      if (!isTelemetryTab) {
+        this.logger.resetCadence();
+        this._updateText(this.hzValue, "0.0");
+        this._updateText(this.msValue, "0");
+      } else if (prevTab !== 'tab-dashboard' && prevTab !== 'tab-adc') {
+        this.logger.resetCadence();
+      }
     }
     if (this.logger && this.logger.isRecording) {
       if (tabId === 'tab-dashboard') {
