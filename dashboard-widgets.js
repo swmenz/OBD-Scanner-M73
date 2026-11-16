@@ -1125,8 +1125,15 @@ class DashboardWidgetManager {
       return;
     }
 
+    const liveLoggerCard = this.container.querySelector('[data-widget-id="logger-card"]');
     this.container.innerHTML = '';
     this.standardTemplates.forEach((tpl, id) => {
+      if (id === 'logger-card' && liveLoggerCard) {
+        liveLoggerCard.className = `dashboard-widget ${tpl.defaultSize === 'wide' ? 'widget-wide' : 'widget-compact'}`;
+        this._attachWidgetControls(liveLoggerCard);
+        this.container.appendChild(liveLoggerCard);
+        return;
+      }
       const widgetEl = document.createElement('div');
       widgetEl.className = `dashboard-widget ${tpl.defaultSize === 'wide' ? 'widget-wide' : 'widget-compact'}`;
       widgetEl.setAttribute('data-widget-id', id);
@@ -1408,6 +1415,13 @@ class DashboardWidgetManager {
         const str = num.toFixed(ch.decimals);
         if (this._valO2VoltEl.textContent !== str) {
           this._valO2VoltEl.textContent = str;
+        }
+        const col = this.oscChannel === 'o2Volt'
+          ? (num >= 0.6 ? 'var(--apple-green)' : (num <= 0.3 ? 'var(--apple-blue)' : 'var(--text-primary)'))
+          : 'var(--text-primary)';
+        if (this._valO2VoltEl._lastStyle_color !== col) {
+          this._valO2VoltEl._lastStyle_color = col;
+          this._valO2VoltEl.style.color = col;
         }
       }
 

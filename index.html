@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" href="icon-192.png">
   <title>Диагностика М73 — Лада Приора</title>
   
-  <link rel="stylesheet" href="styles.css?v=55.5">
+  <link rel="stylesheet" href="styles.css?v=55.6">
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
@@ -24,7 +24,7 @@
     <header class="glass-navbar">
       <div class="navbar-brand">
         <span class="status-pulse" id="connIndicator"></span>
-        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v55.5</span></div>
+        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v55.6</span></div>
         <span class="status-text" id="connStateText">Не подключено</span>
       </div>
 
@@ -452,6 +452,22 @@
                   <span class="chip-beacon"></span>
                   <span>Кондиционер</span>
                 </div>
+                <div class="glass-chip" id="flagFullLoad">
+                  <span class="chip-beacon"></span>
+                  <span>Полная нагрузка</span>
+                </div>
+                <div class="glass-chip" id="flagPurgeActive">
+                  <span class="chip-beacon"></span>
+                  <span>Продувка КПА</span>
+                </div>
+                <div class="glass-chip" id="flagRoughRoad">
+                  <span class="chip-beacon"></span>
+                  <span>Блокировка ДНД</span>
+                </div>
+                <div class="glass-chip" id="flagO2Loop2">
+                  <span class="chip-beacon"></span>
+                  <span>Петля ДК2</span>
+                </div>
               </div>
             </div>
           </div>
@@ -675,6 +691,51 @@
               <div class="adc-val-wrap">
                 <span class="adc-number" id="adcRoughRoad">0.000 В</span>
                 <div class="adc-mini-track" aria-hidden="true"><div class="adc-mini-fill" id="barAdcRoughRoad"></div></div>
+              </div>
+            </div>
+
+            <!-- 9. Нагреватель ДК1 -->
+            <div class="adc-row-glass" id="rowAdcO2Resist1">
+              <div class="adc-info">
+                <div class="adc-title-line">
+                  <strong>Нагреватель ДК1 (до ката)</strong>
+                  <span class="badge-health badge-health-neutral" id="healthAdcO2Resist1">Ожидание</span>
+                </div>
+                <span class="adc-subtext" id="descAdcO2Resist1">Сопротивление спирали подогрева (норма: 4 ... 30 Ом)</span>
+              </div>
+              <div class="adc-val-wrap">
+                <span class="adc-number" id="adcO2Resist1">0 Ом</span>
+                <div class="adc-mini-track" aria-hidden="true"><div class="adc-mini-fill" id="barAdcO2Resist1"></div></div>
+              </div>
+            </div>
+
+            <!-- 10. Нагреватель ДК2 -->
+            <div class="adc-row-glass" id="rowAdcO2Resist2">
+              <div class="adc-info">
+                <div class="adc-title-line">
+                  <strong>Нагреватель ДК2 (после ката)</strong>
+                  <span class="badge-health badge-health-neutral" id="healthAdcO2Resist2">Ожидание</span>
+                </div>
+                <span class="adc-subtext" id="descAdcO2Resist2">Сопротивление спирали подогрева (норма: 4 ... 30 Ом)</span>
+              </div>
+              <div class="adc-val-wrap">
+                <span class="adc-number" id="adcO2Resist2">0 Ом</span>
+                <div class="adc-mini-track" aria-hidden="true"><div class="adc-mini-fill" id="barAdcO2Resist2"></div></div>
+              </div>
+            </div>
+
+            <!-- 11. Клапан продувки адсорбера -->
+            <div class="adc-row-glass" id="rowAdcValvePurge">
+              <div class="adc-info">
+                <div class="adc-title-line">
+                  <strong>Клапан продувки адсорбера (КПА)</strong>
+                  <span class="badge-health badge-health-neutral" id="healthAdcValvePurge">Ожидание</span>
+                </div>
+                <span class="adc-subtext" id="descAdcValvePurge">Напряжение в цепи управления (0 ... 14.8 В)</span>
+              </div>
+              <div class="adc-val-wrap">
+                <span class="adc-number" id="adcValvePurge">0.000 В</span>
+                <div class="adc-mini-track" aria-hidden="true"><div class="adc-mini-fill" id="barAdcValvePurge"></div></div>
               </div>
             </div>
 
@@ -1269,6 +1330,28 @@
           </div>
         </div>
 
+        <div class="adc-ref-section">
+          <div class="adc-ref-title">Нагреватели ДК1 / ДК2 и клапан КПА</div>
+          <div class="adc-ref-table">
+            <div class="adc-ref-row">
+              <span class="badge-health badge-health-ok">4 ... 30 Ом</span>
+              <span><b>Нагреватель ОК:</b> Исправная спираль подогрева лямбда-зонда</span>
+            </div>
+            <div class="adc-ref-row">
+              <span class="badge-health badge-health-warn">31 ... 60 Ом</span>
+              <span><b>Высокое сопр.:</b> Окисление разъёма или деградация нагревателя</span>
+            </div>
+            <div class="adc-ref-row">
+              <span class="badge-health badge-health-danger">&gt; 60 Ом / &lt; 4 Ом</span>
+              <span><b>Обрыв или КЗ:</b> Неисправность цепи нагревателя ДК</span>
+            </div>
+            <div class="adc-ref-row">
+              <span class="badge-health badge-health-ok">0 ... 14.8 В</span>
+              <span><b>КПА норма:</b> Импульсное напряжение в цепи продувки адсорбера</span>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -1359,10 +1442,10 @@
     </div>
   </div>
 
-  <script src="elm327.js?v=55.5"></script>
-  <script src="m73.js?v=55.5"></script>
-  <script src="logger.js?v=55.5"></script>
-  <script src="dashboard-widgets.js?v=55.5"></script>
-  <script src="app.js?v=55.5"></script>
+  <script src="elm327.js?v=55.6"></script>
+  <script src="m73.js?v=55.6"></script>
+  <script src="logger.js?v=55.6"></script>
+  <script src="dashboard-widgets.js?v=55.6"></script>
+  <script src="app.js?v=55.6"></script>
 </body>
 </html>

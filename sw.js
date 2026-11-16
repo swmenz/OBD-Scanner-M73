@@ -1,5 +1,5 @@
-// Сервис-воркер для 100% оффлайн работы приложения в машине без интернета (v55.5)
-const CACHE_NAME = 'm73-diag-cache-v55.5';
+// Сервис-воркер для 100% оффлайн работы приложения в машине без интернета (v55.6)
+const CACHE_NAME = 'm73-diag-cache-v55.6';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -76,11 +76,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Открытие страницы: сначала сеть (свежая версия), но не дольше 2 секунд —
+  // Открытие страницы: сначала сеть (свежая версия), но не дольше 800 мс —
   // при слабом/отсутствующем интернете в машине сразу отдаём страницу из кэша
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetchNoCacheWithTimeout(request.url, 2000).then((networkResponse) => {
+      fetchNoCacheWithTimeout(request.url, 800).then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
           const clone = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put('./index.html', clone));
@@ -97,15 +97,22 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Скрипты, стили, иконки: сначала пробуем сеть (таймаут 1.5 с, AbortController + cache: 'no-cache'),
-  // чтобы любые обновления доставлялись сразу при перезагрузке. Если сети нет — мгновенно из кэша!
+  // Скрипты, стили, иконки: Stale-While-Revalidate — мгновенно отдаём кэш (если есть) и параллельно обновляем в фоне
   event.respondWith(
-    fetchNoCacheWithTimeout(request.url, 1500).then((networkResponse) => {
-      if (networkResponse && networkResponse.status === 200) {
-        const clone = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+    caches.match(request, { ignoreSearch: true }).then((cachedResponse) => {
+      const networkFetch = fetchNoCacheWithTimeout(request.url, 1500).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const clone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+        }
+        return networkResponse;
+      });
+
+      if (cachedResponse) {
+        event.waitUntil(networkFetch.catch(() => {}));
+        return cachedResponse;
       }
-      return networkResponse;
-    }).catch(() => caches.match(request, { ignoreSearch: true }))
+      return networkFetch;
+    })
   );
 });

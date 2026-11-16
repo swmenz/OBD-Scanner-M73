@@ -330,7 +330,7 @@ class Elm327BLE {
     
     this.rxBuffer += chunk;
 
-    if (chunk.includes('>') || this.rxBuffer.includes('>')) {
+    if (chunk.indexOf('>') !== -1) {
       if (this.commandTimeoutTimer) {
         clearTimeout(this.commandTimeoutTimer);
         this.commandTimeoutTimer = null;

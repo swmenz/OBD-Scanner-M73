@@ -11,8 +11,11 @@ class ItelmaM73Protocol {
 
     // Режим Турбо: суффикс 1, конвейерный предзапрос (Request Pipelining), чистый таймаут шины AT ST 10 (~64 мс)
     this.singleFrameSuffixSupported = null; // null = не проверено, true = '21011', false = '2101'
+    this._2101SuffixVerified = false;
     this._lastParsedProbe = null;
     this._lastFrame2101At = 0;
+    this._frame2101Bytes = new Uint8Array(80);
+    this._frame2103Bytes = new Uint8Array(32);
 
     // Кэш для объединения данных из всех параметров ЭБУ (Кадр 21 01 и 21 03)
     this.latestData = {
@@ -83,7 +86,7 @@ class ItelmaM73Protocol {
       adc: {
         volt: 0, temp: 0, maf: 0, tps: 0, o2: 0,
         airTemp: 0, o2_2: 0, o2Resist1: 0, roughRoad: 0,
-        valvePurge: 0, o2Resist2: 0
+        roughRoadG: 0, valvePurge: 0, o2Resist2: 0
       },
 
       // 10. Флаги готовности и режимов работы
@@ -143,6 +146,8 @@ class ItelmaM73Protocol {
 
     // Сброс флагов автоопределения турбо-режима
     this.singleFrameSuffixSupported = null;
+    this._2101SuffixVerified = false;
+    this._lastParsedProbe = null;
 
     this.elm.log('info', 'Открытие диагностической сессии (AT FI)...');
 
@@ -171,15 +176,15 @@ class ItelmaM73Protocol {
     // Отключаем заголовки (AT H0), чтобы ELM отдавал чистый payload без 83 F1 10 и контрольной суммы
     await this.elm.send("AT H0");
 
-    // Проверяем живой отклик тестовым запросом кадра 21 01
+    // Проверяем живой отклик и сразу активируем турбо-суффикс 21011 до старта конвейера
     this.elm.log('info', 'Тестовый опрос кадра 21 01...');
-    const testResp = await this.elm.send("2101", 1000);
-    const cleanTest = testResp.replace(/\s+/g, '').toUpperCase();
-    if (!cleanTest.includes("6101")) {
+    const testResp = await this._sendFastRead("2101");
+    const alreadyParsed = this._lastParsedProbe && this._lastParsedProbe.cmd === "2101" && this._lastParsedProbe.raw === testResp;
+    this._lastParsedProbe = null;
+    if (!alreadyParsed && !this.parseFrame2101(testResp)) {
       throw new Error("ЭБУ открыл сессию, но не отдает кадр 21 01: " + testResp);
     }
 
-    this.parseFrame2101(testResp);
     this._lastFrame2101At = Date.now();
     this.isInitialized = true;
     this.elm.log('info', '>>> СВЯЗЬ С ЭБУ ИТЭЛМА М73 УСПЕШНО УСТАНОВЛЕНА И ПРОВЕРЕНА! <<<');
@@ -234,6 +239,9 @@ class ItelmaM73Protocol {
             : Boolean(this.parseFrame2103(probeResp));
           if (idx !== -1 && (cleanProbe.length - idx) >= minHexLen && parsedOk) {
             this.singleFrameSuffixSupported = true;
+            if (baseCmd === "2101") {
+              this._2101SuffixVerified = true;
+            }
             this._lastParsedProbe = { cmd: baseCmd, raw: probeResp };
             this.elm.log('info', `Турбо-опрос активирован: адаптер поддерживает ${baseCmd}1 (закрытие кадра 0 мс)`);
             return probeResp;
@@ -264,13 +272,31 @@ class ItelmaM73Protocol {
     return this._sendFastRead(baseCmd);
   }
 
+  cleanRawHex(rawStr) {
+    return typeof rawStr === 'string' ? rawStr.replace(/[\s\r\n>]/g, '').toUpperCase() : '';
+  }
+
+  _hexToBytes(hex, startOffset, outBuf) {
+    let byteCount = 0;
+    const maxLen = outBuf.length;
+    for (let i = startOffset; i + 1 < hex.length && byteCount < maxLen; i += 2) {
+      const c1 = hex.charCodeAt(i);
+      const c2 = hex.charCodeAt(i + 1);
+      const n1 = (c1 >= 48 && c1 <= 57) ? (c1 - 48) : ((c1 >= 65 && c1 <= 70) ? (c1 - 55) : -1);
+      const n2 = (c2 >= 48 && c2 <= 57) ? (c2 - 48) : ((c2 >= 65 && c2 <= 70) ? (c2 - 55) : -1);
+      if (n1 === -1 || n2 === -1) return -1;
+      outBuf[byteCount++] = (n1 << 4) | n2;
+    }
+    return byteCount;
+  }
+
   /**
-   * Быстрая проверка валидности сырого ответа кадра перед запуском конвейерного предзапроса (Request Pipelining v55.2).
+   * Быстрая проверка валидности сырого ответа кадра перед запуском конвейерного предзапроса (Request Pipelining v55.6).
    * Гарантирует, что предзапрос следующего кадра отправляется только тогда, когда ЭБУ ответил полным валидным пакетом.
    */
-  isRawFrameValidForPipeline(target = '2101', raw = '') {
-    if (this.singleFrameSuffixSupported === null || !raw || typeof raw !== 'string') return false;
-    const clean = raw.replace(/[\s\r\n]/g, '').toUpperCase();
+  isRawFrameValidForPipeline(target = '2101', rawOrCleanHex = '') {
+    if (this.singleFrameSuffixSupported === null || !rawOrCleanHex || typeof rawOrCleanHex !== 'string') return false;
+    const clean = /[\s\r\n>a-f]/.test(rawOrCleanHex) ? this.cleanRawHex(rawOrCleanHex) : rawOrCleanHex;
     if (target === '2103') {
       const idx = clean.indexOf("6103");
       return idx !== -1 && (clean.length - idx) >= 34;
@@ -280,13 +306,13 @@ class ItelmaM73Protocol {
   }
 
   /**
-   * Разбор и фиксация полученного сырого ответа кадра (2101 / 2103) с защитой от обрезки длинного кадра суффиксом '1'.
+   * Разбор и фиксация полученного сырого ответа кадра (2101 / 2103) с защитой от отключения турбо-суффикса единичной помехой.
    */
-  async commitRawFrame(target = '2101', raw) {
+  async commitRawFrame(target = '2101', raw, preCleanedHex = null) {
     if (target === '2103') {
       const alreadyParsedAdc = this._lastParsedProbe && this._lastParsedProbe.cmd === "2103" && this._lastParsedProbe.raw === raw;
       this._lastParsedProbe = null;
-      if (alreadyParsedAdc || this.parseFrame2103(raw)) {
+      if (alreadyParsedAdc || this.parseFrame2103(raw, preCleanedHex)) {
         this.latestData.timestamp = new Date();
         return this.latestData;
       }
@@ -297,9 +323,10 @@ class ItelmaM73Protocol {
     let raw1 = raw;
     const alreadyParsed2101 = this._lastParsedProbe && this._lastParsedProbe.cmd === "2101" && this._lastParsedProbe.raw === raw1;
     this._lastParsedProbe = null;
-    if (!alreadyParsed2101 && !this.parseFrame2101(raw1)) {
-      // Если суффикс '1' был активирован на коротком кадре 2103, но обрезал длинный 74-байтный кадр 2101
-      if (this.singleFrameSuffixSupported && raw1 && raw1.replace(/\s+/g, '').toUpperCase().includes("6101")) {
+    if (!alreadyParsed2101 && !this.parseFrame2101(raw1, preCleanedHex)) {
+      // Если суффикс '1' был активирован на коротком кадре 2103, но полный 21011 ещё не подтверждён — откатываемся на 2101
+      const clean1 = preCleanedHex || this.cleanRawHex(raw1);
+      if (this.singleFrameSuffixSupported && !this._2101SuffixVerified && clean1.includes("6101")) {
         this.singleFrameSuffixSupported = false;
         this.elm.log('info', 'Суффикс 1 обрезал длинный кадр 2101, переключение на стандартный 2101');
         raw1 = await this.elm.send("2101", 1200);
@@ -309,6 +336,9 @@ class ItelmaM73Protocol {
       }
     }
 
+    if (this.singleFrameSuffixSupported) {
+      this._2101SuffixVerified = true;
+    }
     this.latestData.timestamp = new Date();
     this._lastFrame2101At = Date.now();
     return this.latestData;
@@ -333,20 +363,17 @@ class ItelmaM73Protocol {
    * Разбор Кадра 1 (21 01, ответ 61 01) — Полная карта всех 72 параметров М73
    * Выверена до последнего бита по эталонам ReadLogs 3.3.5.1 и OpenDiag Mobile (hk.java)
    */
-  parseFrame2101(rawStr) {
-    const hex = rawStr.replace(/[\s\r\n]/g, '').toUpperCase();
+  parseFrame2101(rawStr, preCleanedHex = null) {
+    const hex = preCleanedHex || this.cleanRawHex(rawStr);
     const idx = hex.indexOf("6101");
     if (idx === -1) return null;
 
-    const payloadHex = hex.substring(idx + 4);
-    const bytes = [];
-    for (let i = 0; i < payloadHex.length - 1; i += 2) {
-      bytes.push(parseInt(payloadHex.substr(i, 2), 16));
-    }
-    if (bytes.length < 64 || bytes.some(Number.isNaN)) return null;
+    const bytes = this._frame2101Bytes;
+    const byteLen = this._hexToBytes(hex, idx + 4, bytes);
+    if (byteLen < 64) return null;
 
-    const u8 = (i) => bytes[i] !== undefined ? bytes[i] : 0;
-    const u16 = (i) => (bytes[i] !== undefined && bytes[i + 1] !== undefined) ? ((bytes[i] << 8) | bytes[i + 1]) : 0;
+    const u8 = (i) => i < byteLen ? bytes[i] : 0;
+    const u16 = (i) => (i + 1 < byteLen) ? ((bytes[i] << 8) | bytes[i + 1]) : 0;
     const s8 = (i) => {
       const v = u8(i);
       return v > 127 ? v - 256 : v;
@@ -495,17 +522,17 @@ class ItelmaM73Protocol {
     };
 
     // 65: Обороты двигателя на холостом ходу (об/мин)
-    const idleRpm = bytes.length >= 66 ? u8(65) * 10 : idleTarget;
+    const idleRpm = byteLen >= 66 ? u8(65) * 10 : idleTarget;
     // 66: Сигнал датчика кислорода ДК2 после нейтрализатора (В)
-    const o2Volt2 = bytes.length >= 67 ? r3(u8(66) / 192.0 - 0.2) : 0.0;
+    const o2Volt2 = byteLen >= 67 ? r3(u8(66) / 192.0 - 0.2) : 0.0;
     // 67: Период сигнала ДК1 до нейтрализатора (с)
-    const o2Period = bytes.length >= 68 ? r2(u8(67) / 25.0) : 0.0;
+    const o2Period = byteLen >= 68 ? r2(u8(67) / 25.0) : 0.0;
     // 68: Интегральная часть задержки ОС по второму датчику (с)
-    const o2_2_integralDelay = bytes.length >= 69 ? r2(s8(68) / 100.0) : 0.0;
+    const o2_2_integralDelay = byteLen >= 69 ? r2(s8(68) / 100.0) : 0.0;
     // 69: Корректированное среднее значение амплитуды ДК2 (-)
-    const o2_2_amplitude = bytes.length >= 70 ? r3(s8(69) / 256.0) : 0.0;
+    const o2_2_amplitude = byteLen >= 70 ? r3(s8(69) / 256.0) : 0.0;
     // 70-71: Сигнал датчика неровной дороги ДНД (ускорение в g)
-    const roughRoad = bytes.length >= 72 ? r3((u16(70) * 6.25 / 32768.0) - 6.25) : 0.0;
+    const roughRoad = byteLen >= 72 ? r3((u16(70) * 6.25 / 32768.0) - 6.25) : 0.0;
 
     // Расчетные величины (физика мотора Приоры ВАЗ 21126 16V)
     const cycleAir = (rpm > 100 && maf > 0) ? r1((maf * 8333.33) / rpm) : 0.0;
@@ -573,21 +600,18 @@ class ItelmaM73Protocol {
    * Разбор Кадра АЦП (в М73 это 21 03, ответ 61 03)
    * Точная калибровка каналов из OpenDiag Mobile (hk.java, метод E1)
    */
-  parseFrame2103(rawStr) {
-    const hex = rawStr.replace(/[\s\r\n]/g, '').toUpperCase();
+  parseFrame2103(rawStr, preCleanedHex = null) {
+    const hex = preCleanedHex || this.cleanRawHex(rawStr);
     const idx = hex.indexOf("6103");
     if (idx === -1) return null;
 
     // Срез байтов, начиная с заголовка 61 03 (байт 0 = 0x61, байт 1 = 0x03)
-    const frameHex = hex.substring(idx);
-    const bytes = [];
-    for (let i = 0; i < frameHex.length - 1; i += 2) {
-      bytes.push(parseInt(frameHex.substr(i, 2), 16));
-    }
-    if (bytes.length < 17 || bytes.some(Number.isNaN)) return null;
+    const bytes = this._frame2103Bytes;
+    const byteLen = this._hexToBytes(hex, idx, bytes);
+    if (byteLen < 17) return null;
 
-    const u8 = (i) => bytes[i] !== undefined ? bytes[i] : 0;
-    const u16 = (i) => (bytes[i] !== undefined && bytes[i + 1] !== undefined) ? ((bytes[i] << 8) | bytes[i + 1]) : 0;
+    const u8 = (i) => i < byteLen ? bytes[i] : 0;
+    const u16 = (i) => (i + 1 < byteLen) ? ((bytes[i] << 8) | bytes[i + 1]) : 0;
 
     // Точная карта каналов АЦП из OpenDiag Mobile (hk.java -> E1):
     // Байты 2-3 (2B, param_84): Напряжение бортовой сети (В)
@@ -612,24 +636,24 @@ class ItelmaM73Protocol {
     this.latestData.adc.o2_2 = +((u16(12) * 1.25) / 256.0).toFixed(3);
 
     // Байты 14-15 (2B, param_195): Сопротивление нагревателя ДК1 (Ом) -> raw * 2
-    if (bytes.length >= 16) {
+    if (byteLen >= 16) {
       this.latestData.adc.o2Resist1 = u16(14) * 2;
     }
 
     // Байт 16 (1B, param_196): Сигнал датчика неровной дороги ДНД
     // Напряжение АЦП (покой ~2.500 В) и ускорение в g по формуле hk.java: ((raw * 6.25) / 128.0) - 6.25
-    if (bytes.length >= 17) {
+    if (byteLen >= 17) {
       this.latestData.adc.roughRoad = +((u8(16) * 10.0) / 512.0).toFixed(3);
       this.latestData.adc.roughRoadG = +(((u8(16) * 6.25) / 128.0) - 6.25).toFixed(3);
     }
 
     // Байты 17-18 (2B, param_197): Напряжение клапана продувки адсорбера (В) -> (raw * 1.25) / 256.0
-    if (bytes.length >= 19) {
+    if (byteLen >= 19) {
       this.latestData.adc.valvePurge = +((u16(17) * 1.25) / 256.0).toFixed(3);
     }
 
     // Байты 19-20 (2B, param_198): Сопротивление нагревателя ДК2 (Ом) -> raw * 2
-    if (bytes.length >= 21) {
+    if (byteLen >= 21) {
       this.latestData.adc.o2Resist2 = u16(19) * 2;
     }
 

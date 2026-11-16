@@ -193,6 +193,8 @@ class M73Application {
     this.pollPromise = null;
     this.termBuffer = [];
     this.TERM_LIMIT = 300;
+    this._lastManualTerminalAt = 0;
+    this._terminalDirtySession = false;
 
     // Фоновая устойчивость, WakeLock и авто-реконнект
     this.wakeLockMgr = new WakeLockManager();
@@ -301,6 +303,10 @@ class M73Application {
     this.flagMil = document.getElementById('flagMil');
     this.flagO2Ready = document.getElementById('flagO2Ready');
     this.flagAc = document.getElementById('flagAc');
+    this.flagFullLoad = document.getElementById('flagFullLoad');
+    this.flagPurgeActive = document.getElementById('flagPurgeActive');
+    this.flagRoughRoad = document.getElementById('flagRoughRoad');
+    this.flagO2Loop2 = document.getElementById('flagO2Loop2');
 
     // Ошибки DTC
     this.dtcList = document.getElementById('dtcList');
@@ -316,6 +322,9 @@ class M73Application {
     this.adcO2 = document.getElementById('adcO2');
     this.adcO2_2 = document.getElementById('adcO2_2');
     this.adcVolt = document.getElementById('adcVolt');
+    this.adcO2Resist1 = document.getElementById('adcO2Resist1');
+    this.adcO2Resist2 = document.getElementById('adcO2Resist2');
+    this.adcValvePurge = document.getElementById('adcValvePurge');
 
     this.barAdcMaf = document.getElementById('barAdcMaf');
     this.barAdcThrottle = document.getElementById('barAdcThrottle');
@@ -325,6 +334,9 @@ class M73Application {
     this.barAdcO2 = document.getElementById('barAdcO2');
     this.barAdcO2_2 = document.getElementById('barAdcO2_2');
     this.barAdcVolt = document.getElementById('barAdcVolt');
+    this.barAdcO2Resist1 = document.getElementById('barAdcO2Resist1');
+    this.barAdcO2Resist2 = document.getElementById('barAdcO2Resist2');
+    this.barAdcValvePurge = document.getElementById('barAdcValvePurge');
 
     this.healthAdcMaf = document.getElementById('healthAdcMaf');
     this.healthAdcThrottle = document.getElementById('healthAdcThrottle');
@@ -334,6 +346,9 @@ class M73Application {
     this.healthAdcO2 = document.getElementById('healthAdcO2');
     this.healthAdcO2_2 = document.getElementById('healthAdcO2_2');
     this.healthAdcVolt = document.getElementById('healthAdcVolt');
+    this.healthAdcO2Resist1 = document.getElementById('healthAdcO2Resist1');
+    this.healthAdcO2Resist2 = document.getElementById('healthAdcO2Resist2');
+    this.healthAdcValvePurge = document.getElementById('healthAdcValvePurge');
 
     this.descAdcMaf = document.getElementById('descAdcMaf');
     this.descAdcThrottle = document.getElementById('descAdcThrottle');
@@ -343,6 +358,9 @@ class M73Application {
     this.descAdcO2 = document.getElementById('descAdcO2');
     this.descAdcO2_2 = document.getElementById('descAdcO2_2');
     this.descAdcVolt = document.getElementById('descAdcVolt');
+    this.descAdcO2Resist1 = document.getElementById('descAdcO2Resist1');
+    this.descAdcO2Resist2 = document.getElementById('descAdcO2Resist2');
+    this.descAdcValvePurge = document.getElementById('descAdcValvePurge');
 
     this.adcSummaryOrb = document.getElementById('adcSummaryOrb');
     this.adcSummaryText = document.getElementById('adcSummaryText');
@@ -406,24 +424,24 @@ class M73Application {
             return;
           }
         }
-        alert("Диагностика М73 — Версия v55.5\n\nОбновления:\n1) Чистый опрос главной панели: убран канал ДМРВ (АЦП) из осциллографа, поэтому на главном экране опрашивается строго кадр 21 01 без примеси 21 03\n2) Осциллограф: мёртвый канал сигнала детонации заменён на живой график отскока УОЗ (вверх от 0°); убрана лишняя плитка шума ДД\n3) Надёжность BLE и интерфейса: счётчик поколения очереди, живое питание АЦП-каналов в модалке и увеличенные зоны нажатия");
+        alert("Диагностика М73 — Версия v55.6\n\nОбновления:\n1) Ускорение опроса: зондирование 21011 при инициализации, защита турбо-суффикса от сбоя помехой, безаллокационный парсер и единый проход hex в конвейере\n2) Расширена диагностика: в АЦП добавлены цепи нагревателей ДК1/ДК2 и КПА, в виджет флагов добавлены Полная нагрузка, Продувка КПА, Блокировка ДНД и Петля ДК2\n3) Надёжность: сохранение живой карточки логгера при сбросе, восстановление после ребута адаптера, защита команд терминала и мгновенный старт PWA");
       });
     }
 
     // Интеллектуальное автоскрытие нижнего дока при отсутствии взаимодействия и скролле вниз
     this.initDockAutoHide();
 
-    // Режим скорости опроса K-Line: Постоянный Турбо + Конвейер v55.5
+    // Режим скорости опроса K-Line: Постоянный Турбо + Конвейер v55.6
     const cadencePill = document.querySelector('.cadence-pill');
     if (cadencePill) {
-      cadencePill.title = 'Частота опроса K-Line: Турбо + Конвейер v55.5';
+      cadencePill.title = 'Частота опроса K-Line: Турбо + Конвейер v55.6';
 
       cadencePill.addEventListener('click', () => {
         const suffixInfo = this.m73 && this.m73.singleFrameSuffixSupported === true
           ? "Включен (21011 / 21031, закрытие кадра 0 мс)"
           : (this.m73 && this.m73.singleFrameSuffixSupported === false ? "Отключен адаптером (стандартный 2101)" : "Определяется...");
         alert(
-          `Режим опроса: Турбо + Конвейер (Релиз v55.5)\n\n` +
+          `Режим опроса: Турбо + Конвейер (Релиз v55.6)\n\n` +
           `• Адаптивный тайминг: AT AT 2\n` +
           `• Таймаут шины: AT ST 10 (~64 мс, постоянный Турбо)\n` +
           `• Турбо-суффикс кадра: ${suffixInfo}\n` +
@@ -475,7 +493,7 @@ class M73Application {
       }
     };
 
-    // Делегированные обработчики логгера (работают всегда, без задвоения вызовов)
+    // Делегированные обработчики логгера и истории (работают всегда, включая после сброса раскладки)
     document.addEventListener('click', (e) => {
       if (e.target.closest('#btnToggleLog')) {
         this.toggleLogging();
@@ -483,6 +501,20 @@ class M73Application {
         this.logger.exportToCsv();
       } else if (e.target.closest('#btnExportXlsx')) {
         this.logger.exportToXlsx();
+      } else if (e.target.closest('#btnOpenHistory')) {
+        this.openHistoryModal();
+      } else if (e.target.closest('#btnQuickExport')) {
+        if (this.lastAutoSavedTrip) {
+          this.logger.exportToCsv(this.lastAutoSavedTrip.records, this.lastAutoSavedTrip.fileName);
+        } else {
+          this.logger.exportToCsv();
+        }
+      } else if (e.target.closest('#btnQuickExportXlsx')) {
+        if (this.lastAutoSavedTrip) {
+          this.logger.exportToXlsx(this.lastAutoSavedTrip.records, this.lastAutoSavedTrip.fileName);
+        } else {
+          this.logger.exportToXlsx();
+        }
       }
     });
 
@@ -507,9 +539,6 @@ class M73Application {
       }
     });
 
-    if (this.btnOpenHistory) {
-      this.btnOpenHistory.addEventListener('click', () => this.openHistoryModal());
-    }
     if (this.btnCloseHistory) {
       this.btnCloseHistory.addEventListener('click', () => this.closeHistoryModal());
     }
@@ -546,24 +575,6 @@ class M73Application {
       this.modalAdcReference.addEventListener('click', (e) => {
         if (e.target === this.modalAdcReference) {
           this.modalAdcReference.classList.remove('open');
-        }
-      });
-    }
-    if (this.btnQuickExport) {
-      this.btnQuickExport.addEventListener('click', () => {
-        if (this.lastAutoSavedTrip) {
-          this.logger.exportToCsv(this.lastAutoSavedTrip.records, this.lastAutoSavedTrip.fileName);
-        } else {
-          this.logger.exportToCsv();
-        }
-      });
-    }
-    if (this.btnQuickExportXlsx) {
-      this.btnQuickExportXlsx.addEventListener('click', () => {
-        if (this.lastAutoSavedTrip) {
-          this.logger.exportToXlsx(this.lastAutoSavedTrip.records, this.lastAutoSavedTrip.fileName);
-        } else {
-          this.logger.exportToXlsx();
         }
       });
     }
@@ -828,6 +839,7 @@ class M73Application {
     this.needsReconnectOnVisible = false;
     this.isActuatorBusy = false;
     this._cancelRegulatorRequested = false;
+    this._terminalDirtySession = false;
     if (this._pendingReleases) this._pendingReleases.clear();
 
     if (this.activeRegulator) {
@@ -963,7 +975,7 @@ class M73Application {
                 }
                 failures = 0;
               }
-            } else if (Date.now() - lastTesterPresent > 2000) {
+            } else if (Date.now() - (this.currentTab === 'tab-terminal' ? Math.max(lastTesterPresent, this._lastManualTerminalAt || 0) : lastTesterPresent) > 2000) {
               // Раз в 2 секунды отправляем легкий Tester Present (3E), чтобы сессия ЭБУ не закрылась по таймауту
               const alive = await this.m73.checkEcuAlive();
               if (!alive) throw new Error("Нет ответа ЭБУ на TesterPresent (3E)");
@@ -978,11 +990,9 @@ class M73Application {
             continue;
           }
 
-          // 2. Логика строго раздельного опроса (1 вкладка = 1 кадр) с конвейерным предзапросом (Request Pipelining v55.2):
+          // 2. Логика строго раздельного опроса (1 вкладка = 1 кадр) с конвейерным предзапросом (Request Pipelining v55.6):
           if (this.currentTab === 'tab-dashboard') {
             // Главная панель: опрашиваем ИСКЛЮЧИТЕЛЬНО Кадр 1 (21 01) на максимальной скорости K-Line.
-            // Как только байты текущего ответа приняты из BLE, мгновенно запускаем следующий запрос 21011,
-            // чтобы адаптер ELM327 и ЭБУ М73 общались по K-Line параллельно с парсингом, рендерингом DOM/Canvas и записью лога на CPU iPhone!
             let raw1;
             if (prefetched && prefetched.target === '2101') {
               const p = prefetched.promise;
@@ -993,19 +1003,20 @@ class M73Application {
               raw1 = await this.m73.sendRawFrame('2101');
             }
 
+            const clean1 = this.m73.cleanRawHex(raw1);
             if (
               this.isPolling &&
               this.elm.isConnected &&
               !this.isActuatorBusy &&
               this.currentTab === 'tab-dashboard' &&
-              this.m73.isRawFrameValidForPipeline('2101', raw1)
+              this.m73.isRawFrameValidForPipeline('2101', clean1)
             ) {
               const nextPromise = this.m73.sendRawFrame('2101');
               nextPromise.catch(() => {});
               prefetched = { target: '2101', promise: nextPromise };
             }
 
-            const data = await this.m73.commitRawFrame('2101', raw1);
+            const data = await this.m73.commitRawFrame('2101', raw1, clean1);
             if (data) {
               // Мгновенный микро-рендеринг с Dirty Checking (<0.3 мс) и фиксация в лог параллельно с K-Line запросом следующего кадра
               this.updateDashboardUI(data);
@@ -1026,19 +1037,20 @@ class M73Application {
               rawAdc = await this.m73.sendRawFrame('2103');
             }
 
+            const cleanAdc = this.m73.cleanRawHex(rawAdc);
             if (
               this.isPolling &&
               this.elm.isConnected &&
               !this.isActuatorBusy &&
               this.currentTab === 'tab-adc' &&
-              this.m73.isRawFrameValidForPipeline('2103', rawAdc)
+              this.m73.isRawFrameValidForPipeline('2103', cleanAdc)
             ) {
               const nextPromise = this.m73.sendRawFrame('2103');
               nextPromise.catch(() => {});
               prefetched = { target: '2103', promise: nextPromise };
             }
 
-            const dataAdc = await this.m73.commitRawFrame('2103', rawAdc);
+            const dataAdc = await this.m73.commitRawFrame('2103', rawAdc, cleanAdc);
             if (dataAdc) {
               this.updateAdcUI(dataAdc);
               const oscModalOpen = Boolean(
@@ -1097,15 +1109,22 @@ class M73Application {
           if (failures === 6) {
             try { await this.elm.send("3E", 500); } catch (e) {}
           } else if (failures >= 10 && failures % 10 === 0) {
+            let fastOk = false;
+            let fiResp = '';
             try {
               this.elm.log('info', 'Попытка автовосстановления сессии K-Line (AT FI)...');
-              const fiResp = await this.elm.send("ATFI", 2000);
+              fiResp = await this.elm.send("ATFI", 2000);
               if (this.m73.isFastInitResponseOk(fiResp)) {
                 await this.elm.send("ATH0", 1000); // Обязательно выключаем заголовки после реконнекта
-              } else {
-                this.elm.log('warn', `AT FI не восстановил сессию: ${fiResp || 'нет ответа'}`);
+                fastOk = true;
               }
             } catch (e) {}
+            if (!fastOk) {
+              try {
+                this.elm.log('warn', `AT FI не восстановил сессию (${fiResp || 'нет ответа'}), запуск полной инициализации...`);
+                await this.m73.initEcu();
+              } catch (e2) {}
+            }
           }
           await this.delay(failures < 5 ? 80 : 250);
         }
@@ -1293,12 +1312,6 @@ class M73Application {
     // Новые параметры v32
     if (data.frlLoad !== undefined) this._updateText(this.valFrlLoad, data.frlLoad.toFixed(1));
     if (data.calcLoad !== undefined) this._updateText(this.valCalcLoad, data.calcLoad.toFixed(1));
-    const isO2OscActive = !this.widgetManager || this.widgetManager.oscChannel === 'o2Volt';
-    if (data.o2Volt !== undefined && isO2OscActive) {
-      this._updateText(this.valO2Volt, data.o2Volt.toFixed(3));
-      const col = data.o2Volt >= 0.6 ? 'var(--apple-green)' : (data.o2Volt <= 0.3 ? 'var(--apple-blue)' : 'var(--text-primary)');
-      this._setStyle(this.valO2Volt, 'color', col);
-    }
     if (data.o2Volt2 !== undefined) {
       this._updateText(this.valO2Volt2, data.o2Volt2.toFixed(3));
       if (this.valO2Volt2) {
@@ -1327,6 +1340,10 @@ class M73Application {
       if (this.flagMil) this.setFlag(this.flagMil, data.flags.mil);
       if (this.flagO2Ready) this.setFlag(this.flagO2Ready, data.flags.o2Ready);
       if (this.flagAc) this.setFlag(this.flagAc, data.flags.acRequest || data.flags.acAllowed);
+      if (this.flagFullLoad) this.setFlag(this.flagFullLoad, data.flags.fullLoad);
+      if (this.flagPurgeActive) this.setFlag(this.flagPurgeActive, data.flags.purgeActive);
+      if (this.flagRoughRoad) this.setFlag(this.flagRoughRoad, data.flags.roughRoadFlag);
+      if (this.flagO2Loop2) this.setFlag(this.flagO2Loop2, data.flags.o2_2_loop);
     }
 
     if (data.dtcCount !== undefined) {
@@ -1375,6 +1392,9 @@ class M73Application {
     this._updateText(this.adcO2, `${o2V.toFixed(3)} В`);
     if (o2_2V !== null) this._updateText(this.adcO2_2, `${o2_2V.toFixed(3)} В`);
     this._updateText(this.adcVolt, `${voltV.toFixed(2)} В`);
+    if (adc.o2Resist1 !== undefined && this.adcO2Resist1) this._updateText(this.adcO2Resist1, `${Math.round(Number(adc.o2Resist1))} Ом`);
+    if (adc.o2Resist2 !== undefined && this.adcO2Resist2) this._updateText(this.adcO2Resist2, `${Math.round(Number(adc.o2Resist2))} Ом`);
+    if (adc.valvePurge !== undefined && this.adcValvePurge) this._updateText(this.adcValvePurge, `${Number(adc.valvePurge).toFixed(3)} В`);
 
     // Вычисляем здоровье каждого датчика и обновляем бейджи со сводкой
     this.evaluateAdcHealth(data);
@@ -1571,6 +1591,42 @@ class M73Application {
         setBadge(this.healthAdcRoughRoad, this.descAdcRoughRoad, 'info', 'Динамика дороги', 'Акселерометр фиксирует ускорения и вибрации подвески', this.barAdcRoughRoad, roughRatio);
       } else {
         setBadge(this.healthAdcRoughRoad, this.descAdcRoughRoad, 'danger', 'Ошибка ДНД', 'Выход опорного напряжения за физический предел датчика', this.barAdcRoughRoad, roughRatio);
+      }
+    }
+
+    // 9–10. Нагреватели ДК1 и ДК2 (Сопротивление спирали, Ом)
+    const evalHeaterResist = (rawVal, badgeEl, descEl, barEl, label) => {
+      if (rawVal === undefined || rawVal === null) {
+        setBadge(badgeEl, descEl, 'neutral', 'Нет данных', `Канал ${label} не передан в ответе ЭБУ`, barEl, 0);
+        return;
+      }
+      const ohm = Number(rawVal);
+      const ratio = Math.min(1, ohm / 60);
+      if (ohm >= 4 && ohm <= 30) {
+        setBadge(badgeEl, descEl, 'ok', 'Норма', `Сопротивление нагревателя ${label} в норме (4 ... 30 Ом)`, barEl, ratio);
+      } else if (ohm > 30 && ohm <= 60) {
+        setBadge(badgeEl, descEl, 'warn', 'Высокое сопр.', `Повышенное сопротивление ${label} (>30 Ом). Проверьте разъём`, barEl, ratio);
+      } else if (ohm > 60) {
+        setBadge(badgeEl, descEl, 'danger', 'Обрыв цепи', `Сопротивление ${label} >60 Ом — обрыв цепи нагревателя`, barEl, ratio);
+      } else if (ohm > 0) {
+        setBadge(badgeEl, descEl, 'danger', 'КЗ цепи', `Сопротивление ${label} <4 Ом — короткое замыкание нагревателя`, barEl, ratio);
+      } else {
+        setBadge(badgeEl, descEl, 'warn', '0 Ом / выкл', `Нагреватель ${label} не активен или нет измерения`, barEl, 0);
+      }
+    };
+    evalHeaterResist(adc.o2Resist1, this.healthAdcO2Resist1, this.descAdcO2Resist1, this.barAdcO2Resist1, 'ДК1');
+    evalHeaterResist(adc.o2Resist2, this.healthAdcO2Resist2, this.descAdcO2Resist2, this.barAdcO2Resist2, 'ДК2');
+
+    // 11. Клапан продувки адсорбера КПА (В)
+    if (adc.valvePurge === undefined || adc.valvePurge === null) {
+      setBadge(this.healthAdcValvePurge, this.descAdcValvePurge, 'neutral', 'Нет данных', 'Канал КПА не передан в ответе ЭБУ', this.barAdcValvePurge, 0);
+    } else {
+      const vpV = Number(adc.valvePurge);
+      const vpRatio = Math.min(1, Math.max(0, vpV / 15.0));
+      if (vpV >= 0 && vpV <= 14.8) {
+        setBadge(this.healthAdcValvePurge, this.descAdcValvePurge, 'ok', 'Цепь исправна', 'Напряжение в цепи клапана продувки адсорбера в норме', this.barAdcValvePurge, vpRatio);
+      } else {
+        setBadge(this.healthAdcValvePurge, this.descAdcValvePurge, 'danger', 'Перенапряжение', 'Напряжение >14.8 В в цепи клапана продувки адсорбера', this.barAdcValvePurge, vpRatio);
       }
     }
 
@@ -2181,6 +2237,16 @@ class M73Application {
         this._cancelRegulatorRequested = true;
       }
     }
+    if (prevTab === 'tab-terminal' && tabId !== 'tab-terminal' && this._terminalDirtySession && this.elm.isConnected) {
+      this._terminalDirtySession = false;
+      // Атомарно ставим восстановление параметров ELM327 в очередь перед первым кадром 2101/2103
+      Promise.all([
+        this.elm.send("AT E0", 500),
+        this.elm.send("AT S0", 500),
+        this.elm.send("AT H0", 500),
+        this.elm.send("AT SH 81 10 F1", 500)
+      ]).catch(() => {});
+    }
     this.currentTab = tabId;
     if (tabId === 'tab-adc') {
       this._o2AdcWindow = [];
@@ -2367,6 +2433,8 @@ class M73Application {
     const cmd = this.terminalInput.value.trim();
     if (!cmd) return;
     this.terminalInput.value = "";
+    this._lastManualTerminalAt = Date.now();
+    this._terminalDirtySession = true;
     try {
       await this.elm.send(cmd);
       // Ответ автоматически отобразится через callback this.elm.onLog

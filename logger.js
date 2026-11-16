@@ -283,6 +283,7 @@ class TripLogger {
     this.startTime = performance.now();
     this._lastCheckpointTime = performance.now();
     this._checkpointBusy = false;
+    this._lastSavedRecordCount = 0;
     this.isRecording = true;
     this.lastFrameTime = performance.now();
     this.hzHistory = [];
@@ -291,9 +292,13 @@ class TripLogger {
 
   async saveCheckpoint(maxRpm = 0) {
     if (this.records && this.records.length >= 2) {
+      if (this._lastSavedRecordCount === this.records.length && this.lastSavedTrip) {
+        return this.lastSavedTrip;
+      }
       try {
         const saved = await this.storage.saveTrip(this.records, maxRpm, this.currentTripId, true);
         this.lastSavedTrip = saved;
+        this._lastSavedRecordCount = this.records.length;
         return saved;
       } catch (err) {
         console.warn("Ошибка контрольной точки лога:", err);
@@ -309,6 +314,7 @@ class TripLogger {
       try {
         const saved = await this.storage.saveTrip(this.records, maxRpm, this.currentTripId, false);
         this.lastSavedTrip = saved;
+        this._lastSavedRecordCount = this.records.length;
         return saved;
       } catch (err) {
         console.warn("Ошибка автосохранения поездки:", err);
