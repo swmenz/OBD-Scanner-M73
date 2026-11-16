@@ -852,6 +852,39 @@ body {
   padding: 14px 16px;
 }
 
+.flags-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.flags-edit-btn {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--text-secondary);
+  font-size: 0.70rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.flags-edit-btn:active {
+  transform: scale(0.95);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.flags-empty-hint {
+  grid-column: 1 / -1;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  padding: 10px 6px;
+}
+
 .glass-chips-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -2270,7 +2303,8 @@ body {
 }
 
 .dashboard-grid.edit-mode .peak-badge,
-.dashboard-grid.edit-mode .gear-badge {
+.dashboard-grid.edit-mode .gear-badge,
+.dashboard-grid.edit-mode .flags-edit-btn {
   margin-right: 14px;
   transition: margin 0.18s ease;
 }
@@ -3377,6 +3411,110 @@ body {
 
 .dtc-item.dtc-item-stored {
   border-left: 3px solid var(--apple-amber);
+}
+
+/* Режим Евро-2 (АЦП) и модалка настройки флагов ЭБУ */
+.adc-mode-row {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+}
+
+.adc-row-muted {
+  opacity: 0.52;
+  transition: opacity 0.2s ease;
+}
+
+.flags-editor-section-lbl {
+  font-size: 0.70rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  margin: 10px 2px 6px;
+}
+
+.flags-editor-section-lbl:first-child {
+  margin-top: 2px;
+}
+
+.flags-editor-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 6px;
+}
+
+.flags-editor-row.is-hidden-flag {
+  opacity: 0.65;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.flags-editor-name {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #fff;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flags-editor-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.flag-ctrl-btn {
+  min-width: 34px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.flag-ctrl-btn:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+
+.flag-ctrl-btn.flag-ctrl-remove {
+  color: var(--apple-rose);
+  border-color: rgba(255, 69, 58, 0.35);
+  background: rgba(255, 69, 58, 0.12);
+}
+
+.flag-ctrl-btn.flag-ctrl-add {
+  color: var(--apple-green);
+  border-color: rgba(48, 209, 88, 0.35);
+  background: rgba(48, 209, 88, 0.12);
+  padding: 0 12px;
+  font-size: 0.76rem;
+}
+
+.flags-modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
 }
 
 /* Адаптация ширины оболочки и дока для альбомной ориентации и широких экранов */

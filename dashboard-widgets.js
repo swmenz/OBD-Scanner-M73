@@ -234,6 +234,26 @@ class DashboardWidgetManager {
       { id: 'extra-time-reset', title: 'Время с момента сброса', unit: 'мин', field: 'timeSinceReset', category: 'main', decimals: 0 },
       { id: 'extra-time-reset-hours', title: 'Время сброса ЭБУ (ч)', unit: 'ч', field: 'timeSinceResetHours', category: 'main', decimals: 1 }
     ];
+
+    this.flagsStorageKey = 'priora_m73_flags_layout_v1';
+    this.flagsModal = null;
+    this.flagsCatalog = [
+      { id: 'flagIdle', label: 'Холостой ход' },
+      { id: 'flagLambda', label: 'Лямбда-петля' },
+      { id: 'flagKnock', label: 'Контроль детонации' },
+      { id: 'flagFuelCut', label: 'Отсечка топлива' },
+      { id: 'flagPump', label: 'Бензонасос' },
+      { id: 'flagFan1', label: 'Вентилятор 1' },
+      { id: 'flagFan2', label: 'Вентилятор 2' },
+      { id: 'flagMil', label: 'Check Engine', alert: true },
+      { id: 'flagO2Ready', label: 'Готовность ДК1' },
+      { id: 'flagAc', label: 'Кондиционер' },
+      { id: 'flagFullLoad', label: 'Полная нагрузка' },
+      { id: 'flagPurgeActive', label: 'Продувка КПА' },
+      { id: 'flagRoughRoad', label: 'Блокировка ДНД' },
+      { id: 'flagO2Loop2', label: 'Петля ДК2' }
+    ];
+    this.flagsLayout = this._loadFlagsLayout();
   }
 
   init() {
@@ -268,6 +288,9 @@ class DashboardWidgetManager {
 
     // Загрузка сохранённого порядка и размеров из LocalStorage
     this._loadSavedLayout();
+
+    // Применение пользовательского порядка и состава флагов ЭБУ
+    this.applyFlagsLayout();
 
     // Привязка событий взаимодействия
     this._bindEvents();
@@ -374,6 +397,9 @@ class DashboardWidgetManager {
 
     // Touch Drag & Drop перетаскивание на iPhone с задержкой 0.5с и прямым обменом
     this._bindTouchDrag();
+
+    // Настройка порядка и состава флагов ЭБУ
+    this._bindFlagsModalEvents();
   }
 
   _bindLongPress() {
@@ -493,7 +519,7 @@ class DashboardWidgetManager {
     this.container.addEventListener('touchstart', (e) => {
       if (!this.isEditMode) return;
       const widget = e.target.closest('.dashboard-widget');
-      if (!widget || e.target.closest('.widget-action-btn')) return;
+      if (!widget || e.target.closest('.widget-action-btn, .flags-edit-btn')) return;
 
       cleanupDrag();
 
@@ -893,9 +919,16 @@ class DashboardWidgetManager {
       setTimeout(() => this.drawOscilloscope(), 50);
     }
 
+    if (item.id === 'ecu-flags') {
+      this.applyFlagsLayout(true);
+    }
+
     // Повторно инициализируем кэшированные элементы в приложении
     if (!skipSave && this.app && typeof this.app.initElements === 'function') {
       this.app.initElements();
+      if (item.id === 'ecu-flags' && this.app.m73 && this.app.m73.latestData && (this.app.elm.isConnected || this.app.m73._lastFrame2101At > 0)) {
+        this.app.updateDashboardUI(this.app.m73.latestData);
+      }
     }
 
     // Плавная прокрутка к добавленному виджету только если галерея закрыта
@@ -1152,6 +1185,7 @@ class DashboardWidgetManager {
     this.o2Ctx = this.o2Canvas ? this.o2Canvas.getContext('2d') : null;
     this._bindOscWidgetEvents(this.container);
     this._updateOscUIElements();
+    this.applyFlagsLayout(true);
 
     if (this.app && typeof this.app.initElements === 'function') {
       this.app.initElements();
@@ -1768,6 +1802,287 @@ class DashboardWidgetManager {
         }
       }
     }
+  }
+
+  // ================== НАСТРОЙКА ФЛАГОВ СОСТОЯНИЯ ЭБУ ==================
+  _defaultFlagsLayout() {
+    return this.flagsCatalog.map(f => ({ id: f.id, enabled: true }));
+  }
+
+  _normalizeFlagsLayout(rawList) {
+    const knownMap = new Map(this.flagsCatalog.map(f => [f.id, f]));
+    const seen = new Set();
+    const enabled = [];
+    const disabled = [];
+
+    if (Array.isArray(rawList)) {
+      rawList.forEach(item => {
+        if (!item || typeof item.id !== 'string' || !knownMap.has(item.id) || seen.has(item.id)) return;
+        seen.add(item.id);
+        const entry = { id: item.id, enabled: item.enabled !== false };
+        if (entry.enabled) enabled.push(entry);
+        else disabled.push(entry);
+      });
+    }
+
+    // Новые флаги из будущих версий автоматически попадают в активный список
+    this.flagsCatalog.forEach(f => {
+      if (!seen.has(f.id)) {
+        enabled.push({ id: f.id, enabled: true });
+      }
+    });
+
+    return [...enabled, ...disabled];
+  }
+
+  _loadFlagsLayout() {
+    try {
+      const raw = localStorage.getItem(this.flagsStorageKey);
+      if (raw) {
+        return this._normalizeFlagsLayout(JSON.parse(raw));
+      }
+    } catch (e) {}
+    return this._defaultFlagsLayout();
+  }
+
+  _saveFlagsLayout() {
+    try {
+      localStorage.setItem(this.flagsStorageKey, JSON.stringify(this.flagsLayout));
+    } catch (e) {}
+  }
+
+  applyFlagsLayout(skipAppSync = false) {
+    const grid = this.container
+      ? this.container.querySelector('.dashboard-widget[data-widget-id="ecu-flags"] .glass-chips-grid')
+      : document.querySelector('.dashboard-widget[data-widget-id="ecu-flags"] .glass-chips-grid');
+    if (!grid) return;
+
+    const catalogMap = new Map(this.flagsCatalog.map(f => [f.id, f]));
+    const enabled = this.flagsLayout.filter(x => x.enabled && catalogMap.has(x.id));
+
+    grid.innerHTML = '';
+    if (enabled.length === 0) {
+      const hint = document.createElement('div');
+      hint.className = 'flags-empty-hint';
+      hint.textContent = 'Все флаги скрыты. Нажмите «Настроить», чтобы вернуть нужные.';
+      grid.appendChild(hint);
+    } else {
+      const frag = document.createDocumentFragment();
+      enabled.forEach(item => {
+        const meta = catalogMap.get(item.id);
+        const chip = document.createElement('div');
+        chip.className = meta.alert ? 'glass-chip chip-alert' : 'glass-chip';
+        chip.id = meta.id;
+        const dot = document.createElement('span');
+        dot.className = 'chip-beacon';
+        const lbl = document.createElement('span');
+        lbl.textContent = meta.label;
+        chip.appendChild(dot);
+        chip.appendChild(lbl);
+        frag.appendChild(chip);
+      });
+      grid.appendChild(frag);
+    }
+
+    if (!skipAppSync && this.app && typeof this.app.initElements === 'function') {
+      this.app.initElements();
+      if (this.app.m73 && this.app.m73.latestData && (this.app.elm.isConnected || this.app.m73._lastFrame2101At > 0)) {
+        this.app.updateDashboardUI(this.app.m73.latestData);
+      }
+    }
+  }
+
+  _bindFlagsModalEvents() {
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#btnEditFlags')) {
+        e.stopPropagation();
+        this.openFlagsModal();
+        return;
+      }
+
+      if (e.target.closest('#btnCloseFlagsModal, #btnDoneFlagsModal')) {
+        this.closeFlagsModal();
+        return;
+      }
+
+      if (e.target.closest('#btnResetFlagsLayout')) {
+        this.resetFlagsLayout();
+        return;
+      }
+
+      const flagBtn = e.target.closest('#flagsEditorList .flag-ctrl-btn');
+      if (flagBtn) {
+        const action = flagBtn.dataset.action;
+        const flagId = flagBtn.dataset.flagId;
+        if (!flagId) return;
+        if (action === 'up') this._moveFlag(flagId, -1);
+        else if (action === 'down') this._moveFlag(flagId, 1);
+        else if (action === 'remove') this._setFlagEnabled(flagId, false);
+        else if (action === 'add') this._setFlagEnabled(flagId, true);
+        return;
+      }
+    });
+
+    // Прямой обработчик на подложке: iOS Safari не всплывает click от некликабельных div до document
+    const modalEl = document.getElementById('modalFlagsEditor');
+    if (modalEl) {
+      this.flagsModal = modalEl;
+      modalEl.addEventListener('click', (e) => {
+        if (e.target === modalEl) this.closeFlagsModal();
+      });
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const modal = document.getElementById('modalFlagsEditor');
+        if (modal && modal.classList.contains('open')) {
+          this.closeFlagsModal();
+        }
+      }
+    });
+  }
+
+  openFlagsModal() {
+    if (!this.flagsModal) {
+      this.flagsModal = document.getElementById('modalFlagsEditor');
+    }
+    if (!this.flagsModal) return;
+
+    this._renderFlagsEditor();
+    this.flagsModal.classList.add('open');
+  }
+
+  closeFlagsModal() {
+    if (!this.flagsModal) {
+      this.flagsModal = document.getElementById('modalFlagsEditor');
+    }
+    if (!this.flagsModal) return;
+
+    this.flagsModal.classList.remove('open');
+  }
+
+  _renderFlagsEditor() {
+    const listEl = document.getElementById('flagsEditorList');
+    if (!listEl) return;
+
+    const catalogMap = new Map(this.flagsCatalog.map(f => [f.id, f]));
+    const enabled = this.flagsLayout.filter(x => x.enabled && catalogMap.has(x.id));
+    const disabled = this.flagsLayout.filter(x => !x.enabled && catalogMap.has(x.id));
+
+    listEl.innerHTML = '';
+    const frag = document.createDocumentFragment();
+
+    const makeCtrlBtn = (action, flagId, text, title, extraClass = '', isDisabled = false) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = extraClass ? `flag-ctrl-btn ${extraClass}` : 'flag-ctrl-btn';
+      btn.dataset.action = action;
+      btn.dataset.flagId = flagId;
+      btn.textContent = text;
+      btn.title = title;
+      if (isDisabled) btn.disabled = true;
+      return btn;
+    };
+
+    const activeTitle = document.createElement('div');
+    activeTitle.className = 'flags-editor-section-lbl';
+    activeTitle.textContent = `Отображаемые флаги (${enabled.length})`;
+    frag.appendChild(activeTitle);
+
+    if (enabled.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'flags-empty-hint';
+      empty.textContent = 'Нет активных флагов. Верните нужные из списка ниже.';
+      frag.appendChild(empty);
+    } else {
+      enabled.forEach((item, idx) => {
+        const meta = catalogMap.get(item.id);
+        const row = document.createElement('div');
+        row.className = 'flags-editor-row';
+
+        const name = document.createElement('span');
+        name.className = 'flags-editor-name';
+        name.textContent = meta.label;
+
+        const controls = document.createElement('div');
+        controls.className = 'flags-editor-controls';
+        controls.appendChild(makeCtrlBtn('up', item.id, '↑', 'Поднять выше', '', idx === 0));
+        controls.appendChild(makeCtrlBtn('down', item.id, '↓', 'Опустить ниже', '', idx === enabled.length - 1));
+        controls.appendChild(makeCtrlBtn('remove', item.id, '✕', 'Удалить с панели', 'flag-ctrl-remove', false));
+
+        row.appendChild(name);
+        row.appendChild(controls);
+        frag.appendChild(row);
+      });
+    }
+
+    if (disabled.length > 0) {
+      const hiddenTitle = document.createElement('div');
+      hiddenTitle.className = 'flags-editor-section-lbl';
+      hiddenTitle.textContent = `Скрытые (${disabled.length})`;
+      frag.appendChild(hiddenTitle);
+
+      disabled.forEach(item => {
+        const meta = catalogMap.get(item.id);
+        const row = document.createElement('div');
+        row.className = 'flags-editor-row is-hidden-flag';
+
+        const name = document.createElement('span');
+        name.className = 'flags-editor-name';
+        name.textContent = meta.label;
+
+        const controls = document.createElement('div');
+        controls.className = 'flags-editor-controls';
+        controls.appendChild(makeCtrlBtn('add', item.id, '＋', 'Вернуть на панель', 'flag-ctrl-add', false));
+
+        row.appendChild(name);
+        row.appendChild(controls);
+        frag.appendChild(row);
+      });
+    }
+
+    listEl.appendChild(frag);
+  }
+
+  _moveFlag(flagId, delta) {
+    const enabled = this.flagsLayout.filter(x => x.enabled);
+    const disabled = this.flagsLayout.filter(x => !x.enabled);
+    const idx = enabled.findIndex(x => x.id === flagId);
+    const targetIdx = idx + delta;
+    if (idx === -1 || targetIdx < 0 || targetIdx >= enabled.length) return;
+
+    [enabled[idx], enabled[targetIdx]] = [enabled[targetIdx], enabled[idx]];
+    this.flagsLayout = [...enabled, ...disabled];
+    this._saveFlagsLayout();
+    this.applyFlagsLayout();
+    this._renderFlagsEditor();
+    if (navigator.vibrate) navigator.vibrate(10);
+  }
+
+  _setFlagEnabled(flagId, enabledState) {
+    const target = this.flagsLayout.find(x => x.id === flagId);
+    if (!target) return;
+
+    const enabled = this.flagsLayout.filter(x => x.enabled && x.id !== flagId);
+    const disabled = this.flagsLayout.filter(x => !x.enabled && x.id !== flagId);
+    const nextItem = { id: flagId, enabled: Boolean(enabledState) };
+
+    if (nextItem.enabled) enabled.push(nextItem);
+    else disabled.push(nextItem);
+
+    this.flagsLayout = [...enabled, ...disabled];
+    this._saveFlagsLayout();
+    this.applyFlagsLayout();
+    this._renderFlagsEditor();
+    if (navigator.vibrate) navigator.vibrate(15);
+  }
+
+  resetFlagsLayout() {
+    this.flagsLayout = this._defaultFlagsLayout();
+    this._saveFlagsLayout();
+    this.applyFlagsLayout();
+    this._renderFlagsEditor();
+    if (navigator.vibrate) navigator.vibrate(25);
   }
 }
 

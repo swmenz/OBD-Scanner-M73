@@ -217,6 +217,8 @@ class M73Application {
     };
     this.lastAutoSavedTrip = null;
     this._o2AdcWindow = [];
+    this.isEuro2Mode = false;
+    this._hasAdcFrame = false;
 
     this.initElements();
     this.bindEvents();
@@ -362,6 +364,10 @@ class M73Application {
     this.descAdcO2Resist2 = document.getElementById('descAdcO2Resist2');
     this.descAdcValvePurge = document.getElementById('descAdcValvePurge');
 
+    this.chkEuro2Mode = document.getElementById('chkEuro2Mode');
+    this.rowAdcO2_2 = document.getElementById('rowAdcO2_2');
+    this.rowAdcO2Resist2 = document.getElementById('rowAdcO2Resist2');
+
     this.adcSummaryOrb = document.getElementById('adcSummaryOrb');
     this.adcSummaryText = document.getElementById('adcSummaryText');
     this.adcCountOk = document.getElementById('adcCountOk');
@@ -424,24 +430,24 @@ class M73Application {
             return;
           }
         }
-        alert("Диагностика М73 — Версия v55.6\n\nОбновления:\n1) Ускорение опроса: зондирование 21011 при инициализации, защита турбо-суффикса от сбоя помехой, безаллокационный парсер и единый проход hex в конвейере\n2) Расширена диагностика: в АЦП добавлены цепи нагревателей ДК1/ДК2 и КПА, в виджет флагов добавлены Полная нагрузка, Продувка КПА, Блокировка ДНД и Петля ДК2\n3) Надёжность: сохранение живой карточки логгера при сбросе, восстановление после ребута адаптера, защита команд терминала и мгновенный старт PWA");
+        alert("Диагностика М73 — Версия v55.7\n\nОбновления:\n1) Сверка с реальным логом OpenDiag М73 Е3: строгий контроль длины кадра 21 01 (72 байта / 148 символов) и эталонные формулы дросселя (/ 255), мощности (maf / 3.49) и момента (× 7016)\n2) Протокол KWP2000: штатное закрытие сессии командой 82 (StopCommunication) при отключении\n3) Режим Евро-2 во вкладке АЦП (исключение ДК2 и его нагревателя) + настройка порядка и скрытие флагов ЭБУ");
       });
     }
 
     // Интеллектуальное автоскрытие нижнего дока при отсутствии взаимодействия и скролле вниз
     this.initDockAutoHide();
 
-    // Режим скорости опроса K-Line: Постоянный Турбо + Конвейер v55.6
+    // Режим скорости опроса K-Line: Постоянный Турбо + Конвейер v55.7
     const cadencePill = document.querySelector('.cadence-pill');
     if (cadencePill) {
-      cadencePill.title = 'Частота опроса K-Line: Турбо + Конвейер v55.6';
+      cadencePill.title = 'Частота опроса K-Line: Турбо + Конвейер v55.7';
 
       cadencePill.addEventListener('click', () => {
         const suffixInfo = this.m73 && this.m73.singleFrameSuffixSupported === true
           ? "Включен (21011 / 21031, закрытие кадра 0 мс)"
           : (this.m73 && this.m73.singleFrameSuffixSupported === false ? "Отключен адаптером (стандартный 2101)" : "Определяется...");
         alert(
-          `Режим опроса: Турбо + Конвейер (Релиз v55.6)\n\n` +
+          `Режим опроса: Турбо + Конвейер (Релиз v55.7)\n\n` +
           `• Адаптивный тайминг: AT AT 2\n` +
           `• Таймаут шины: AT ST 10 (~64 мс, постоянный Турбо)\n` +
           `• Турбо-суффикс кадра: ${suffixInfo}\n` +
@@ -518,6 +524,17 @@ class M73Application {
       }
     });
 
+    // Режим Евро-2 (исключение ДК2 и нагревателя ДК2 из оценки АЦП)
+    try {
+      this.isEuro2Mode = localStorage.getItem('m73_euro2_mode') === 'true';
+    } catch (e) {
+      this.isEuro2Mode = false;
+    }
+    if (this.chkEuro2Mode) {
+      this.chkEuro2Mode.checked = this.isEuro2Mode;
+    }
+    this._applyEuro2ModeUI();
+
     // Автозапись и история поездок
     if (this.chkAutoRecord) {
       let savedAutoRec = null;
@@ -528,14 +545,24 @@ class M73Application {
     }
 
     document.addEventListener('change', (e) => {
-      const chk = e.target.closest('#chkAutoRecord');
-      if (chk) {
+      const chkAuto = e.target.closest('#chkAutoRecord');
+      if (chkAuto) {
         try {
-          localStorage.setItem('m73_autorecord', String(chk.checked));
+          localStorage.setItem('m73_autorecord', String(chkAuto.checked));
         } catch (err) {}
-        if (chk.checked && this.elm.isConnected && !this.logger.isRecording) {
+        if (chkAuto.checked && this.elm.isConnected && !this.logger.isRecording) {
           this.startLogging();
         }
+        return;
+      }
+
+      const chkEuro2 = e.target.closest('#chkEuro2Mode');
+      if (chkEuro2) {
+        this.isEuro2Mode = Boolean(chkEuro2.checked);
+        try {
+          localStorage.setItem('m73_euro2_mode', String(this.isEuro2Mode));
+        } catch (err) {}
+        this._applyEuro2ModeUI();
       }
     });
 
@@ -622,6 +649,9 @@ class M73Application {
       for (const id of releaseIds) {
         try { await this.m73.releaseActuatorControl(id); } catch (e) {}
       }
+      if (this.m73.isInitialized) {
+        try { await this.m73.stopSession(); } catch (e) {}
+      }
       await this.elm.disconnect();
       await this.handleDisconnectedState();
       return;
@@ -666,6 +696,8 @@ class M73Application {
       if (this.btnToggleLog) this.btnToggleLog.disabled = false;
       this.peakRpm = 0;
       this._updateText(this.valPeakRpm, "Пик: 0");
+      this._hasAdcFrame = false;
+      this._applyEuro2ModeUI();
 
       // Скрываем прошлый баннер о сохранённой поездке
       if (this.tripSavedAlert) this.tripSavedAlert.style.display = 'none';
@@ -840,6 +872,7 @@ class M73Application {
     this.isActuatorBusy = false;
     this._cancelRegulatorRequested = false;
     this._terminalDirtySession = false;
+    if (this.m73) this.m73.isInitialized = false;
     if (this._pendingReleases) this._pendingReleases.clear();
 
     if (this.activeRegulator) {
@@ -1215,7 +1248,7 @@ class M73Application {
 
     // Скорость и передача
     this._updateText(this.valSpeed, data.speed);
-    this._updateText(this.valThrottleSub, `${data.throttle}%`);
+    this._updateText(this.valThrottleSub, `${data.throttle.toFixed(1)}%`);
     const gear = this.estimateGear(data.rpm, data.speed);
     this._updateText(this.valGearAux, `КПП: ${gear}`);
 
@@ -1397,6 +1430,7 @@ class M73Application {
     if (adc.valvePurge !== undefined && this.adcValvePurge) this._updateText(this.adcValvePurge, `${Number(adc.valvePurge).toFixed(3)} В`);
 
     // Вычисляем здоровье каждого датчика и обновляем бейджи со сводкой
+    this._hasAdcFrame = true;
     this.evaluateAdcHealth(data);
   }
 
@@ -1561,7 +1595,10 @@ class M73Application {
     }
 
     // 7. ДК2 (Диагностический лямбда-зонд)
-    if (adc.o2_2 === undefined || adc.o2_2 === null) {
+    if (this.rowAdcO2_2) this.rowAdcO2_2.classList.toggle('adc-row-muted', this.isEuro2Mode);
+    if (this.isEuro2Mode) {
+      setBadge(this.healthAdcO2_2, this.descAdcO2_2, 'neutral', 'Откл. (Евро-2)', 'Исключён из оценки (режим Евро-2 без катализатора)', this.barAdcO2_2, 0);
+    } else if (adc.o2_2 === undefined || adc.o2_2 === null) {
       setBadge(this.healthAdcO2_2, this.descAdcO2_2, 'neutral', 'Нет данных', 'Канал ДК2 не передан в ответе ЭБУ', this.barAdcO2_2, 0);
     } else {
       const o2_2V = Number(adc.o2_2);
@@ -1615,7 +1652,12 @@ class M73Application {
       }
     };
     evalHeaterResist(adc.o2Resist1, this.healthAdcO2Resist1, this.descAdcO2Resist1, this.barAdcO2Resist1, 'ДК1');
-    evalHeaterResist(adc.o2Resist2, this.healthAdcO2Resist2, this.descAdcO2Resist2, this.barAdcO2Resist2, 'ДК2');
+    if (this.rowAdcO2Resist2) this.rowAdcO2Resist2.classList.toggle('adc-row-muted', this.isEuro2Mode);
+    if (this.isEuro2Mode) {
+      setBadge(this.healthAdcO2Resist2, this.descAdcO2Resist2, 'neutral', 'Откл. (Евро-2)', 'Исключён из оценки (режим Евро-2 без катализатора)', this.barAdcO2Resist2, 0);
+    } else {
+      evalHeaterResist(adc.o2Resist2, this.healthAdcO2Resist2, this.descAdcO2Resist2, this.barAdcO2Resist2, 'ДК2');
+    }
 
     // 11. Клапан продувки адсорбера КПА (В)
     if (adc.valvePurge === undefined || adc.valvePurge === null) {
@@ -1653,6 +1695,41 @@ class M73Application {
         }
         this._updateText(this.adcSummaryText, 'Все электрические цепи датчиков соответствуют норме М73');
       }
+    }
+  }
+
+  _applyEuro2ModeUI() {
+    if (this.rowAdcO2_2) this.rowAdcO2_2.classList.toggle('adc-row-muted', this.isEuro2Mode);
+    if (this.rowAdcO2Resist2) this.rowAdcO2Resist2.classList.toggle('adc-row-muted', this.isEuro2Mode);
+
+    if (this._hasAdcFrame && this.m73 && this.m73.latestData && this.m73.latestData.adc) {
+      this.evaluateAdcHealth(this.m73.latestData);
+      return;
+    }
+
+    const setPending = (badgeEl, descEl, barEl, badgeText, descText) => {
+      if (badgeEl) {
+        badgeEl.className = 'badge-health badge-health-neutral';
+        const html = `<span class="badge-dot"></span>${badgeText}`;
+        if (badgeEl._lastHtml !== html) {
+          badgeEl._lastHtml = html;
+          badgeEl.innerHTML = html;
+        }
+      }
+      if (descEl) this._updateText(descEl, descText);
+      if (barEl) {
+        this._setStyle(barEl, 'transform', 'scaleX(0.000)');
+        if (barEl.className !== 'adc-mini-fill fill-info') barEl.className = 'adc-mini-fill fill-info';
+      }
+    };
+
+    if (this.isEuro2Mode) {
+      const msg = 'Исключён из оценки (режим Евро-2 без катализатора)';
+      setPending(this.healthAdcO2_2, this.descAdcO2_2, this.barAdcO2_2, 'Откл. (Евро-2)', msg);
+      setPending(this.healthAdcO2Resist2, this.descAdcO2Resist2, this.barAdcO2Resist2, 'Откл. (Евро-2)', msg);
+    } else {
+      setPending(this.healthAdcO2_2, this.descAdcO2_2, this.barAdcO2_2, 'Ожидание', 'Контроль катализатора (0.55 ... 0.78 В)');
+      setPending(this.healthAdcO2Resist2, this.descAdcO2Resist2, this.barAdcO2Resist2, 'Ожидание', 'Сопротивление спирали подогрева (норма: 4 ... 30 Ом)');
     }
   }
 

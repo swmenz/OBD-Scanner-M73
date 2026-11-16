@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" href="icon-192.png">
   <title>Диагностика М73 — Лада Приора</title>
   
-  <link rel="stylesheet" href="styles.css?v=55.6">
+  <link rel="stylesheet" href="styles.css?v=55.7">
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
@@ -24,7 +24,7 @@
     <header class="glass-navbar">
       <div class="navbar-brand">
         <span class="status-pulse" id="connIndicator"></span>
-        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v55.6</span></div>
+        <div class="brand-title-row"><h1 class="brand-name">М73</h1><span class="app-version-badge" id="appVersionBadge">v55.7</span></div>
         <span class="status-text" id="connStateText">Не подключено</span>
       </div>
 
@@ -410,7 +410,10 @@
           <!-- Виджет 26: Флаги и режимы ЭБУ -->
           <div class="dashboard-widget widget-wide" data-widget-id="ecu-flags" data-title="Флаги и режимы ЭБУ">
             <div class="glass-card flags-container">
-              <span class="micro-header">Режимы и флаги состояния</span>
+              <div class="flags-header-row">
+                <span class="micro-header">Режимы и флаги состояния</span>
+                <button id="btnEditFlags" class="flags-edit-btn" type="button" title="Порядок и состав флагов">Настроить</button>
+              </div>
               <div class="glass-chips-grid">
                 <div class="glass-chip" id="flagIdle">
                   <span class="chip-beacon"></span>
@@ -567,6 +570,14 @@
             <div class="adc-counter-chip counter-ok"><span class="counter-dot"></span><span id="adcCountOk">0</span> в норме</div>
             <div class="adc-counter-chip counter-warn"><span class="counter-dot"></span><span id="adcCountWarn">0</span> внимание</div>
             <div class="adc-counter-chip counter-danger"><span class="counter-dot"></span><span id="adcCountDanger">0</span> отказ</div>
+          </div>
+
+          <div class="adc-mode-row">
+            <label class="auto-rec-label" for="chkEuro2Mode">
+              <input type="checkbox" id="chkEuro2Mode">
+              <span class="switch-slider"></span>
+              <span class="auto-rec-text">Режим Евро-2 (не учитывать ДК2 и его нагреватель)</span>
+            </label>
           </div>
         </div>
 
@@ -1442,10 +1453,25 @@
     </div>
   </div>
 
-  <script src="elm327.js?v=55.6"></script>
-  <script src="m73.js?v=55.6"></script>
-  <script src="logger.js?v=55.6"></script>
-  <script src="dashboard-widgets.js?v=55.6"></script>
-  <script src="app.js?v=55.6"></script>
+  <!-- МОДАЛЬНОЕ ОКНО: НАСТРОЙКА ПОРЯДКА И СОСТАВА ФЛАГОВ ЭБУ -->
+  <div id="modalFlagsEditor" class="modal-backdrop">
+    <div class="glass-modal gallery-modal-sheet">
+      <div class="modal-header">
+        <div class="modal-title">Флаги и режимы ЭБУ</div>
+        <button id="btnCloseFlagsModal" class="modal-close-btn" type="button">&times;</button>
+      </div>
+      <div class="modal-body gallery-modal-body" id="flagsEditorList"></div>
+      <div class="modal-footer flags-modal-footer">
+        <button id="btnResetFlagsLayout" class="glass-btn btn-glass-secondary btn-compact" type="button">↺ По умолчанию</button>
+        <button id="btnDoneFlagsModal" class="glass-btn btn-primary-glass btn-compact" type="button">Готово</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="elm327.js?v=55.7"></script>
+  <script src="m73.js?v=55.7"></script>
+  <script src="logger.js?v=55.7"></script>
+  <script src="dashboard-widgets.js?v=55.7"></script>
+  <script src="app.js?v=55.7"></script>
 </body>
 </html>

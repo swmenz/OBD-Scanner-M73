@@ -192,6 +192,24 @@ class ItelmaM73Protocol {
   }
 
   /**
+   * Штатное закрытие диагностической сессии KWP2000 (StopCommunication 0x82 -> 0xC2)
+   */
+  async stopSession() {
+    const wasInit = this.isInitialized;
+    this.isInitialized = false;
+    if (!wasInit || !this.elm || !this.elm.isConnected) {
+      return false;
+    }
+    this.elm.log('info', 'Закрытие диагностической сессии KWP2000 (82)...');
+    try {
+      const resp = await this.elm.send("82", 400);
+      return this.cleanRawHex(resp).includes("C2");
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
    * Валидация ответа адаптера на команду Fast Init (AT FI)
    */
   isFastInitResponseOk(resp) {
@@ -233,7 +251,7 @@ class ItelmaM73Protocol {
           const cleanProbe = (probeResp || "").replace(/[\s\r\n]/g, '').toUpperCase();
           const expectedHeader = "61" + baseCmd.substring(2, 4);
           const idx = cleanProbe.indexOf(expectedHeader);
-          const minHexLen = baseCmd === "2101" ? 132 : 34;
+          const minHexLen = baseCmd === "2101" ? 148 : 34;
           const parsedOk = baseCmd === "2101"
             ? Boolean(this.parseFrame2101(probeResp))
             : Boolean(this.parseFrame2103(probeResp));
@@ -302,7 +320,7 @@ class ItelmaM73Protocol {
       return idx !== -1 && (clean.length - idx) >= 34;
     }
     const idx = clean.indexOf("6101");
-    return idx !== -1 && (clean.length - idx) >= 132;
+    return idx !== -1 && (clean.length - idx) >= 148;
   }
 
   /**
@@ -370,7 +388,7 @@ class ItelmaM73Protocol {
 
     const bytes = this._frame2101Bytes;
     const byteLen = this._hexToBytes(hex, idx + 4, bytes);
-    if (byteLen < 64) return null;
+    if (byteLen < 72) return null;
 
     const u8 = (i) => i < byteLen ? bytes[i] : 0;
     const u16 = (i) => (i + 1 < byteLen) ? ((bytes[i] << 8) | bytes[i + 1]) : 0;
@@ -399,9 +417,9 @@ class ItelmaM73Protocol {
     // 5: Скорость автомобиля (км/ч)
     const speed = Math.round(u8(5) * 1.25);
     // 6: Положение дроссельной заслонки (%)
-    const throttle = r1((u8(6) * 100.0) / 256.0);
+    const throttle = r2((u8(6) * 100.0) / 255.0);
     // 7: Обороты коленвала (шаг 40 об/мин)
-        const rpm = u8(7) * 40;
+    const rpm = u8(7) * 40;
     // 8-9: Массовый расход воздуха ДМРВ (кг/ч)
     const rawMaf = u16(8);
     let maf = r1(rawMaf / 10.0);
@@ -537,8 +555,9 @@ class ItelmaM73Protocol {
     // Расчетные величины (физика мотора Приоры ВАЗ 21126 16V)
     const cycleAir = (rpm > 100 && maf > 0) ? r1((maf * 8333.33) / rpm) : 0.0;
     const dutyCycle = (rpm > 100 && injTime > 0) ? r1(Math.min(100, Math.max(0, (injTime * rpm) / 1200))) : 0.0;
-    const enginePower = (maf > 0) ? r1(maf / 3.1) : 0.0;
-    const engineTorque = (rpm > 200 && maf > 0) ? r1((maf / 3.1) * 7120 / rpm) : 0.0;
+    const rawPower = maf / 3.49;
+    const enginePower = (maf > 0) ? r2(rawPower) : 0.0;
+    const engineTorque = (rpm > 200 && maf > 0) ? r2((rawPower * 7016.0) / rpm) : 0.0;
 
     // Запись в latestData
     this.latestData.dtcCount = dtcCount;
