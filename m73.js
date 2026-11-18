@@ -123,6 +123,10 @@ class ItelmaM73Protocol {
     };
   }
 
+  static get CORE_ELM_CMDS() {
+    return ["AT E0", "AT L0", "AT AL", "AT AT 2", "AT S0", "AT ST 10"];
+  }
+
   /**
    * Сверхбыстрая инициализация ELM327 под тайминги М73
    */
@@ -133,12 +137,9 @@ class ItelmaM73Protocol {
     await this.delay(100);
 
     // Последовательность, проверенная по реальному логу OpenDiag Mobile на этом же автомобиле
-    await this.elm.send("AT E0");
-    await this.elm.send("AT L0");
-    await this.elm.send("AT AL");     // Разрешить длинные ответы (кадр 21 01 = 74 байта)
-    await this.elm.send("AT AT 2");   // Агрессивный адаптивный тайминг (разгон)
-    await this.elm.send("AT S0");     // Пробелы выкл
-    await this.elm.send("AT ST 10");  // Чистый турбо-таймаут шины v54.6 (~64 мс, максимум скорости)
+    for (const cmd of ItelmaM73Protocol.CORE_ELM_CMDS) {
+      await this.elm.send(cmd);
+    }
     await this.elm.send("AT SH 81 10 F1");
     await this.elm.send("AT IIA 10"); // Адрес ЭБУ для Fast Init
     await this.elm.send("AT SP 5");
@@ -308,6 +309,17 @@ class ItelmaM73Protocol {
     return byteCount;
   }
 
+  _isPureHexSlice(str, start, len) {
+    const end = start + len;
+    if (end > str.length) return false;
+    for (let i = start; i < end; i++) {
+      const c = str.charCodeAt(i);
+      const isHex = (c >= 48 && c <= 57) || (c >= 65 && c <= 70);
+      if (!isHex) return false;
+    }
+    return true;
+  }
+
   /**
    * Быстрая проверка валидности сырого ответа кадра перед запуском конвейерного предзапроса (Request Pipelining v55.6).
    * Гарантирует, что предзапрос следующего кадра отправляется только тогда, когда ЭБУ ответил полным валидным пакетом.
@@ -317,10 +329,10 @@ class ItelmaM73Protocol {
     const clean = /[\s\r\n>a-f]/.test(rawOrCleanHex) ? this.cleanRawHex(rawOrCleanHex) : rawOrCleanHex;
     if (target === '2103') {
       const idx = clean.indexOf("6103");
-      return idx !== -1 && (clean.length - idx) >= 34;
+      return idx !== -1 && (clean.length - idx) >= 34 && this._isPureHexSlice(clean, idx, 34);
     }
     const idx = clean.indexOf("6101");
-    return idx !== -1 && (clean.length - idx) >= 148;
+    return idx !== -1 && (clean.length - idx) >= 148 && this._isPureHexSlice(clean, idx, 148);
   }
 
   /**

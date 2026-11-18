@@ -610,7 +610,7 @@ class DashboardWidgetManager {
     this.container.addEventListener('mousedown', (e) => {
       if (!this.isEditMode || e.button !== 0) return;
       const widget = e.target.closest('.dashboard-widget');
-      if (!widget || e.target.closest('.widget-action-btn')) return;
+      if (!widget || e.target.closest('.widget-action-btn, .flags-edit-btn')) return;
 
       mouseTarget = widget;
       mouseInitialX = e.clientX;
@@ -1547,13 +1547,17 @@ class DashboardWidgetManager {
   }
 
   drawOscilloscope() {
-    // 1. Отрисовка на плитке дашборда (только если канвас реально подключен к странице)
-    if (!this.o2Canvas || !this.o2Canvas.isConnected) {
-      this.o2Canvas = document.getElementById('canvasO2');
-      if (this.o2Canvas) this.o2Ctx = this.o2Canvas.getContext('2d');
-    }
-    if (this.o2Canvas && this.o2Canvas.isConnected && this.o2Ctx) {
-      this._drawCanvasWave(this.o2Canvas, this.o2Ctx, false);
+    // 1. Отрисовка на плитке дашборда (только если вкладка панели активна и канвас реально видим)
+    const dashPane = document.getElementById('tab-dashboard');
+    const isDashActive = Boolean(dashPane && dashPane.classList.contains('active'));
+    if (isDashActive) {
+      if (!this.o2Canvas || !this.o2Canvas.isConnected) {
+        this.o2Canvas = document.getElementById('canvasO2');
+        if (this.o2Canvas) this.o2Ctx = this.o2Canvas.getContext('2d');
+      }
+      if (this.o2Canvas && this.o2Canvas.isConnected && this.o2Canvas.offsetParent !== null && this.o2Ctx) {
+        this._drawCanvasWave(this.o2Canvas, this.o2Ctx, false);
+      }
     }
 
     // 2. Отрисовка в модальном окне (если открыто)

@@ -619,11 +619,13 @@ class M73Application {
 
     // Если поиск уже идёт — повторное нажатие служит кнопкой быстрой отмены!
     if (this.connecting) {
+      if (this._cancellingConnect) return;
+      this._cancellingConnect = true;
       this._connectSeq++;
       this.connecting = false;
       this.userExplicitDisconnect = true;
       this.shouldBeConnected = false;
-      this.btnConnect.disabled = false;
+      this.btnConnect.disabled = true;
       this.btnConnectText.textContent = "Подключить";
       if (this.widgetManager) this.widgetManager.stopOscLoop();
       if (!this.logger.isRecording) this.bgKeeper.stop();
@@ -631,7 +633,12 @@ class M73Application {
       this.connIndicator.className = 'status-pulse';
       this.connStateText.textContent = "Не подключено";
       this.elm.log('info', 'Поиск отменён пользователем');
-      try { await this.elm.disconnect(); } catch (e) {}
+      try {
+        await this.elm.disconnect();
+      } catch (e) {} finally {
+        this._cancellingConnect = false;
+        this.btnConnect.disabled = false;
+      }
       return;
     }
 
@@ -1148,8 +1155,14 @@ class M73Application {
               this.elm.log('info', 'Попытка автовосстановления сессии K-Line (AT FI)...');
               fiResp = await this.elm.send("ATFI", 2000);
               if (this.m73.isFastInitResponseOk(fiResp)) {
-                await this.elm.send("ATH0", 1000); // Обязательно выключаем заголовки после реконнекта
-                fastOk = true;
+                for (const cmd of ItelmaM73Protocol.CORE_ELM_CMDS) {
+                  await this.elm.send(cmd, 800);
+                }
+                await this.elm.send("ATH0", 1000);
+                const verifyRaw = await this.m73.sendRawFrame('2101');
+                if (this.m73.parseFrame2101(verifyRaw)) {
+                  fastOk = true;
+                }
               }
             } catch (e) {}
             if (!fastOk) {
@@ -1963,23 +1976,30 @@ class M73Application {
     await this.stopPolling();
 
     let clearedOk = false;
+    let pendingAlert = null;
     try {
       const ok = await this.m73.clearDtcCodes();
       if (ok) {
         clearedOk = true;
         this.updateDockDtcBadge(0);
       } else {
-        alert("Контроллер отклонил команду сброса");
+        pendingAlert = "Контроллер отклонил команду сброса";
       }
     } catch (err) {
-      alert("Ошибка сброса: " + err.message);
+      pendingAlert = "Ошибка сброса: " + err.message;
     } finally {
       await this._finishBusy(prevPolling && !clearedOk);
     }
 
-    if (clearedOk && this.elm.isConnected) {
+    if (pendingAlert) {
+      alert(pendingAlert);
+    } else if (clearedOk && this.elm.isConnected) {
       await this.readDtc();
-      alert("Ошибки успешно сброшены!");
+      const titleEl = this.dtcList ? this.dtcList.querySelector('.dtc-clean-body strong') : null;
+      if (titleEl) {
+        titleEl.textContent = "Ошибки ЭБУ успешно сброшены";
+      }
+      this.elm.log('info', 'Ошибки ЭБУ успешно сброшены');
     }
   }
   adjustRegulator(key, delta) {
@@ -2029,6 +2049,7 @@ class M73Application {
     const prevPolling = this.isPolling || this.shouldBeConnected;
     await this.stopPolling();
 
+    let pendingAlert = null;
     try {
       // 2. Опрашиваем свежий кадр 21 01 и убеждаемся, что автомобиль стоит на месте
       if (!skipConfirm) {
@@ -2039,11 +2060,11 @@ class M73Application {
         } catch (e) {}
 
         if (!freshData) {
-          alert("Не удалось проверить текущую скорость автомобиля (ЭБУ не ответил на запрос 21 01). Проверьте зажигание.");
+          pendingAlert = "Не удалось проверить текущую скорость автомобиля (ЭБУ не ответил на запрос 21 01). Проверьте зажигание.";
           return;
         }
         if (freshData.speed > 0) {
-          alert("Внимание! Ручное управление уставками разрешено только на стоянке (скорость 0 км/ч). При движении автомобиля управление блокируется в целях безопасности.");
+          pendingAlert = "Внимание! Ручное управление уставками разрешено только на стоянке (скорость 0 км/ч). При движении автомобиля управление блокируется в целях безопасности.";
           return;
         }
       } else if (this.m73.latestData && this.m73.latestData.speed > 0) {
@@ -2078,9 +2099,10 @@ class M73Application {
         this._updateRegulatorUI(key, true);
       }
     } catch (err) {
-      alert("Ошибка установки параметра: " + err.message);
+      pendingAlert = "Ошибка установки параметра: " + err.message;
     } finally {
       await this._finishBusy(prevPolling);
+      if (pendingAlert) alert(pendingAlert);
     }
   }
 
@@ -2177,6 +2199,7 @@ class M73Application {
     const prevPolling = this.isPolling || this.shouldBeConnected;
     await this.stopPolling();
 
+    let pendingAlert = null;
     try {
       // Если был активен плавный регулятор — сначала отпускаем его
       if (this.activeRegulator) {
@@ -2195,7 +2218,7 @@ class M73Application {
       } catch (e) {}
 
       if (!freshData) {
-        alert("Не удалось считать текущее состояние двигателя (ЭБУ не ответил на запрос 21 01). Проверьте, включено ли зажигание.");
+        pendingAlert = "Не удалось считать текущее состояние двигателя (ЭБУ не ответил на запрос 21 01). Проверьте, включено ли зажигание.";
         return;
       }
 
@@ -2203,11 +2226,11 @@ class M73Application {
       // - Для всех тестов обязательна стоянка автомобиля (speed === 0)
       // - Для форсунок, катушек, бензонасоса, кондиционера и стартера двигатель должен быть заглушен (rpm === 0)
       if (freshData.speed > 0) {
-        alert("Внимание! Любые тесты исполнительных механизмов разрешены только на СТОЯНКЕ автомобиля (скорость 0 км/ч)!");
+        pendingAlert = "Внимание! Любые тесты исполнительных механизмов разрешены только на СТОЯНКЕ автомобиля (скорость 0 км/ч)!";
         return;
       }
       if (!allowRunning && freshData.rpm > 0) {
-        alert("Внимание! Тесты форсунок, катушек зажигания, бензонасоса, кондиционера и стартера разрешены только при ЗАГЛУШЕННОМ двигателе (0 об/мин) и включенном зажигании!\n\nНа заведённом моторе разрешены тесты Вентиляторов 1/2 и Лампы Check Engine.");
+        pendingAlert = "Внимание! Тесты форсунок, катушек зажигания, бензонасоса, кондиционера и стартера разрешены только при ЗАГЛУШЕННОМ двигателе (0 об/мин) и включенном зажигании!\n\nНа заведённом моторе разрешены тесты Вентиляторов 1/2 и Лампы Check Engine.";
         return;
       }
 
@@ -2228,7 +2251,7 @@ class M73Application {
         if (this.connStateText) this.connStateText.textContent = "Выполняется тест...";
         await this.m73.runActuatorTest(testType);
       } catch (err) {
-        alert("Ошибка выполнения теста: " + err.message);
+        pendingAlert = "Ошибка выполнения теста: " + err.message;
       } finally {
         if (btnEl) {
           btnEl.disabled = false;
@@ -2242,6 +2265,7 @@ class M73Application {
       }
     } finally {
       await this._finishBusy(prevPolling);
+      if (pendingAlert) alert(pendingAlert);
     }
   }
 
@@ -2264,6 +2288,7 @@ class M73Application {
     await this.stopPolling();
 
     let sessionEnded = false;
+    let pendingAlert = null;
     try {
       // 2. Опрашиваем актуальный статус перед сбросом (проверка заглушен ли мотор и стоит ли машина)
       let freshData = null;
@@ -2272,13 +2297,13 @@ class M73Application {
       } catch (e) {}
 
       if (!freshData) {
-        alert("Не удалось проверить состояние двигателя (нет ответа от ЭБУ). Проверьте, включено ли зажигание.");
+        pendingAlert = "Не удалось проверить состояние двигателя (нет ответа от ЭБУ). Проверьте, включено ли зажигание.";
         return;
       }
 
       // 3. Проверка условий безопасности: сброс ЭБУ разрешен ТОЛЬКО при RPM == 0 и SPEED == 0
       if (freshData.rpm > 0 || freshData.speed > 0) {
-        alert("Внимание! Сброс ЭБУ с инициализацией разрешен только на СТОЯНКЕ (скорость 0 км/ч) при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nПерезапуск контроллера при заведённом двигателе или во время движения строго запрещен.");
+        pendingAlert = "Внимание! Сброс ЭБУ с инициализацией разрешен только на СТОЯНКЕ (скорость 0 км/ч) при ЗАГЛУШЕННОМ двигателе (обороты 0) и включенном зажигании!\n\nПерезапуск контроллера при заведённом двигателе или во время движения строго запрещен.";
         return;
       }
 
@@ -2289,12 +2314,12 @@ class M73Application {
         this.userExplicitDisconnect = true;
         await this.elm.disconnect();
         await this.handleDisconnectedState();
-        alert("Сброс с инициализацией выполнен! Выключите зажигание на 10 секунд, затем включите и подключитесь заново.");
+        pendingAlert = "Сброс с инициализацией выполнен! Выключите зажигание на 10 секунд, затем включите и подключитесь заново.";
       } else {
-        alert("ЭБУ не подтвердил сброс (подробности во вкладке «Терминал»).");
+        pendingAlert = "ЭБУ не подтвердил сброс (подробности во вкладке «Терминал»).";
       }
     } catch (err) {
-      alert("Ошибка сброса: " + err.message);
+      pendingAlert = "Ошибка сброса: " + err.message;
     } finally {
       if (sessionEnded) {
         this._pendingReleases.clear();
@@ -2302,6 +2327,7 @@ class M73Application {
       } else {
         await this._finishBusy(prevPolling);
       }
+      if (pendingAlert) alert(pendingAlert);
     }
   }
 
@@ -2317,12 +2343,9 @@ class M73Application {
     if (prevTab === 'tab-terminal' && tabId !== 'tab-terminal' && this._terminalDirtySession && this.elm.isConnected) {
       this._terminalDirtySession = false;
       // Атомарно ставим восстановление параметров ELM327 в очередь перед первым кадром 2101/2103
-      Promise.all([
-        this.elm.send("AT E0", 500),
-        this.elm.send("AT S0", 500),
-        this.elm.send("AT H0", 500),
-        this.elm.send("AT SH 81 10 F1", 500)
-      ]).catch(() => {});
+      Promise.all(
+        [...ItelmaM73Protocol.CORE_ELM_CMDS, "AT H0", "AT SH 81 10 F1"].map(cmd => this.elm.send(cmd, 500))
+      ).catch(() => {});
     }
     this.currentTab = tabId;
     if (tabId === 'tab-adc') {

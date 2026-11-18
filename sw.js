@@ -1,5 +1,5 @@
-// Сервис-воркер для 100% оффлайн работы приложения в машине без интернета (v55.7.1)
-const CACHE_NAME = 'm73-diag-cache-v55.7.1';
+// Сервис-воркер для 100% оффлайн работы приложения в машине без интернета (v55.7.2)
+const CACHE_NAME = 'm73-diag-cache-v55.7.2';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -100,10 +100,14 @@ self.addEventListener('fetch', (event) => {
   // Скрипты, стили, иконки: Stale-While-Revalidate — мгновенно отдаём кэш (если есть) и параллельно обновляем в фоне
   event.respondWith(
     caches.match(request, { ignoreSearch: true }).then((cachedResponse) => {
+      const cleanUrl = new URL(request.url);
+      cleanUrl.search = '';
+      const cacheKey = cleanUrl.toString();
+
       const networkFetch = fetchNoCacheWithTimeout(request.url, 1500).then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
           const clone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          caches.open(CACHE_NAME).then((cache) => cache.put(cacheKey, clone));
         }
         return networkResponse;
       });

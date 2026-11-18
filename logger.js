@@ -87,6 +87,12 @@ class TripStorage {
     }
   }
 
+  _enqueueWrite(task) {
+    const next = this._writeQueue.catch(() => {}).then(task);
+    this._writeQueue = next.catch(() => {});
+    return next;
+  }
+
   async saveTrip(records, maxRpm = 0, existingId = null, skipPrune = false) {
     if (!records || records.length === 0) return null;
     const task = async () => {
@@ -128,8 +134,7 @@ class TripStorage {
       return trip;
     };
 
-    this._writeQueue = this._writeQueue.catch(() => {}).then(task);
-    return this._writeQueue;
+    return this._enqueueWrite(task);
   }
 
   async _pruneOldTrips(maxCount = 10) {
@@ -177,23 +182,23 @@ class TripStorage {
   }
 
   async deleteTrip(id) {
-    return this._withDb((db) => new Promise((resolve, reject) => {
+    return this._enqueueWrite(() => this._withDb((db) => new Promise((resolve, reject) => {
       const tx = db.transaction([this.storeName, this.metaStoreName], 'readwrite');
       tx.objectStore(this.storeName).delete(id);
       tx.objectStore(this.metaStoreName).delete(id);
       tx.oncomplete = () => resolve(true);
       tx.onerror = (e) => reject(e.target.error);
-    }));
+    })));
   }
 
   async clearAll() {
-    return this._withDb((db) => new Promise((resolve, reject) => {
+    return this._enqueueWrite(() => this._withDb((db) => new Promise((resolve, reject) => {
       const tx = db.transaction([this.storeName, this.metaStoreName], 'readwrite');
       tx.objectStore(this.storeName).clear();
       tx.objectStore(this.metaStoreName).clear();
       tx.oncomplete = () => resolve(true);
       tx.onerror = (e) => reject(e.target.error);
-    }));
+    })));
   }
 }
 
