@@ -10,7 +10,7 @@
 
 Приложение обращается к контроллеру по заводскому протоколу **KWP2000 (ISO 14230-4)** через адаптеры **ELM327 BLE (Bluetooth 4.0/5.0)** напрямую из веб-браузера с поддержкой Web Bluetooth API, не требуя установки нативных бинарных программ.
 
-**Веб-версия:** [swmenz.github.io/OBD-Scanner-M73](https://swmenz.github.io/OBD-Scanner-M73/)
+**Веб-версия:** https://weissvv.github.io/OBD-Scanner-M73/
 
 ---
 
