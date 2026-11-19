@@ -189,6 +189,8 @@ class M73Application {
 
     // Состояние подключения и терминала
     this.connecting = false;
+    this._cancellingConnect = false;
+    this._disconnecting = false;
     this._connectSeq = 0;
     this.pollPromise = null;
     this.termBuffer = [];
@@ -430,24 +432,24 @@ class M73Application {
             return;
           }
         }
-        alert("Диагностика М73 — Версия v55.7\n\nОбновления:\n1) Сверка с реальным логом OpenDiag М73 Е3: строгий контроль длины кадра 21 01 (72 байта / 148 символов) и эталонные формулы дросселя (/ 255), мощности (maf / 3.49) и момента (× 7016)\n2) Протокол KWP2000: штатное закрытие сессии командой 82 (StopCommunication) при отключении\n3) Режим Евро-2 во вкладке АЦП (исключение ДК2 и его нагревателя) + настройка порядка и скрытие флагов ЭБУ");
+        alert("Диагностика М73 — Версия v55.8\n\nОбновления:\n1) Стабильность BLE и K-Line: защита от гонки реконнекта при обрыве на initEcu(), полное восстановление ELM327 (CORE_ELM_CMDS + AT H0 + AT SH 81 10 F1) после ATFI и терминала, защита кнопок подключения/отмены\n2) Неблокирующий UX и осциллограф: перенос блокирующих alert() после освобождения шины, отключение лишней отрисовки и ложных точек осциллографа при смене вкладок/флагов\n3) Надёжность PWA и логов: очередь IndexedDB с обработкой onabort, восстановление ленивой загрузки SheetJS после сбоя и расширенный таймаут SW при холодном промахе");
       });
     }
 
     // Интеллектуальное автоскрытие нижнего дока при отсутствии взаимодействия и скролле вниз
     this.initDockAutoHide();
 
-    // Режим скорости опроса K-Line: Постоянный Турбо + Конвейер v55.7
+    // Режим скорости опроса K-Line: Постоянный Турбо + Конвейер v55.8
     const cadencePill = document.querySelector('.cadence-pill');
     if (cadencePill) {
-      cadencePill.title = 'Частота опроса K-Line: Турбо + Конвейер v55.7';
+      cadencePill.title = 'Частота опроса K-Line: Турбо + Конвейер v55.8';
 
       cadencePill.addEventListener('click', () => {
         const suffixInfo = this.m73 && this.m73.singleFrameSuffixSupported === true
           ? "Включен (21011 / 21031, закрытие кадра 0 мс)"
           : (this.m73 && this.m73.singleFrameSuffixSupported === false ? "Отключен адаптером (стандартный 2101)" : "Определяется...");
         alert(
-          `Режим опроса: Турбо + Конвейер (Релиз v55.7)\n\n` +
+          `Режим опроса: Турбо + Конвейер (Релиз v55.8)\n\n` +
           `• Адаптивный тайминг: AT AT 2\n` +
           `• Таймаут шины: AT ST 10 (~64 мс, постоянный Турбо)\n` +
           `• Турбо-суффикс кадра: ${suffixInfo}\n` +
@@ -612,6 +614,7 @@ class M73Application {
   }
 
   async toggleConnection() {
+    if (this._cancellingConnect || this._disconnecting) return;
     if (this.isReconnecting) {
       this.elm.log('info', 'Идёт автоматическое восстановление связи, подождите...');
       return;
@@ -644,23 +647,30 @@ class M73Application {
 
     if (this.elm.isConnected) {
       // Осознанное отключение пользователем: перед разрывом BLE возвращаем управление регуляторами ЭБУ
+      this._disconnecting = true;
+      this.btnConnect.disabled = true;
       this._connectSeq++;
       this.userExplicitDisconnect = true;
       this.shouldBeConnected = false;
-      await this.stopPolling();
-      const releaseIds = new Set(this._pendingReleases || []);
-      if (this.activeRegulator && this.activeRegulator.idHex) {
-        releaseIds.add(this.activeRegulator.idHex);
+      try {
+        await this.stopPolling();
+        const releaseIds = new Set(this._pendingReleases || []);
+        if (this.activeRegulator && this.activeRegulator.idHex) {
+          releaseIds.add(this.activeRegulator.idHex);
+        }
+        if (this._pendingReleases) this._pendingReleases.clear();
+        for (const id of releaseIds) {
+          try { await this.m73.releaseActuatorControl(id); } catch (e) {}
+        }
+        if (this.m73.isInitialized) {
+          try { await this.m73.stopSession(); } catch (e) {}
+        }
+        await this.elm.disconnect();
+        await this.handleDisconnectedState();
+      } finally {
+        this._disconnecting = false;
+        this.btnConnect.disabled = false;
       }
-      if (this._pendingReleases) this._pendingReleases.clear();
-      for (const id of releaseIds) {
-        try { await this.m73.releaseActuatorControl(id); } catch (e) {}
-      }
-      if (this.m73.isInitialized) {
-        try { await this.m73.stopSession(); } catch (e) {}
-      }
-      await this.elm.disconnect();
-      await this.handleDisconnectedState();
       return;
     }
 
@@ -756,6 +766,17 @@ class M73Application {
 
   async handleUnexpectedDisconnect() {
     if (this.userExplicitDisconnect) {
+      await this.handleDisconnectedState();
+      return;
+    }
+
+    if (this.connecting) {
+      // Первичное подключение ещё выполняется — очистку и уведомление обработает catch/finally в toggleConnection()
+      this.elm.log('err', 'Обрыв BLE связи во время инициализации подключения');
+      return;
+    }
+
+    if (!this.shouldBeConnected) {
       await this.handleDisconnectedState();
       return;
     }
@@ -1159,8 +1180,10 @@ class M73Application {
                   await this.elm.send(cmd, 800);
                 }
                 await this.elm.send("ATH0", 1000);
+                await this.elm.send("AT SH 81 10 F1", 800);
                 const verifyRaw = await this.m73.sendRawFrame('2101');
                 if (this.m73.parseFrame2101(verifyRaw)) {
+                  this.m73._lastFrame2101At = Date.now();
                   fastOk = true;
                 }
               }
@@ -1239,7 +1262,7 @@ class M73Application {
   /**
    * Отрисовка значений приборной панели (с поддержкой Dirty Checking v54.7)
    */
-  updateDashboardUI(data) {
+  updateDashboardUI(data, options = null) {
     if (!data) return;
 
     // Обороты (Аппаратное ускорение через transform: scaleX для 120 FPS + реактивное свечение зоны оборотов)
@@ -1410,7 +1433,7 @@ class M73Application {
 
     // Обновление модульной системы виджетов и осциллографа ДК1
     if (this.widgetManager) {
-      this.widgetManager.updateDynamicWidgets(data);
+      this.widgetManager.updateDynamicWidgets(data, options);
     }
   }
 
@@ -1780,7 +1803,6 @@ class M73Application {
     this.logger.start();
     if (this.btnToggleLog) this.btnToggleLog.classList.add('active');
     if (this.recBtnLabel) this.recBtnLabel.textContent = "Остановить";
-    if (this.loggerStatusDot) this.loggerStatusDot.classList.add('recording');
     if (this.btnExportCsv) this.btnExportCsv.disabled = true;
     if (this.btnExportXlsx) this.btnExportXlsx.disabled = true;
     if (this.tripSavedAlert) this.tripSavedAlert.style.display = 'none';
@@ -1790,7 +1812,6 @@ class M73Application {
     const saved = await this.logger.stop(this.peakRpm || 0);
     if (this.btnToggleLog) this.btnToggleLog.classList.remove('active');
     if (this.recBtnLabel) this.recBtnLabel.textContent = "Начать запись";
-    if (this.loggerStatusDot) this.loggerStatusDot.classList.remove('recording');
     if (this.loggerStatsText) this.loggerStatsText.textContent = `Запись завершена • ${this.logger.records.length} точек`;
     if (this.btnExportCsv) this.btnExportCsv.disabled = this.logger.records.length === 0;
     if (this.btnExportXlsx) this.btnExportXlsx.disabled = this.logger.records.length === 0;
@@ -2368,15 +2389,6 @@ class M73Application {
         this._updateText(this.loggerStatsText, `Запись на паузе (откройте «Панель») • ${this.logger.records.length} точек`);
       }
     }
-    if (tabId === 'tab-dashboard') {
-      if (this.widgetManager) this.widgetManager.ensureOscLoop();
-      if (this.m73 && this.m73.latestData) this.updateDashboardUI(this.m73.latestData);
-    } else {
-      if (this.widgetManager) this.widgetManager.stopOscLoop();
-      if (tabId === 'tab-actuators' && this.m73 && this.m73.latestData) {
-        this.updateActuatorLiveBar(this.m73.latestData);
-      }
-    }
     document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.dock-item').forEach(el => el.classList.remove('active'));
 
@@ -2384,6 +2396,21 @@ class M73Application {
     const targetNav = document.querySelector(`[data-tab="${tabId}"]`);
     if (targetContent) targetContent.classList.add('active');
     if (targetNav) targetNav.classList.add('active');
+
+    if (tabId === 'tab-dashboard') {
+      if (this.m73 && this.m73.latestData && this.m73._lastFrame2101At > 0) {
+        this.updateDashboardUI(this.m73.latestData, { skipOscFeed: true });
+      }
+      if (this.widgetManager) {
+        this.widgetManager.drawOscilloscope();
+        this.widgetManager.ensureOscLoop();
+      }
+    } else {
+      if (this.widgetManager) this.widgetManager.stopOscLoop();
+      if (tabId === 'tab-actuators' && this.m73 && this.m73.latestData && this.m73._lastFrame2101At > 0) {
+        this.updateActuatorLiveBar(this.m73.latestData);
+      }
+    }
 
     // Обновляем позицию скользящей стеклянной капсулы (Liquid Glider) в нижнем доке
     const dock = document.querySelector('.liquid-dock');

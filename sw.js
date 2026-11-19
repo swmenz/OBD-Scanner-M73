@@ -1,5 +1,5 @@
-// Сервис-воркер для 100% оффлайн работы приложения в машине без интернета (v55.7.2)
-const CACHE_NAME = 'm73-diag-cache-v55.7.2';
+// Сервис-воркер для 100% оффлайн работы приложения в машине без интернета (v55.8)
+const CACHE_NAME = 'm73-diag-cache-v55.8';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -79,44 +79,53 @@ self.addEventListener('fetch', (event) => {
   // Открытие страницы: сначала сеть (свежая версия), но не дольше 800 мс —
   // при слабом/отсутствующем интернете в машине сразу отдаём страницу из кэша
   if (request.mode === 'navigate') {
-    event.respondWith(
-      fetchNoCacheWithTimeout(request.url, 800).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200) {
-          const clone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put('./index.html', clone));
-        }
-        return networkResponse;
-      }).catch(async () => {
-        const cached = (await caches.match('./index.html')) || (await caches.match('./'));
-        return cached || new Response('Оффлайн режим. Запустите приложение с интернетом хотя бы один раз.', {
-          status: 503,
-          headers: { 'Content-Type': 'text/plain; charset=utf-8' }
-        });
-      })
-    );
+    let navCacheTask = Promise.resolve();
+    const navResponsePromise = fetchNoCacheWithTimeout(request.url, 800).then((networkResponse) => {
+      if (networkResponse && networkResponse.status === 200) {
+        const clone = networkResponse.clone();
+        navCacheTask = caches.open(CACHE_NAME).then((cache) => cache.put('./index.html', clone)).catch(() => {});
+      }
+      return networkResponse;
+    }).catch(async () => {
+      const cached = (await caches.match('./index.html')) || (await caches.match('./'));
+      return cached || new Response('Оффлайн режим. Запустите приложение с интернетом хотя бы один раз.', {
+        status: 503,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      });
+    });
+
+    event.respondWith(navResponsePromise);
+    event.waitUntil(navResponsePromise.then(() => navCacheTask, () => {}));
     return;
   }
 
-  // Скрипты, стили, иконки: Stale-While-Revalidate — мгновенно отдаём кэш (если есть) и параллельно обновляем в фоне
-  event.respondWith(
-    caches.match(request, { ignoreSearch: true }).then((cachedResponse) => {
-      const cleanUrl = new URL(request.url);
-      cleanUrl.search = '';
-      const cacheKey = cleanUrl.toString();
+  // Скрипты, стили, иконки: Stale-While-Revalidate — мгновенно отдаём кэш (если есть) и обновляем в фоне;
+  // при холодном промахе (например, крупный xlsx.full.min.js на слабой сети) даём расширенный таймаут 15 с
+  let assetBgTask = Promise.resolve();
+  const assetResponsePromise = caches.match(request, { ignoreSearch: true }).then((cachedResponse) => {
+    const cleanUrl = new URL(request.url);
+    cleanUrl.search = '';
+    const cacheKey = cleanUrl.toString();
 
-      const networkFetch = fetchNoCacheWithTimeout(request.url, 1500).then((networkResponse) => {
+    if (cachedResponse) {
+      assetBgTask = fetchNoCacheWithTimeout(request.url, 4000).then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
           const clone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(cacheKey, clone));
+          return caches.open(CACHE_NAME).then((cache) => cache.put(cacheKey, clone));
         }
-        return networkResponse;
-      });
+      }).catch(() => {});
+      return cachedResponse;
+    }
 
-      if (cachedResponse) {
-        event.waitUntil(networkFetch.catch(() => {}));
-        return cachedResponse;
+    return fetchNoCacheWithTimeout(request.url, 15000).then((networkResponse) => {
+      if (networkResponse && networkResponse.status === 200) {
+        const clone = networkResponse.clone();
+        assetBgTask = caches.open(CACHE_NAME).then((cache) => cache.put(cacheKey, clone)).catch(() => {});
       }
-      return networkFetch;
-    })
-  );
+      return networkResponse;
+    });
+  });
+
+  event.respondWith(assetResponsePromise);
+  event.waitUntil(assetResponsePromise.then(() => assetBgTask, () => {}));
 });

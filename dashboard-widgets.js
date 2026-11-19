@@ -691,7 +691,6 @@ class DashboardWidgetManager {
     this.container.classList.add('edit-mode');
     if (this.editBar) {
       this.editBar.style.display = 'flex';
-      this.editBar.classList.add('animate-slide-up');
     }
     const btnCustomize = document.getElementById('btnCustomizeDash');
     if (btnCustomize) btnCustomize.classList.add('active');
@@ -702,7 +701,6 @@ class DashboardWidgetManager {
     this.container.classList.remove('edit-mode');
     if (this.editBar) {
       this.editBar.style.display = 'none';
-      this.editBar.classList.remove('animate-slide-up');
     }
     const btnCustomize = document.getElementById('btnCustomizeDash');
     if (btnCustomize) btnCustomize.classList.remove('active');
@@ -726,18 +724,27 @@ class DashboardWidgetManager {
     }
   }
 
-  removeWidget(widgetEl) {
+  removeWidget(widgetEl, immediate = false) {
     if (!widgetEl || widgetEl.getAttribute('data-widget-id') === 'logger-card') return;
     widgetEl.removeAttribute('data-widget-id');
-    widgetEl.classList.add('widget-leaving');
-    setTimeout(() => {
+    // Снимаем id со всех дочерних элементов уходящего виджета, чтобы быстрое повторное добавление не породило дублей ID
+    widgetEl.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+
+    const finalizeRemoval = () => {
       widgetEl.remove();
       this._activeSensorsDirty = true;
       this._saveLayout();
       if (this.app && typeof this.app.initElements === 'function') {
         this.app.initElements();
       }
-    }, 200);
+    };
+
+    if (immediate) {
+      finalizeRemoval();
+    } else {
+      widgetEl.classList.add('widget-leaving');
+      setTimeout(finalizeRemoval, 200);
+    }
     if (navigator.vibrate) navigator.vibrate(30);
   }
 
@@ -838,7 +845,7 @@ class DashboardWidgetManager {
           // Удалить датчик с панели прямо из галереи
           const widgetEl = this.container.querySelector(`[data-widget-id="${item.id}"]`);
           if (widgetEl) {
-            this.removeWidget(widgetEl);
+            this.removeWidget(widgetEl, true);
           }
           row.classList.remove('item-added');
           actionWrap.innerHTML = '<button class="glass-btn btn-compact btn-gallery-add" type="button">＋ Добавить</button>';
@@ -927,7 +934,7 @@ class DashboardWidgetManager {
     if (!skipSave && this.app && typeof this.app.initElements === 'function') {
       this.app.initElements();
       if (item.id === 'ecu-flags' && this.app.m73 && this.app.m73.latestData && (this.app.elm.isConnected || this.app.m73._lastFrame2101At > 0)) {
-        this.app.updateDashboardUI(this.app.m73.latestData);
+        this.app.updateDashboardUI(this.app.m73.latestData, { skipOscFeed: true });
       }
     }
 
@@ -1190,7 +1197,7 @@ class DashboardWidgetManager {
     if (this.app && typeof this.app.initElements === 'function') {
       this.app.initElements();
       if (this.app.m73 && this.app.m73.latestData && (this.app.elm.isConnected || this.app.m73._lastFrame2101At > 0)) {
-        this.app.updateDashboardUI(this.app.m73.latestData);
+        this.app.updateDashboardUI(this.app.m73.latestData, { skipOscFeed: true });
       }
     }
 
@@ -1774,11 +1781,13 @@ class DashboardWidgetManager {
    * Обновление динамически добавленных датчиков из каталога и осциллографа
    * Использует кэширование активных DOM-узлов и dirty-check для устранения фризов UI
    */
-  updateDynamicWidgets(data) {
+  updateDynamicWidgets(data, options = null) {
     if (!data) return;
 
-    // Подаем данные в универсальный осциллограф
-    this.feedOscilloscope(data);
+    // Подаем данные в универсальный осциллограф (кроме синхронизации UI при смене вкладки/раскладки)
+    if (!(options && options.skipOscFeed)) {
+      this.feedOscilloscope(data);
+    }
 
     // Кэш только РЕАЛЬНО отображаемых на панели дополнительных датчиков
     if (
@@ -1891,7 +1900,7 @@ class DashboardWidgetManager {
     if (!skipAppSync && this.app && typeof this.app.initElements === 'function') {
       this.app.initElements();
       if (this.app.m73 && this.app.m73.latestData && (this.app.elm.isConnected || this.app.m73._lastFrame2101At > 0)) {
-        this.app.updateDashboardUI(this.app.m73.latestData);
+        this.app.updateDashboardUI(this.app.m73.latestData, { skipOscFeed: true });
       }
     }
   }

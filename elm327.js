@@ -279,13 +279,13 @@ class Elm327BLE {
           ? rxChar 
           : await service.getCharacteristic(candidate.tx);
 
+        // Включаем уведомления от ELM до фиксации ссылок характеристик
+        await rxChar.startNotifications();
+        rxChar.addEventListener('characteristicvaluechanged', this._rxHandler);
+
         this.service = service;
         this.rxCharacteristic = rxChar;
         this.txCharacteristic = txChar;
-
-        // Включаем уведомления от ELM
-        await this.rxCharacteristic.startNotifications();
-        this.rxCharacteristic.addEventListener('characteristicvaluechanged', this._rxHandler);
 
         this.log('info', `Определен тип порта: ${candidate.name}`);
         return;
@@ -306,11 +306,11 @@ class Elm327BLE {
           if (c.properties.write || c.properties.writeWithoutResponse) tx = c;
         }
         if (rx && tx) {
+          await rx.startNotifications();
+          rx.addEventListener('characteristicvaluechanged', this._rxHandler);
           this.service = s;
           this.rxCharacteristic = rx;
           this.txCharacteristic = tx;
-          await this.rxCharacteristic.startNotifications();
-          this.rxCharacteristic.addEventListener('characteristicvaluechanged', this._rxHandler);
           this.log('info', `Автоматически подобран порт в сервисе ${s.uuid}`);
           return;
         }

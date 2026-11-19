@@ -188,6 +188,7 @@ class TripStorage {
       tx.objectStore(this.metaStoreName).delete(id);
       tx.oncomplete = () => resolve(true);
       tx.onerror = (e) => reject(e.target.error);
+      tx.onabort = (e) => reject(tx.error || (e && e.target && e.target.error) || new Error('IndexedDB transaction aborted'));
     })));
   }
 
@@ -198,6 +199,7 @@ class TripStorage {
       tx.objectStore(this.metaStoreName).clear();
       tx.oncomplete = () => resolve(true);
       tx.onerror = (e) => reject(e.target.error);
+      tx.onabort = (e) => reject(tx.error || (e && e.target && e.target.error) || new Error('IndexedDB transaction aborted'));
     })));
   }
 }
@@ -482,9 +484,6 @@ class TripLogger {
   }
 
   /**
-
-   */
-  /**
    * Генерация компактного файла .csv (стандарт OpenDiag Mobile / ReadLogs / MegaLogViewer / Excel)
    * Размер лога в 5-6 раз меньше чем .xlsx, мгновенная генерация без зависаний памяти на iOS.
    */
@@ -566,15 +565,10 @@ class TripLogger {
     if (TripLogger._xlsxLoadPromise) return TripLogger._xlsxLoadPromise;
 
     TripLogger._xlsxLoadPromise = new Promise((resolve, reject) => {
-      const existing = document.querySelector('script[data-xlsx-loader="true"]');
-      if (existing) {
-        existing.addEventListener('load', () => resolve(), { once: true });
-        existing.addEventListener('error', () => {
-          TripLogger._xlsxLoadPromise = null;
-          reject(new Error('Не удалось загрузить SheetJS'));
-        }, { once: true });
-        return;
-      }
+      // Удаляем возможный «зависший»/неуспешный тег от предыдущей попытки, чтобы повторная загрузка не зависала
+      const stale = document.querySelector('script[data-xlsx-loader="true"]');
+      if (stale) stale.remove();
+
       const script = document.createElement('script');
       script.src = 'xlsx.full.min.js';
       script.async = true;
@@ -583,11 +577,13 @@ class TripLogger {
         if (typeof XLSX !== 'undefined') {
           resolve();
         } else {
+          script.remove();
           TripLogger._xlsxLoadPromise = null;
           reject(new Error('Библиотека SheetJS не инициализировалась'));
         }
       };
       script.onerror = () => {
+        script.remove();
         TripLogger._xlsxLoadPromise = null;
         reject(new Error('Не удалось загрузить xlsx.full.min.js'));
       };
